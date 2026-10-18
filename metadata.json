@@ -1,0 +1,6 @@
+{
+  "name": "Cancionero & Archivo Musical",
+  "description": "Catálogo centralizado de canciones de autor con letras, acordes, enlaces a Spotify, YouTube y SoundCloud, borradores y gestión de archivos Markdown/JSON con sincronización tipo Git.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
