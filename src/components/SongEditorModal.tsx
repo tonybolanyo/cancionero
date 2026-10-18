@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileEdit, Code2, AlertCircle } from 'lucide-react';
+import { X, Save, FileEdit, Code2, AlertCircle, Plus, Tag } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 
@@ -36,6 +36,32 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [audioUrl, setAudioUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [lyrics, setLyrics] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState<string>('');
+
+  const commonTagSuggestions = [
+    'acústico',
+    'en vivo',
+    'colaboración',
+    'maqueta',
+    'balada',
+    'banda',
+    'poesía',
+    'guitarra',
+    'inédita'
+  ];
+
+  const handleAddTag = (tagToAdd: string) => {
+    const clean = tagToAdd.trim().toLowerCase().replace(/^#/, '');
+    if (clean && !tags.includes(clean)) {
+      setTags([...tags, clean]);
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
 
   // Raw Markdown mode
   const [rawMarkdown, setRawMarkdown] = useState('');
@@ -57,6 +83,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setSoundcloudUrl(song.soundcloudUrl || '');
       setAudioUrl(song.audioUrl || '');
       setNotes(song.notes || '');
+      setTags(song.tags || []);
       setLyrics(song.lyrics);
       setRawMarkdown(songToMarkdown(song));
     } else {
@@ -75,6 +102,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setSoundcloudUrl('');
       setAudioUrl('');
       setNotes('');
+      setTags(['acústico']);
       setLyrics(`## Estrofa 1\n[Am] Escribe el primer verso aquí\n[G] Segundo verso con acordes\n\n## Estribillo\n[F] Y aquí va el estribillo...`);
       
       const draftSong: Song = {
@@ -87,6 +115,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         tempo: 96,
         timeSignature: '4/4',
         tuning: 'Estándar (EADGBE)',
+        tags: ['acústico'],
         lyrics: `## Estrofa 1\n[Am] Escribe el primer verso aquí\n[G] Segundo verso con acordes\n\n## Estribillo\n[F] Y aquí va el estribillo...`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -111,6 +140,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       soundcloudUrl: soundcloudUrl || undefined,
       audioUrl: audioUrl || undefined,
       notes: notes || undefined,
+      tags: tags.length > 0 ? tags : undefined,
       lyrics,
       createdAt: song?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -136,6 +166,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setSoundcloudUrl(parsed.soundcloudUrl || '');
       setAudioUrl(parsed.audioUrl || '');
       setNotes(parsed.notes || '');
+      setTags(parsed.tags || []);
       setLyrics(parsed.lyrics);
       setParseError(null);
       setMode('form');
@@ -179,6 +210,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       soundcloudUrl: soundcloudUrl.trim() || undefined,
       audioUrl: audioUrl.trim() || undefined,
       notes: notes.trim() || undefined,
+      tags: tags.length > 0 ? tags : undefined,
       lyrics: lyrics.trim(),
       createdAt: song?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -384,6 +416,98 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                     placeholder="Ej. 4/4, 3/4, 6/8"
                     className="w-full px-3.5 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] font-mono shadow-sm"
                   />
+                </div>
+              </div>
+
+              {/* Row: Tags / Temáticas */}
+              <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                    <Tag className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Etiquetas y Temáticas (ej. acústico, en vivo, colaboración)</span>
+                  </div>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {tags.length} {tags.length === 1 ? 'etiqueta' : 'etiquetas'}
+                  </span>
+                </div>
+
+                {/* Active tags chips with remove X */}
+                <div className="flex flex-wrap items-center gap-1.5 min-h-[28px]">
+                  {tags.map((t) => (
+                    <span
+                      key={t}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-mono bg-[var(--bg-surface)] text-[var(--accent-primary)] border border-[var(--accent-border)] rounded-md"
+                    >
+                      <span>#{t}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(t)}
+                        className="p-0.5 hover:text-red-500 rounded cursor-pointer"
+                        title={`Eliminar etiqueta #${t}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {tags.length === 0 && (
+                    <span className="text-xs text-[var(--text-muted)] italic">
+                      Sin etiquetas asignadas. Añade una etiqueta abajo o selecciona sugerencias.
+                    </span>
+                  )}
+                </div>
+
+                {/* Input to add custom tag */}
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (tagInput.trim()) handleAddTag(tagInput);
+                        }
+                      }}
+                      placeholder="Nueva etiqueta (ej. en vivo, vals, nostálgico) y pulsa Enter"
+                      className="w-full px-3 py-1.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm font-mono"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tagInput.trim()) handleAddTag(tagInput);
+                    }}
+                    disabled={!tagInput.trim()}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Añadir</span>
+                  </button>
+                </div>
+
+                {/* Quick suggestions */}
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mr-1">
+                    Sugerencias:
+                  </span>
+                  {commonTagSuggestions.map((sug) => {
+                    const isAdded = tags.includes(sug);
+                    return (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => isAdded ? handleRemoveTag(sug) : handleAddTag(sug)}
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                          isAdded
+                            ? 'bg-[var(--accent-subtle)] border-[var(--accent-primary)] text-[var(--accent-primary)] font-semibold'
+                            : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-border)]'
+                        }`}
+                      >
+                        {isAdded ? `✓ #${sug}` : `+ #${sug}`}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

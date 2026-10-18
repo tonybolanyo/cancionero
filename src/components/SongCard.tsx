@@ -9,6 +9,7 @@ interface SongCardProps {
   onDownloadMd: (song: Song) => void;
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
+  onSelectTag?: (tag: string) => void;
 }
 
 export const SongCard: React.FC<SongCardProps> = ({
@@ -17,7 +18,8 @@ export const SongCard: React.FC<SongCardProps> = ({
   onEdit,
   onDownloadMd,
   isAuthor,
-  onViewHistory
+  onViewHistory,
+  onSelectTag
 }) => {
   // Extract first 2-3 lines of lyrics for preview
   const lyricPreview = song.lyrics
@@ -81,7 +83,7 @@ export const SongCard: React.FC<SongCardProps> = ({
         )}
 
         {/* Available Streaming Platforms / Audio availability */}
-        <div className="flex items-center gap-3 mb-6 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 mb-4 text-xs text-[var(--text-muted)]">
           {hasAudio ? (
             <div className="flex items-center gap-2.5">
               <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
@@ -114,6 +116,25 @@ export const SongCard: React.FC<SongCardProps> = ({
             </span>
           )}
         </div>
+
+        {/* Thematic Tags (Clickable for quick catalog filtering) */}
+        {song.tags && song.tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            {song.tags.map((tag) => (
+              <button
+                key={tag}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectTag?.(tag);
+                }}
+                className="text-[11px] font-mono text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                title={`Filtrar canciones por #${tag}`}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Card Actions Footer */}

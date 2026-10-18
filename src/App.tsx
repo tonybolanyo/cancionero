@@ -27,6 +27,7 @@ function CancioneroApp() {
   const [statusFilter, setStatusFilter] = useState<'all' | SongStatus>('all');
   const [platformFilter, setPlatformFilter] = useState<'all' | 'spotify' | 'youtube' | 'soundcloud' | 'audio'>('all');
   const [keyFilter, setKeyFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
   const [activeNavTab, setActiveNavTab] = useState<'all' | 'published' | 'drafts' | 'private' | 'dashboard'>('all');
 
   // Modal states
@@ -136,6 +137,24 @@ function CancioneroApp() {
     return Array.from(set).sort();
   }, [songs, isAuthor]);
 
+  // Available unique tags and counts
+  const availableTags = useMemo(() => {
+    const map = new Map<string, number>();
+    songs.forEach(song => {
+      if (isAuthor || song.status === 'published') {
+        song.tags?.forEach(tag => {
+          const clean = tag.trim().toLowerCase();
+          if (clean) {
+            map.set(clean, (map.get(clean) || 0) + 1);
+          }
+        });
+      }
+    });
+    return Array.from(map.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }, [songs, isAuthor]);
+
   // Counts for segmented tabs
   const counts = useMemo(() => {
     const published = songs.filter(s => s.status === 'published').length;
@@ -171,6 +190,13 @@ function CancioneroApp() {
       // Key filter
       if (keyFilter !== 'all' && song.key !== keyFilter) return false;
 
+      // Tag filter
+      if (tagFilter !== 'all') {
+        if (!song.tags || !song.tags.some(t => t.trim().toLowerCase() === tagFilter.toLowerCase())) {
+          return false;
+        }
+      }
+
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -178,12 +204,13 @@ function CancioneroApp() {
         const inGenre = song.genre?.toLowerCase().includes(q);
         const inLyrics = song.lyrics.toLowerCase().includes(q);
         const inNotes = song.notes?.toLowerCase().includes(q);
-        return inTitle || inGenre || inLyrics || inNotes;
+        const inTags = song.tags?.some(t => t.toLowerCase().includes(q));
+        return inTitle || inGenre || inLyrics || inNotes || !!inTags;
       }
 
       return true;
     });
-  }, [songs, statusFilter, platformFilter, keyFilter, searchQuery, isAuthor]);
+  }, [songs, statusFilter, platformFilter, keyFilter, tagFilter, searchQuery, isAuthor]);
 
   const handleNavSelect = (tab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard') => {
     setActiveNavTab(tab);
@@ -292,6 +319,9 @@ function CancioneroApp() {
             keyFilter={keyFilter}
             onKeyChange={setKeyFilter}
             availableKeys={availableKeys}
+            tagFilter={tagFilter}
+            onTagChange={setTagFilter}
+            availableTags={availableTags}
             counts={counts}
             isAuthor={isAuthor}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -309,6 +339,7 @@ function CancioneroApp() {
                   onDownloadMd={(s) => handleDownloadMd(s)}
                   isAuthor={isAuthor}
                   onViewHistory={handleViewHistory}
+                  onSelectTag={setTagFilter}
                 />
               ))}
             </div>
@@ -331,6 +362,7 @@ function CancioneroApp() {
                     setStatusFilter('all');
                     setPlatformFilter('all');
                     setKeyFilter('all');
+                    setTagFilter('all');
                     setActiveNavTab('all');
                   }}
                   className="px-4 py-2 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer"

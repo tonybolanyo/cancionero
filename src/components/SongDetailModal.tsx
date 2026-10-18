@@ -220,6 +220,19 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
             <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)] truncate">
               {song.title}
             </h2>
+
+            {song.tags && song.tags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {song.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-[11px] font-mono text-[var(--accent-primary)] bg-[var(--accent-subtle)] border border-[var(--accent-border)] px-2 py-0.5 rounded"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">

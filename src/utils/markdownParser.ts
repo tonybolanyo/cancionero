@@ -90,6 +90,7 @@ export function songToMarkdown(song: Song): string {
     song.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
     song.audioUrl ? `audioUrl: "${song.audioUrl}"` : null,
     song.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${t.replace(/"/g, '')}"`).join(', ')}]` : null,
     `createdAt: "${song.createdAt}"`,
     `updatedAt: "${song.updatedAt}"`,
     '---',
@@ -147,6 +148,19 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     ? meta.status 
     : 'draft';
 
+  let parsedTags: string[] | undefined = undefined;
+  if (meta.tags) {
+    try {
+      if (meta.tags.startsWith('[') && meta.tags.endsWith(']')) {
+        parsedTags = JSON.parse(meta.tags);
+      } else {
+        parsedTags = meta.tags.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+      }
+    } catch {
+      parsedTags = meta.tags.replace(/[\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
   return {
     id,
     title: meta.title || 'Sin título',
@@ -163,6 +177,7 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     soundcloudUrl: meta.soundcloudUrl || undefined,
     audioUrl: meta.audioUrl || undefined,
     notes: meta.notes || undefined,
+    tags: parsedTags && parsedTags.length > 0 ? parsedTags : undefined,
     lyrics: lyricsBody,
     createdAt: meta.createdAt || now,
     updatedAt: meta.updatedAt || now

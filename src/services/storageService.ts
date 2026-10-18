@@ -139,7 +139,22 @@ export class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_SONGS);
       if (stored) {
-        return JSON.parse(stored);
+        const songs: Song[] = JSON.parse(stored);
+        let updated = false;
+        const migrated = songs.map(song => {
+          if (!song.tags || song.tags.length === 0) {
+            const initial = INITIAL_SONGS.find(i => i.id === song.id);
+            if (initial?.tags) {
+              updated = true;
+              return { ...song, tags: initial.tags };
+            }
+          }
+          return song;
+        });
+        if (updated) {
+          this.saveSongs(migrated);
+        }
+        return migrated;
       }
     } catch (e) {
       console.warn('Failed to parse songs from storage', e);

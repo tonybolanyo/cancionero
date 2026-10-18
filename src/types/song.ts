@@ -17,6 +17,7 @@ export interface Song {
   audioUrl?: string;
   coverImage?: string;
   notes?: string; // Songwriting notes, history, instrumentation
+  tags?: string[]; // Thematic tags e.g. 'acústico', 'en vivo', 'colaboración', 'maqueta'
   lyrics: string; // Markdown formatted lyrics with [Chords] and section headers
   createdAt: string; // ISO date
   updatedAt: string; // ISO date

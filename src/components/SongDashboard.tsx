@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { BarChart3, Music, Layers, Calendar, Sparkles } from 'lucide-react';
+import { BarChart3, Music, Layers, Calendar, Sparkles, Tag } from 'lucide-react';
 import { Song } from '../types/song';
 import { useTheme } from '../context/ThemeContext';
 
@@ -18,7 +18,7 @@ interface SongDashboardProps {
   isAuthor: boolean;
 }
 
-type ChartGrouping = 'genre' | 'key' | 'year';
+type ChartGrouping = 'genre' | 'key' | 'year' | 'tag';
 
 export const SongDashboard: React.FC<SongDashboardProps> = ({ songs, isAuthor }) => {
   const [groupBy, setGroupBy] = useState<ChartGrouping>('genre');
@@ -87,7 +87,38 @@ export const SongDashboard: React.FC<SongDashboardProps> = ({ songs, isAuthor })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [songs]);
 
-  const activeData = groupBy === 'genre' ? genreData : groupBy === 'key' ? keyData : yearData;
+  // Aggregate data by tags
+  const tagData = useMemo(() => {
+    const counts: Record<string, { count: number; songs: string[] }> = {};
+    songs.forEach(song => {
+      if (song.tags && song.tags.length > 0) {
+        song.tags.forEach(t => {
+          const clean = t.trim().toLowerCase();
+          if (!counts[clean]) {
+            counts[clean] = { count: 0, songs: [] };
+          }
+          counts[clean].count += 1;
+          counts[clean].songs.push(song.title);
+        });
+      }
+    });
+
+    return Object.entries(counts)
+      .map(([name, data]) => ({
+        name: `#${name}`,
+        count: data.count,
+        songList: data.songs
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [songs]);
+
+  const activeData = groupBy === 'genre'
+    ? genreData
+    : groupBy === 'key'
+    ? keyData
+    : groupBy === 'year'
+    ? yearData
+    : tagData;
 
   // Key stats
   const topGenre = genreData[0]?.name || 'N/A';
@@ -203,6 +234,18 @@ export const SongDashboard: React.FC<SongDashboardProps> = ({ songs, isAuthor })
           >
             <Calendar className="w-3.5 h-3.5" />
             <span>Por Año</span>
+          </button>
+
+          <button
+            onClick={() => setGroupBy('tag')}
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              groupBy === 'tag'
+                ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Por Temática / Tag</span>
           </button>
         </div>
       </div>
