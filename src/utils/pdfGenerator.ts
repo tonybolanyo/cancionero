@@ -1,10 +1,11 @@
 import { jsPDF } from 'jspdf';
 import { Song } from '../types/song';
-import { transposeChord, transposeLyrics } from './markdownParser';
+import { transposeChord, transposeLyrics, parseLyricLine } from './markdownParser';
 
 interface PdfExportOptions {
   showChords?: boolean;
   semitones?: number;
+  chordPosition?: 'above' | 'inline';
 }
 
 /**
@@ -12,7 +13,7 @@ interface PdfExportOptions {
  * Designed with pure white canvas, serif typography, structured metadata, and clean chord notation.
  */
 export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): void {
-  const { showChords = true, semitones = 0 } = options;
+  const { showChords = true, semitones = 0, chordPosition = 'above' } = options;
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -142,44 +143,88 @@ export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): voi
     }
 
     if (showChords && /\[[A-G][#b]?[^\]]*\]/.test(line)) {
-      // Split by chords
-      const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
-      let posX = margin;
+      if (chordPosition === 'above') {
+        const segments = parseLyricLine(line);
+        ensureSpace(12);
+        let posX = margin;
 
-      parts.forEach((part) => {
-        if (part.startsWith('[') && part.endsWith(']')) {
-          const chord = part.slice(1, -1);
-          const chordWidth = doc.getTextWidth(chord) + 1.5;
-          if (posX + chordWidth > pageWidth - margin && posX > margin) {
-            ensureSpace(7);
-            cursorY += 6;
-            posX = margin;
-          }
+        segments.forEach((seg) => {
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8.5);
-          doc.setTextColor(180, 83, 9); // Amber print chord
-          doc.text(chord, posX, cursorY - 1);
-          posX += chordWidth;
-        } else if (part) {
+          doc.setFontSize(8);
+          const chordText = seg.chord || '';
+          const chordW = chordText ? doc.getTextWidth(chordText) + 2 : 0;
+
           doc.setFont('times', 'normal');
           doc.setFontSize(10.5);
-          doc.setTextColor(30, 30, 30);
-          
-          const words = part.split(' ');
-          words.forEach((word, wIdx) => {
-            const wordText = wIdx === 0 ? word : ' ' + word;
-            const wWidth = doc.getTextWidth(wordText);
-            if (posX + wWidth > pageWidth - margin && posX > margin) {
+          const lyricText = seg.text || '';
+          const lyricW = lyricText ? doc.getTextWidth(lyricText) : 0;
+
+          const segWidth = Math.max(chordW, lyricW);
+
+          if (posX + segWidth > pageWidth - margin && posX > margin) {
+            ensureSpace(12);
+            cursorY += 8.5;
+            posX = margin;
+          }
+
+          if (chordText) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(180, 83, 9); // Amber print chord
+            doc.text(chordText, posX, cursorY - 1);
+          }
+
+          if (lyricText) {
+            doc.setFont('times', 'normal');
+            doc.setFontSize(10.5);
+            doc.setTextColor(30, 30, 30);
+            doc.text(lyricText, posX, cursorY + 3.8);
+          }
+
+          posX += segWidth;
+        });
+
+        cursorY += 8.5;
+      } else {
+        // Inline chords
+        const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
+        let posX = margin;
+
+        parts.forEach((part) => {
+          if (part.startsWith('[') && part.endsWith(']')) {
+            const chord = part.slice(1, -1);
+            const chordWidth = doc.getTextWidth(chord) + 1.5;
+            if (posX + chordWidth > pageWidth - margin && posX > margin) {
               ensureSpace(7);
               cursorY += 6;
               posX = margin;
             }
-            doc.text(wordText, posX, cursorY);
-            posX += wWidth;
-          });
-        }
-      });
-      cursorY += 6;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(180, 83, 9); // Amber print chord
+            doc.text(chord, posX, cursorY - 1);
+            posX += chordWidth;
+          } else if (part) {
+            doc.setFont('times', 'normal');
+            doc.setFontSize(10.5);
+            doc.setTextColor(30, 30, 30);
+            
+            const words = part.split(' ');
+            words.forEach((word, wIdx) => {
+              const wordText = wIdx === 0 ? word : ' ' + word;
+              const wWidth = doc.getTextWidth(wordText);
+              if (posX + wWidth > pageWidth - margin && posX > margin) {
+                ensureSpace(7);
+                cursorY += 6;
+                posX = margin;
+              }
+              doc.text(wordText, posX, cursorY);
+              posX += wWidth;
+            });
+          }
+        });
+        cursorY += 6;
+      }
     } else {
       // Plain text lyric line without chords
       const cleanLine = line.replace(/\[[^\]]+\]/g, '');

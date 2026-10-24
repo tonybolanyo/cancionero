@@ -60,6 +60,14 @@ function shiftNote(note: string, semitones: number): string {
 }
 
 /**
+ * Structure of a lyric segment for rendering lyrics with chords
+ */
+export interface LyricSegment {
+  chord: string | null;
+  text: string;
+}
+
+/**
  * Transpose all chords enclosed in brackets [Am] inside lyrics text
  */
 export function transposeLyrics(lyrics: string, semitones: number): string {
@@ -67,6 +75,88 @@ export function transposeLyrics(lyrics: string, semitones: number): string {
   return lyrics.replace(/\[([A-G][#b]?[^\]]*)\]/g, (_, chord) => {
     return `[${transposeChord(chord, semitones)}]`;
   });
+}
+
+/**
+ * Parses a single line of lyrics with embedded chords [Chord] into structured segments.
+ * Accurately aligns chords with syllables, avoids collisions between adjacent chords,
+ * and preserves proper spacing.
+ */
+export function parseLyricLine(line: string): LyricSegment[] {
+  if (!line) return [];
+
+  // If no chords present, return the whole line as a single segment
+  if (!/\[([A-G][#b]?[^\]]*)\]/.test(line)) {
+    return [{ chord: null, text: line }];
+  }
+
+  // Split line keeping bracketed chord tokens
+  const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
+  const rawSegments: { chord: string | null; text: string }[] = [];
+  let pendingChord: string | null = null;
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === '') continue;
+
+    if (part.startsWith('[') && part.endsWith(']')) {
+      if (pendingChord !== null) {
+        // Consecutive chords with no text in between (e.g. [C][G])
+        rawSegments.push({ chord: pendingChord, text: '' });
+      }
+      pendingChord = part.slice(1, -1);
+    } else {
+      rawSegments.push({ chord: pendingChord, text: part });
+      pendingChord = null;
+    }
+  }
+
+  if (pendingChord !== null) {
+    rawSegments.push({ chord: pendingChord, text: '' });
+  }
+
+  // Refine segments so words can wrap smoothly on mobile screens while keeping chords attached to exact syllables
+  const finalSegments: LyricSegment[] = [];
+
+  for (const seg of rawSegments) {
+    if (!seg.text) {
+      finalSegments.push({ chord: seg.chord, text: '' });
+      continue;
+    }
+
+    if (seg.chord) {
+      // If the text starts with spaces, preserve the leading space before the chord-bearing word
+      const matchLeadingSpaces = seg.text.match(/^(\s+)(.*)$/);
+      let leadingSpaces = '';
+      let restText = seg.text;
+
+      if (matchLeadingSpaces && matchLeadingSpaces[2].length > 0) {
+        leadingSpaces = matchLeadingSpaces[1];
+        restText = matchLeadingSpaces[2];
+        finalSegments.push({ chord: null, text: leadingSpaces });
+      }
+
+      // Split remaining text into word tokens preserving trailing spaces
+      const words = restText.match(/\S+\s*|\s+/g) || (restText ? [restText] : ['']);
+
+      if (words.length > 0) {
+        finalSegments.push({ chord: seg.chord, text: words[0] });
+        for (let w = 1; w < words.length; w++) {
+          finalSegments.push({ chord: null, text: words[w] });
+        }
+      } else {
+        finalSegments.push({ chord: seg.chord, text: '' });
+      }
+    } else {
+      // Segment without chord: split into word chunks so text wraps naturally
+      const words = seg.text.match(/\S+\s*|\s+/g) || [seg.text];
+      for (const word of words) {
+        finalSegments.push({ chord: null, text: word });
+      }
+    }
+  }
+
+  return finalSegments;
 }
 
 /**

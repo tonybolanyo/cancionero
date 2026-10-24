@@ -13,4 +13,5 @@ export interface AuthState {
   user: GitHubUser | null;
   token: string | null;
   authorizedUsername: string;
+  rememberMe: boolean;
 }

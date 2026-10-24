@@ -10,7 +10,9 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  Sparkles
+  UserCheck,
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,15 +26,14 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
     isAuthenticated,
     user,
     authorizedUsername,
-    setAuthorizedUsername,
     loginWithGitHub,
     logout,
-    simulateAuthorDemoLogin
+    isVerifyingSession
   } = useAuth();
 
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [customUsername, setCustomUsername] = useState(authorizedUsername);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -40,20 +41,20 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token.trim()) return;
+
     setIsLoading(true);
     setStatusMessage(null);
 
-    // Save custom username
-    setAuthorizedUsername(customUsername);
-
-    const result = await loginWithGitHub(token, customUsername);
+    const result = await loginWithGitHub(token, rememberMe);
     setIsLoading(false);
 
     if (result.success && result.user) {
       setStatusMessage({
         type: 'success',
-        text: `¡Bienvenido Tony! Autenticado como @${result.user.login}. Modo autor activado.`
+        text: `Identidad verificada con éxito como @${result.user.login}. Modo autor activado.`
       });
+      setToken('');
       setTimeout(() => {
         onClose();
         setStatusMessage(null);
@@ -61,74 +62,115 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
     } else {
       setStatusMessage({
         type: 'error',
-        text: result.error || 'Error al autenticar con GitHub.'
+        text: result.error || 'Error al autenticar credenciales con GitHub.'
       });
     }
   };
 
-  const handleDemoLogin = () => {
-    setAuthorizedUsername(customUsername);
-    simulateAuthorDemoLogin();
-    setStatusMessage({
-      type: 'success',
-      text: `Modo autor activado para pruebas en vista previa.`
-    });
-    setTimeout(() => {
-      onClose();
-      setStatusMessage(null);
-    }, 1200);
+  const handleLogout = () => {
+    logout();
+    setStatusMessage(null);
+    setToken('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
       <div className="relative w-full max-w-lg max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200">
-        {/* Header */}
+        {/* Modal Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
+            <div className="w-10 h-10 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)] shadow-sm">
               {isAuthenticated ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
-                {isAuthenticated ? 'Sesión de Autor Activa' : 'Acceso de Autor con GitHub'}
+                {isAuthenticated ? 'Sesión de Autor Verificada' : 'Acceso Restringido de Autor'}
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
-                Autenticación 100% estática para la administración del cancionero
+                Verificación directa con GitHub API · Cero secretos en el repositorio
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer transition-colors"
+            title="Cerrar ventana"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-4 sm:p-6 space-y-6 bg-[var(--bg-surface)]">
+        {/* Modal Content Body */}
+        <div className="p-4 sm:p-6 space-y-5 bg-[var(--bg-surface)]">
+          {/* Security architecture banner */}
+          <div className="p-4 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-xs text-[var(--text-secondary)] space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-[var(--accent-primary)]">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Autorización exclusiva para @{authorizedUsername}</span>
+              </div>
+              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--bg-modal)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
+                GitHub Pages
+              </span>
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              El repositorio y la web estática en GitHub Pages son completamente públicos y <strong>no contienen ningún dato sensible ni token</strong>.
+              El acceso a la sección de autor está protegido criptográficamente: solo el usuario titular de la cuenta <strong className="text-[var(--text-primary)] font-mono">@{authorizedUsername}</strong> puede desbloquear la edición tras validar su identidad con la API de GitHub.
+            </p>
+          </div>
+
+          {/* Status feedback banner */}
+          {statusMessage && (
+            <div
+              className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 transition-all ${
+                statusMessage.type === 'success'
+                  ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-red-500/15 border border-red-500/30 text-red-700 dark:text-red-300'
+              }`}
+            >
+              {statusMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+              ) : (
+                <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              )}
+              <span className="leading-relaxed font-medium">{statusMessage.text}</span>
+            </div>
+          )}
+
           {isAuthenticated && user ? (
-            /* Logged in state */
+            /* Logged in state for authorized author */
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center gap-4">
+              <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-start gap-4">
                 <img
                   src={user.avatar_url}
                   alt={user.login}
-                  className="w-12 h-12 rounded-full border border-[var(--border-medium)] object-cover"
+                  className="w-13 h-13 rounded-full border-2 border-[var(--accent-primary)] object-cover shadow-sm shrink-0"
                   referrerPolicy="no-referrer"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-[var(--text-primary)] text-sm truncate">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-serif font-bold text-[var(--text-primary)] text-base truncate">
                       {user.name}
                     </span>
-                    <span className="text-xs text-[var(--accent-primary)] font-mono font-medium">
+                    <span className="text-xs text-[var(--accent-primary)] font-mono font-semibold px-2 py-0.5 rounded-full bg-[var(--accent-subtle)] border border-[var(--accent-border)]">
                       @{user.login}
                     </span>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                    Modo autor activado. Tienes acceso completo para crear canciones, editar borradores y gestionar Git.
+
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Identidad verificada como Autor Único</span>
+                  </div>
+
+                  {user.bio && (
+                    <p className="text-xs text-[var(--text-muted)] mt-1.5 italic font-serif">
+                      "{user.bio}"
+                    </p>
+                  )}
+
+                  <p className="text-[11px] text-[var(--text-secondary)] mt-2">
+                    Tienes permisos completos para componer nuevas canciones, editar letras y cifrados, gestionar borradores e inéditas y registrar commits en Git.
                   </p>
                 </div>
               </div>
@@ -145,82 +187,55 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                 </a>
 
                 <button
-                  onClick={logout}
-                  className="px-4 py-2 text-xs font-semibold text-red-500 hover:text-white bg-red-500/10 hover:bg-red-500/80 border border-red-500/20 rounded-lg transition-colors cursor-pointer"
+                  onClick={handleLogout}
+                  className="px-4 py-2 text-xs font-semibold text-red-500 hover:text-white bg-red-500/10 hover:bg-red-500 border border-red-500/20 rounded-lg transition-colors cursor-pointer"
                 >
                   Cerrar Sesión de Autor
                 </button>
               </div>
             </div>
           ) : (
-            /* Login Form */
-            <form onSubmit={handleLogin} className="space-y-5">
-              {/* Architecture info note */}
-              <div className="p-3.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-xs text-[var(--text-secondary)] space-y-1">
-                <div className="flex items-center gap-1.5 font-semibold text-[var(--accent-primary)]">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Sin backend dedicado (Web 100% estática)</span>
+            /* Login Form for the author */
+            <form onSubmit={handleLogin} className="space-y-4">
+              {/* Authorized user badge - Not editable by unauthorized visitors */}
+              <div className="p-3 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-[var(--text-muted)] block font-medium">
+                      Cuenta de GitHub autorizada
+                    </span>
+                    <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
+                      @{authorizedUsername}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                  Para que puedas publicar el cancionero en GitHub Pages o cualquier hosting estático, la verificación de identidad se realiza directamente desde tu navegador contra <code className="text-[var(--text-primary)] font-mono">api.github.com</code>.
-                </p>
-              </div>
-
-              {/* Status banner */}
-              {statusMessage && (
-                <div className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
-                  statusMessage.type === 'success'
-                    ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
-                    : 'bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-300'
-                }`}>
-                  {statusMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                  )}
-                  <span>{statusMessage.text}</span>
-                </div>
-              )}
-
-              {/* Authorized Username Field */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-[var(--text-primary)] block">
-                  Tu nombre de usuario en GitHub
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-[var(--text-muted)]">
-                    @
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={customUsername}
-                    onChange={(e) => setCustomUsername(e.target.value)}
-                    placeholder="tonygb"
-                    className="w-full pl-8 pr-3.5 py-2.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
-                  />
-                </div>
-                <span className="text-[11px] text-[var(--text-muted)] block">
-                  Solo esta cuenta de GitHub tendrá permisos de edición y acceso a borradores.
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Único titular</span>
                 </span>
               </div>
 
-              {/* Token Field */}
+              {/* Personal Access Token Input */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-[var(--text-primary)] block">
-                    Token de acceso personal de GitHub (PAT)
+                    Personal Access Token (PAT) de GitHub de @{authorizedUsername}
                   </label>
                   <a
                     href="https://github.com/settings/tokens/new?description=Cancionero+Tony+Author+Mode&scopes=read:user"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[11px] text-[var(--accent-primary)] hover:underline flex items-center gap-1 font-medium"
+                    title="Crear un token en tu cuenta de GitHub con permiso read:user"
                   >
-                    <span>Generar en GitHub</span>
+                    <span>Generar token</span>
                     <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </div>
+
                 <div className="relative">
                   <KeyRound className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                   <input
@@ -228,52 +243,67 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                     required
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxx o github_pat_..."
-                    className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
+                    placeholder="ghp_... o github_pat_..."
+                    className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] font-mono placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
                   />
                   <button
                     type="button"
                     onClick={() => setShowToken(!showToken)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                    title={showToken ? 'Ocultar token' : 'Mostrar token'}
                   >
                     {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <span className="text-[11px] text-[var(--text-muted)] block leading-relaxed">
-                  Solo requiere el permiso mínimo <code className="text-[var(--accent-primary)] font-semibold">read:user</code> para validar tu identidad. No requiere acceso a repositorios privados si no lo deseas.
-                </span>
+
+                <div className="text-[11px] text-[var(--text-muted)] space-y-1 leading-relaxed">
+                  <p>
+                    • Solo requiere el permiso de lectura básica de perfil (<code className="text-[var(--accent-primary)] font-semibold font-mono">read:user</code>).
+                  </p>
+                  <p>
+                    • Si cualquier otra persona introduce un token de una cuenta distinta, el sistema rechazará la autenticación inmediatamente.
+                  </p>
+                </div>
               </div>
 
-              {/* Actions */}
-              <div className="pt-2 space-y-3">
+              {/* Persistence option */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2.5 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] bg-[var(--bg-input)] border-[var(--border-subtle)] cursor-pointer"
+                  />
+                  <span>Recordar sesión en este navegador (usar solo en tu equipo personal)</span>
+                </label>
+              </div>
+
+              {/* Action button */}
+              <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 px-4 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                  disabled={isLoading || isVerifyingSession || !token.trim()}
+                  className="w-full py-2.5 px-4 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Lock className="w-4 h-4" />
-                  <span>{isLoading ? 'Verificando con GitHub...' : 'Verificar y Entrar como Autor'}</span>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Validando credenciales con GitHub...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      <span>Verificar y Entrar como Autor</span>
+                    </>
+                  )}
                 </button>
-
-                {/* Instant preview testing button */}
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    ¿Probando en vista previa sin token?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleDemoLogin}
-                    className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
-                  >
-                    Activar Modo Autor de Prueba
-                  </button>
-                </div>
               </div>
             </form>
           )}
         </div>
 
-        {/* Footer */}
+        {/* Modal Footer */}
         <div className="p-4 sm:p-6 border-t border-[var(--border-subtle)] bg-[var(--bg-modal)] flex justify-end">
           <button
             onClick={onClose}

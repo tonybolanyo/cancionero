@@ -15,6 +15,7 @@ import {
 import { Song, GitCommit, GitStatusSummary } from '../types/song';
 import { StorageService } from '../services/storageService';
 import { generateGitRepositoryZip } from '../utils/markdownParser';
+import { useAuth } from '../context/AuthContext';
 
 interface GitSyncModalProps {
   isOpen: boolean;
@@ -31,9 +32,12 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const { user } = useAuth();
+  const defaultAuthor = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
+
   const [activeTab, setActiveTab] = useState<'status' | 'history' | 'export' | 'import' | 'remote'>('status');
   const [commitMessage, setCommitMessage] = useState('');
-  const [authorName, setAuthorName] = useState('Tony <tony@tonygb.com>');
+  const [authorName, setAuthorName] = useState(defaultAuthor);
   const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 

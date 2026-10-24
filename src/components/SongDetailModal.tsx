@@ -22,6 +22,7 @@ import {
   songToMarkdown,
   transposeLyrics,
   transposeChord,
+  parseLyricLine,
   getYouTubeEmbedUrl,
   getSpotifyEmbedUrl
 } from '../utils/markdownParser';
@@ -48,9 +49,44 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
   const [semitones, setSemitones] = useState<number>(0);
   const [showChords, setShowChords] = useState<boolean>(true);
-  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
+  const [chordPosition, setChordPosition] = useState<'above' | 'inline'>(() => {
+    try {
+      const saved = localStorage.getItem('cancionero_chord_position');
+      if (saved === 'above' || saved === 'inline') return saved;
+    } catch {
+      // ignore
+    }
+    return 'above';
+  });
+  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>(() => {
+    try {
+      const saved = localStorage.getItem('cancionero_font_size');
+      if (saved === 'sm' || saved === 'base' || saved === 'lg') return saved;
+    } catch {
+      // ignore
+    }
+    return 'base';
+  });
   const [copied, setCopied] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'lyrics' | 'markdown' | 'notes'>('lyrics');
+
+  const handleChordPositionChange = (pos: 'above' | 'inline') => {
+    setChordPosition(pos);
+    try {
+      localStorage.setItem('cancionero_chord_position', pos);
+    } catch (err) {
+      console.warn('Error al guardar la posición de acordes:', err);
+    }
+  };
+
+  const handleFontSizeChange = (size: 'sm' | 'base' | 'lg') => {
+    setFontSize(size);
+    try {
+      localStorage.setItem('cancionero_font_size', size);
+    } catch (err) {
+      console.warn('Error al guardar el tamaño de fuente:', err);
+    }
+  };
   
   // Auto-scroll state for singing/playing
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
@@ -112,7 +148,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   const handleExportPdf = () => {
     try {
       setIsExportingPdf(true);
-      exportSongToPdf(song, { showChords, semitones });
+      exportSongToPdf(song, { showChords, semitones, chordPosition });
       setTimeout(() => setIsExportingPdf(false), 1800);
     } catch (err) {
       console.error('Error al exportar canción a PDF:', err);
@@ -157,6 +193,40 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
       }
 
       if (showChords && /\[([A-G][#b]?[^\]]*)\]/.test(line)) {
+        if (chordPosition === 'above') {
+          const segments = parseLyricLine(line);
+          return (
+            <div
+              key={idx}
+              className="flex flex-wrap items-end my-1 font-serif text-[var(--text-primary)]"
+            >
+              {segments.map((segment, sIdx) => {
+                const hasChord = !!segment.chord;
+                return (
+                  <span
+                    key={sIdx}
+                    className="inline-flex flex-col justify-end align-bottom select-text"
+                  >
+                    <span
+                      className={`font-mono font-bold text-xs leading-none select-none ${
+                        hasChord
+                          ? 'text-[var(--accent-primary)] pb-1 pr-1.5'
+                          : 'text-transparent pb-1'
+                      }`}
+                      aria-hidden={!hasChord}
+                    >
+                      {hasChord ? segment.chord : '\u00A0'}
+                    </span>
+                    <span className="font-serif leading-normal whitespace-pre">
+                      {segment.text || (hasChord ? '\u00A0' : '')}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+          );
+        }
+
         const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
         return (
           <p key={idx} className="leading-relaxed font-mono text-[var(--text-primary)] flex flex-wrap items-baseline gap-1 my-1">
@@ -166,7 +236,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 return (
                   <span
                     key={pIdx}
-                    className="inline-block px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-mono font-semibold text-xs border border-[var(--accent-border)] -translate-y-1 mx-0.5"
+                    className="inline-block px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-mono font-semibold text-xs border border-[var(--accent-border)] -translate-y-1 mx-0.5 select-none"
                   >
                     {chordSymbol}
                   </span>
@@ -496,35 +566,103 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
               {/* Transpose Semitones Controls */}
               {showChords && (
-                <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-md p-0.5">
-                  <button
-                    onClick={() => setSemitones(prev => prev - 1)}
-                    className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                    title="Bajar 1 semitono"
-                  >
-                    <ArrowDown className="w-3 h-3" />
-                  </button>
-                  <span className="text-[11px] font-mono px-1.5 text-[var(--accent-primary)] font-semibold tabular-nums">
-                    {semitones === 0 ? 'Tono 0' : semitones > 0 ? `+${semitones}` : semitones}
-                  </span>
-                  <button
-                    onClick={() => setSemitones(prev => prev + 1)}
-                    className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                    title="Subir 1 semitono"
-                  >
-                    <ArrowUp className="w-3 h-3" />
-                  </button>
-                  {semitones !== 0 && (
+                <>
+                  <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-md p-0.5">
                     <button
-                      onClick={() => setSemitones(0)}
-                      className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      title="Restablecer tonalidad original"
+                      onClick={() => setSemitones(prev => prev - 1)}
+                      className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                      title="Bajar 1 semitono"
                     >
-                      <RotateCcw className="w-2.5 h-2.5" />
+                      <ArrowDown className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
+                    <span className="text-[11px] font-mono px-1.5 text-[var(--accent-primary)] font-semibold tabular-nums">
+                      {semitones === 0 ? 'Tono 0' : semitones > 0 ? `+${semitones}` : semitones}
+                    </span>
+                    <button
+                      onClick={() => setSemitones(prev => prev + 1)}
+                      className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                      title="Subir 1 semitono"
+                    >
+                      <ArrowUp className="w-3 h-3" />
+                    </button>
+                    {semitones !== 0 && (
+                      <button
+                        onClick={() => setSemitones(0)}
+                        className="p-1 hover:bg-[var(--bg-surface)] rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        title="Restablecer tonalidad original"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Chord Position Toggle: Above vs Inline */}
+                  <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-md p-0.5 text-xs">
+                    <span className="text-[11px] text-[var(--text-muted)] px-1 font-medium hidden sm:inline">
+                      Acordes:
+                    </span>
+                    <button
+                      onClick={() => handleChordPositionChange('above')}
+                      className={`px-2 py-0.5 rounded text-xs transition-colors cursor-pointer font-medium ${
+                        chordPosition === 'above'
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      title="Mostrar acordes encima de las sílabas correspondientes (preferencia guardada)"
+                    >
+                      Encima
+                    </button>
+                    <button
+                      onClick={() => handleChordPositionChange('inline')}
+                      className={`px-2 py-0.5 rounded text-xs transition-colors cursor-pointer font-medium ${
+                        chordPosition === 'inline'
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      title="Mostrar acordes en la misma línea intercalados con el texto (preferencia guardada)"
+                    >
+                      En línea
+                    </button>
+                  </div>
+                </>
               )}
+
+              {/* Font Size Selector */}
+              <div className="flex items-center gap-0.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-md p-0.5 text-xs">
+                <button
+                  onClick={() => handleFontSizeChange('sm')}
+                  className={`px-2 py-0.5 rounded text-xs font-mono transition-colors cursor-pointer ${
+                    fontSize === 'sm'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Tamaño de letra: Pequeña"
+                >
+                  A-
+                </button>
+                <button
+                  onClick={() => handleFontSizeChange('base')}
+                  className={`px-2 py-0.5 rounded text-xs font-mono transition-colors cursor-pointer ${
+                    fontSize === 'base'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Tamaño de letra: Normal"
+                >
+                  A
+                </button>
+                <button
+                  onClick={() => handleFontSizeChange('lg')}
+                  className={`px-2 py-0.5 rounded text-xs font-mono transition-colors cursor-pointer ${
+                    fontSize === 'lg'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Tamaño de letra: Grande"
+                >
+                  A+
+                </button>
+              </div>
 
               {/* Teleprompter / Auto-scroll toggle */}
               <button
