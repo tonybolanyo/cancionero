@@ -446,59 +446,71 @@ function CancioneroApp() {
       </footer>
 
       {/* Modals */}
-      <SongDetailModal
-        song={selectedSong}
-        onClose={() => setSelectedSong(null)}
-        onEdit={(song) => {
-          setSelectedSong(null);
-          handleEditSong(song);
-        }}
-        onDownloadMd={handleDownloadMd}
-        isAuthor={isAuthor}
-        onViewHistory={handleViewHistory}
-      />
+      {selectedSong && (
+        <SongDetailModal
+          song={selectedSong}
+          onClose={() => setSelectedSong(null)}
+          onEdit={(song) => {
+            setSelectedSong(null);
+            handleEditSong(song);
+          }}
+          onDownloadMd={handleDownloadMd}
+          isAuthor={isAuthor}
+          onViewHistory={handleViewHistory}
+        />
+      )}
 
-      <SongEditorModal
-        song={editingSong}
-        isOpen={isEditorOpen}
-        onClose={() => {
-          setIsEditorOpen(false);
-          setEditingSong(null);
-        }}
-        onSave={handleSaveSong}
-      />
+      {isEditorOpen && (
+        <SongEditorModal
+          song={editingSong}
+          isOpen={isEditorOpen}
+          onClose={() => {
+            setIsEditorOpen(false);
+            setEditingSong(null);
+          }}
+          onSave={handleSaveSong}
+        />
+      )}
 
-      <GitSyncModal
-        isOpen={isGitModalOpen}
-        onClose={() => {
-          setIsGitModalOpen(false);
-          checkGitStatus();
-        }}
-        songs={songs}
-        onSongsUpdated={handleSongsUpdated}
-      />
+      {isGitModalOpen && (
+        <GitSyncModal
+          isOpen={isGitModalOpen}
+          onClose={() => {
+            setIsGitModalOpen(false);
+            checkGitStatus();
+          }}
+          songs={songs}
+          onSongsUpdated={handleSongsUpdated}
+        />
+      )}
 
-      <AboutModal
-        isOpen={isAboutOpen}
-        onClose={() => setIsAboutOpen(false)}
-      />
+      {isAboutOpen && (
+        <AboutModal
+          isOpen={isAboutOpen}
+          onClose={() => setIsAboutOpen(false)}
+        />
+      )}
 
-      <GitHubAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
+      {isAuthModalOpen && (
+        <GitHubAuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+        />
+      )}
 
       {/* Song Version History Modal (Author Only) */}
-      <VersionHistory
-        song={historySong}
-        isOpen={isHistoryModalOpen}
-        onClose={() => {
-          setIsHistoryModalOpen(false);
-          setHistorySong(null);
-        }}
-        onRestoreSong={handleSongRestored}
-        isAuthor={isAuthor}
-      />
+      {isHistoryModalOpen && historySong && (
+        <VersionHistory
+          song={historySong}
+          isOpen={isHistoryModalOpen}
+          onClose={() => {
+            setIsHistoryModalOpen(false);
+            setHistorySong(null);
+          }}
+          onRestoreSong={handleSongRestored}
+          isAuthor={isAuthor}
+        />
+      )}
     </div>
   );
 }

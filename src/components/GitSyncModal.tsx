@@ -30,8 +30,6 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   songs,
   onSongsUpdated
 }) => {
-  if (!isOpen) return null;
-
   const { user } = useAuth();
   const defaultAuthor = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
 
@@ -46,6 +44,8 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
 
   const gitStatus: GitStatusSummary = StorageService.getGitStatus();
   const commits: GitCommit[] = StorageService.getCommits();
+
+  if (!isOpen) return null;
 
   const handleCreateCommit = (e: React.FormEvent) => {
     e.preventDefault();

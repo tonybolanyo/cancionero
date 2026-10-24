@@ -32,42 +32,23 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   onRestoreSong,
   isAuthor
 }) => {
-  if (!isOpen || !song) return null;
-
-  // Strict author-only gate
-  if (!isAuthor) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-        <div className="p-6 rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] max-w-md w-full text-center space-y-4">
-          <ShieldAlert className="w-10 h-10 text-[var(--accent-primary)] mx-auto" />
-          <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
-            Acceso Restringido al Autor
-          </h3>
-          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            El historial de versiones y la visualización de commits de control de versiones solo están disponibles en Modo Autor autenticado.
-          </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const [selectedRecordIndex, setSelectedRecordIndex] = useState<number>(0);
   const [viewTab, setViewTab] = useState<'diff' | 'lyrics' | 'raw'>('diff');
   const [copied, setCopied] = useState<boolean>(false);
   const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
 
+  const songId = song?.id || '';
+  const songUpdatedAt = song?.updatedAt || '';
+
   const historyRecords: SongVersionRecord[] = useMemo(() => {
-    return StorageService.getSongVersionHistory(song.id);
-  }, [song.id, song.updatedAt]);
+    if (!songId) return [];
+    return StorageService.getSongVersionHistory(songId);
+  }, [songId, songUpdatedAt]);
 
   const selectedRecord = historyRecords[selectedRecordIndex] || historyRecords[0];
-  const currentMarkdown = songToMarkdown(song);
+  const currentMarkdown = useMemo(() => {
+    return song ? songToMarkdown(song) : '';
+  }, [song]);
 
   // Compute line-by-line diff
   const diffLines = useMemo(() => {
@@ -106,6 +87,31 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
 
     return lines;
   }, [selectedRecord, currentMarkdown]);
+
+  if (!isOpen || !song) return null;
+
+  // Strict author-only gate
+  if (!isAuthor) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="p-6 rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] max-w-md w-full text-center space-y-4">
+          <ShieldAlert className="w-10 h-10 text-[var(--accent-primary)] mx-auto" />
+          <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
+            Acceso Restringido al Autor
+          </h3>
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+            El historial de versiones y la visualización de commits de control de versiones solo están disponibles en Modo Autor autenticado.
+          </p>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleRestore = () => {
     if (!selectedRecord) return;

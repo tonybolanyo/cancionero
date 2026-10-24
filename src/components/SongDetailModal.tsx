@@ -29,7 +29,7 @@ import {
 import { exportSongToPdf } from '../utils/pdfGenerator';
 
 interface SongDetailModalProps {
-  song: Song | null;
+  song: Song;
   onClose: () => void;
   onEdit: (song: Song) => void;
   onDownloadMd: (song: Song) => void;
@@ -45,8 +45,6 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   isAuthor,
   onViewHistory
 }) => {
-  if (!song) return null;
-
   const [semitones, setSemitones] = useState<number>(0);
   const [showChords, setShowChords] = useState<boolean>(true);
   const [chordPosition, setChordPosition] = useState<'above' | 'inline'>(() => {
@@ -280,10 +278,10 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 Tono: {currentKey} {semitones !== 0 && `(${semitones > 0 ? `+${semitones}` : semitones})`}
               </span>
               {song.tempo && (
-                <>
+                <span className="inline-flex items-center gap-2">
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">{song.tempo} BPM</span>
-                </>
+                </span>
               )}
             </div>
 
@@ -564,9 +562,9 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 {showChords ? 'Acordes: Visibles' : 'Acordes: Ocultos'}
               </button>
 
-              {/* Transpose Semitones Controls */}
+              {/* Transpose Semitones Controls & Chord Position Toggle */}
               {showChords && (
-                <>
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-md p-0.5">
                     <button
                       onClick={() => setSemitones(prev => prev - 1)}
@@ -624,7 +622,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                       En línea
                     </button>
                   </div>
-                </>
+                </div>
               )}
 
               {/* Font Size Selector */}
@@ -685,15 +683,15 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 title="Descargar versión PDF optimizada para impresión (fuente serif, fondo blanco y tonalidad actual)"
               >
                 {isExportingPdf ? (
-                  <>
+                  <span className="inline-flex items-center gap-1.5">
                     <Check className="w-3 h-3 text-emerald-500" />
                     <span className="text-emerald-500 font-medium">¡PDF Guardado!</span>
-                  </>
+                  </span>
                 ) : (
-                  <>
+                  <span className="inline-flex items-center gap-1.5">
                     <FileDown className="w-3 h-3 text-[var(--accent-primary)]" />
                     <span>Exportar PDF</span>
-                  </>
+                  </span>
                 )}
               </button>
             </div>

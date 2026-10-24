@@ -16,8 +16,6 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   onClose,
   onSave
 }) => {
-  if (!isOpen) return null;
-
   const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
 
   // Form fields
@@ -123,6 +121,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setRawMarkdown(songToMarkdown(draftSong));
     }
   }, [song, isOpen]);
+
+  if (!isOpen) return null;
 
   const handleSwitchToRaw = () => {
     const tempSong: Song = {
