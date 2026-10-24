@@ -2,6 +2,7 @@ import React from 'react';
 import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { siteMetadata } from '../utils/siteConfig';
 
 interface HeaderProps {
   onOpenNewSong: () => void;
@@ -37,8 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onSelectTab('all')}
             className="text-left group cursor-pointer focus:outline-none"
           >
-            <span className="font-serif text-xl font-bold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors whitespace-nowrap block">
-              Tony · Cancionero
+            <span className="font-serif text-lg sm:text-xl font-bold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors whitespace-nowrap block">
+              {siteMetadata.name}
             </span>
           </button>
         </div>

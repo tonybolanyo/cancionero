@@ -16,6 +16,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
+import { siteMetadata } from './utils/siteConfig';
 
 function CancioneroApp() {
   const { isAuthor } = useAuth();
@@ -394,10 +395,10 @@ function CancioneroApp() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-[var(--text-muted)]">
           <div>
             <p className="font-serif text-[var(--text-primary)] font-semibold mb-1">
-              Cancionero & Archivo Musical · Tony
+              {siteMetadata.name}
             </p>
-            <p className="text-[var(--text-muted)]">
-              Almacenamiento en archivos locales Markdown con cifrado de acordes y autenticación GitHub 100% estática.
+            <p className="text-[var(--text-muted)] max-w-xl">
+              {siteMetadata.description}
             </p>
           </div>
 

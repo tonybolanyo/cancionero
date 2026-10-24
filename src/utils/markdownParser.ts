@@ -89,10 +89,12 @@ export function songToMarkdown(song: Song): string {
     song.youtubeUrl ? `youtubeUrl: "${song.youtubeUrl}"` : null,
     song.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
     song.audioUrl ? `audioUrl: "${song.audioUrl}"` : null,
+    song.coverImage ? `coverImage: "${song.coverImage}"` : null,
     song.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
     song.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${t.replace(/"/g, '')}"`).join(', ')}]` : null,
     `createdAt: "${song.createdAt}"`,
     `updatedAt: "${song.updatedAt}"`,
+    song.gitHash ? `gitHash: "${song.gitHash}"` : null,
     '---',
     '',
     song.lyrics.trim()
@@ -176,11 +178,13 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     youtubeUrl: meta.youtubeUrl || undefined,
     soundcloudUrl: meta.soundcloudUrl || undefined,
     audioUrl: meta.audioUrl || undefined,
+    coverImage: meta.coverImage || undefined,
     notes: meta.notes || undefined,
     tags: parsedTags && parsedTags.length > 0 ? parsedTags : undefined,
     lyrics: lyricsBody,
     createdAt: meta.createdAt || now,
-    updatedAt: meta.updatedAt || now
+    updatedAt: meta.updatedAt || now,
+    gitHash: meta.gitHash || undefined
   };
 }
 

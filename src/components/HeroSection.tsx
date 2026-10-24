@@ -1,6 +1,8 @@
 import React from 'react';
 import { Play, FolderGit2, Lock } from 'lucide-react';
 import { Song } from '../types/song';
+import { siteMetadata } from '../utils/siteConfig';
+import bannerImage from '../assets/images/songwriter_studio_banner_1792313088629.jpg';
 
 interface HeroSectionProps {
   songs: Song[];
@@ -38,21 +40,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="lg:col-span-7 flex flex-col justify-center">
             {/* Quiet editorial kicker */}
             <div className="flex items-center gap-2 text-xs font-medium text-[var(--accent-primary)] tracking-wider uppercase mb-3">
-              <span>Colección Acústica & Canción de Autor</span>
+              <span>{siteMetadata.subtitle}</span>
               <span aria-hidden="true">·</span>
               <span>Web Estática & Git</span>
             </div>
 
-            {/* Display headline */}
+            {/* Display headline - Uses site title from metadata.json */}
             <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[var(--text-primary)] leading-[1.15] text-balance mb-5">
-              El archivo centralizado de mis canciones, letras y maquetas.
+              {siteMetadata.name}
             </h1>
 
-            {/* Lead editorial copy */}
+            {/* Lead editorial copy - Uses description from metadata.json */}
             <p className="text-base sm:text-lg text-[var(--text-secondary)] font-normal leading-relaxed max-w-2xl mb-8">
-              Una plataforma limpia para escuchar los temas editados en Spotify, YouTube y SoundCloud,
-              leer letras con acordes transportables y gestionar borradores o canciones inéditas privadas
-              almacenadas íntegramente en archivos Markdown y JSON sincronizados con Git.
+              {siteMetadata.description}
             </p>
 
             {/* Functional action triggers */}
@@ -88,7 +88,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="lg:col-span-5 relative group">
             <div className="relative h-72 sm:h-80 lg:h-full min-h-[320px] rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] shadow-xl">
               <img
-                src="/src/assets/images/songwriter_studio_banner_1792313088629.jpg"
+                src={bannerImage}
                 alt="Estudio de composición con guitarra acústica, libreta de letras y luz cálida"
                 className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-700"
                 referrerPolicy="no-referrer"

@@ -1,5 +1,6 @@
 {
   "name": "Cancionero de versos perdidos",
+  "subtitle": "Canciones de autor, letras íntimas y poesía acústica",
   "description": "Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

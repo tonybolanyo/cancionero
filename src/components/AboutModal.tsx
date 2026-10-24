@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Music, GitBranch, FileCode, Shield, Compass, Palette } from 'lucide-react';
+import { siteMetadata } from '../utils/siteConfig';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               <Compass className="w-4 h-4" />
             </div>
             <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
-              Manifiesto del Cancionero & Personalización
+              Manifiesto · {siteMetadata.name}
             </h3>
           </div>
           <button
@@ -31,8 +32,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
 
         <div className="p-6 space-y-6 text-sm text-[var(--text-secondary)] leading-relaxed font-serif bg-[var(--bg-surface)]">
           <p>
-            Este cancionero reúne todas las canciones compuestas a lo largo de los años en un espacio propio,
-            sin bases de datos ni suscripciones privativas.
+            {siteMetadata.description}
           </p>
 
           <div className="space-y-4 not-italic font-sans">
