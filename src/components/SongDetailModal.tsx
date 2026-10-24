@@ -35,6 +35,7 @@ interface SongDetailModalProps {
   onDownloadMd: (song: Song) => void;
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
+  onRenameFile?: (song: Song) => void;
 }
 
 export const SongDetailModal: React.FC<SongDetailModalProps> = ({
@@ -43,7 +44,8 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   onEdit,
   onDownloadMd,
   isAuthor,
-  onViewHistory
+  onViewHistory,
+  onRenameFile
 }) => {
   const [semitones, setSemitones] = useState<number>(0);
   const [showChords, setShowChords] = useState<boolean>(true);
@@ -322,6 +324,15 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 >
                   <Edit3 className="w-4 h-4" />
                 </button>
+                {onRenameFile && (
+                  <button
+                    onClick={() => onRenameFile(song)}
+                    className="p-2 text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                    title="Renombrar archivo Markdown (.md) (Solo autor)"
+                  >
+                    <FileCode className="w-4 h-4" />
+                  </button>
+                )}
               </>
             )}
             <button
@@ -750,10 +761,20 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
         {/* Tab 3: Raw Markdown with YAML Frontmatter */}
         {activeTab === 'markdown' && (
           <div className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-[var(--text-muted)]">
-                Archivo fuente: <strong className="text-[var(--accent-primary)]">songs/{song.id}.md</strong>
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[var(--text-muted)]">
+                  Archivo fuente: <strong className="text-[var(--accent-primary)]">songs/{song.id}.md</strong>
+                </span>
+                {isAuthor && onRenameFile && (
+                  <button
+                    onClick={() => onRenameFile(song)}
+                    className="px-2 py-0.5 text-[11px] font-sans font-medium text-[var(--accent-primary)] hover:underline cursor-pointer"
+                  >
+                    (Renombrar archivo)
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopyMarkdown}

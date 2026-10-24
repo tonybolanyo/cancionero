@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode } from 'lucide-react';
 import { Song } from '../types/song';
 
 interface SongExpandedRowProps {
@@ -10,6 +10,7 @@ interface SongExpandedRowProps {
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
+  onRenameFile?: (song: Song) => void;
 }
 
 export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
@@ -20,6 +21,7 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
   isAuthor,
   onViewHistory,
   onSelectTag,
+  onRenameFile,
 }) => {
   // Extract up to 3 lines of lyrics for expanded preview
   const lyricLines = song.lyrics
@@ -226,6 +228,15 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
                   title="Historial de versiones Git"
                 >
                   <History className="w-4 h-4" />
+                </button>
+              )}
+              {onRenameFile && (
+                <button
+                  onClick={() => onRenameFile(song)}
+                  className="p-2 hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                  title="Renombrar archivo songs/[nombre].md"
+                >
+                  <FileCode className="w-4 h-4" />
                 </button>
               )}
               <button

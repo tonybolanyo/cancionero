@@ -21,10 +21,16 @@ Aplicación web moderna desarrollada en **React 19**, **Vite** y **Tailwind CSS*
   * **Lista ampliada**: Filas detalladas con previsualización de estrofas poéticas y notas del autor.
   * **Lista comprimida**: Tabla de atril densa, con métrica, tempo BPM y columnas ordenables.
 * 🎧 **Integración multimedia**: Enlaces y reproductores para Spotify, YouTube, SoundCloud y maquetas de audio directas.
+* 📦 **Sincronización Git & Operación Push**:
+  * Registro de commits con mensajes descriptivos y autoría.
+  * **Operación "push" automática o manual** tras realizar commits (sincroniza directamente con tu repositorio remoto de GitHub).
+  * Contador de commits pendientes de push y registro de última sincronización.
+* 🏷️ **Renombrado de archivos Markdown (`songs/*.md`)**:
+  * Opción para renombrar archivos desde el editor, visor de detalles, tarjetas o tabla de canciones.
+  * Migración automática de contenido en snapshots y opción de commit/push inmediato del renombrado.
 * 🔐 **Seguridad sin secretos en el repositorio**:
   * Acceso a la sección de autor protegido exclusivamente para tu usuario de GitHub.
   * No hay tokens, contraseñas ni claves API expuestas en el código público.
-* 📦 **Sincronización Git**: Exportación, control de versiones local e importación de temas en Markdown estándar (`.md`).
 
 ---
 

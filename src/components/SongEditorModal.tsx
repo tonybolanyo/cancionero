@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileEdit, Code2, AlertCircle, Plus, Tag } from 'lucide-react';
+import { X, Save, FileEdit, Code2, AlertCircle, Plus, Tag, GitCommit, UploadCloud, FileText } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
+import { StorageService } from '../services/storageService';
+import { GitHubSyncService } from '../services/githubSyncService';
+import { useAuth } from '../context/AuthContext';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -16,6 +19,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   onClose,
   onSave
 }) => {
+  const { token, user } = useAuth();
   const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
 
   // Form fields
@@ -36,6 +40,13 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [lyrics, setLyrics] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
+
+  // Git Commit and Push on Save options
+  const [createCommitOnSave, setCreateCommitOnSave] = useState(true);
+  const [commitMessageOnSave, setCommitMessageOnSave] = useState('');
+  const [pushOnSave, setPushOnSave] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
 
   const commonTagSuggestions = [
     'acústico',
@@ -175,7 +186,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (mode === 'raw_markdown') {
@@ -193,30 +204,81 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       return;
     }
 
-    const songSlug = id.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const cleanSlug = id
+      .trim()
+      .toLowerCase()
+      .replace(/\.md$/i, '')
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-    const updatedSong: Song = {
-      id: songSlug,
-      title: title.trim(),
-      status,
-      year: Number(year) || new Date().getFullYear(),
-      genre: genre.trim() || 'Canción de Autor',
-      key: key.trim() || 'Am',
-      tempo: tempo ? parseInt(tempo, 10) : undefined,
-      timeSignature: timeSignature.trim() || '4/4',
-      tuning: tuning.trim() || 'Estándar (EADGBE)',
-      spotifyUrl: spotifyUrl.trim() || undefined,
-      youtubeUrl: youtubeUrl.trim() || undefined,
-      soundcloudUrl: soundcloudUrl.trim() || undefined,
-      audioUrl: audioUrl.trim() || undefined,
-      notes: notes.trim() || undefined,
-      tags: tags.length > 0 ? tags : undefined,
-      lyrics: lyrics.trim(),
-      createdAt: song?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    setIsSaving(true);
+    setSaveStatusMessage('Guardando cambios locales...');
 
-    onSave(updatedSong);
+    try {
+      let finalId = cleanSlug;
+      // If editing existing song and ID changed, perform file rename
+      if (song && song.id !== cleanSlug) {
+        const renameRes = StorageService.renameSongFile(song.id, cleanSlug, false);
+        if (!renameRes.success) {
+          setParseError(renameRes.error || 'Error al renombrar el archivo.');
+          setIsSaving(false);
+          return;
+        }
+        finalId = cleanSlug;
+      }
+
+      const updatedSong: Song = {
+        id: finalId,
+        title: title.trim(),
+        status,
+        year: Number(year) || new Date().getFullYear(),
+        genre: genre.trim() || 'Canción de Autor',
+        key: key.trim() || 'Am',
+        tempo: tempo ? parseInt(tempo, 10) : undefined,
+        timeSignature: timeSignature.trim() || '4/4',
+        tuning: tuning.trim() || 'Estándar (EADGBE)',
+        spotifyUrl: spotifyUrl.trim() || undefined,
+        youtubeUrl: youtubeUrl.trim() || undefined,
+        soundcloudUrl: soundcloudUrl.trim() || undefined,
+        audioUrl: audioUrl.trim() || undefined,
+        notes: notes.trim() || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        lyrics: lyrics.trim(),
+        createdAt: song?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      onSave(updatedSong);
+
+      // Create Git commit if enabled
+      const defaultMsg = song
+        ? `update: actualizar letra y acordes de "${updatedSong.title}"`
+        : `feat: nueva composición "${updatedSong.title}" en tono ${updatedSong.key}`;
+      const finalMsg = commitMessageOnSave.trim() || defaultMsg;
+
+      if (createCommitOnSave) {
+        setSaveStatusMessage('Registrando Git Commit...');
+        const authorStr = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
+        StorageService.createGitCommit(finalMsg, authorStr);
+
+        // Push to GitHub if enabled
+        if (pushOnSave) {
+          setSaveStatusMessage('Haciendo Push a GitHub...');
+          await GitHubSyncService.pushSongFile(updatedSong, finalMsg, token);
+          if (song && song.id !== finalId) {
+            await GitHubSyncService.deleteRemoteFile(
+              `songs/${song.id}.md`,
+              `chore(files): eliminar ruta anterior tras renombrar a 'songs/${finalId}.md'`,
+              token
+            );
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('Error saving song / push', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -334,6 +396,41 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                     <option value="private">Privada / Inédita íntima</option>
                   </select>
                 </div>
+              </div>
+
+              {/* File Name & Identifier Row */}
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-[var(--text-primary)] flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Nombre de archivo Markdown (.md)</span>
+                  </label>
+                  {song && song.id !== id && (
+                    <span className="text-[11px] text-[var(--accent-primary)] font-semibold flex items-center gap-1">
+                      <span>Renombrar archivo desde: </span>
+                      <code className="font-mono bg-[var(--bg-modal)] px-1.5 py-0.5 rounded border border-[var(--accent-border)]">{song.id}.md</code>
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center">
+                  <span className="px-3 py-2 bg-[var(--bg-modal)] border border-r-0 border-[var(--border-subtle)] rounded-l-lg text-xs font-mono text-[var(--text-muted)] select-none">
+                    songs/
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={id}
+                    onChange={(e) => setId(e.target.value.toLowerCase().replace(/\.md$/i, '').replace(/[^a-z0-9_-]+/g, '-'))}
+                    placeholder="ejemplo-mi-cancion"
+                    className="flex-1 px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
+                  />
+                  <span className="px-3 py-2 bg-[var(--bg-modal)] border border-l-0 border-[var(--border-subtle)] rounded-r-lg text-xs font-mono text-[var(--text-muted)] select-none">
+                    .md
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Ruta del archivo en el repositorio Git. Si lo modificas, se renombrará automáticamente al guardar.
+                </p>
               </div>
 
               {/* Row 2: Musical metadata */}
@@ -583,31 +680,95 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                   className="w-full p-4 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] leading-relaxed resize-y shadow-sm"
                 />
               </div>
+
+              {/* Git Commit & Push on Save Options */}
+              <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={createCommitOnSave}
+                    onChange={(e) => setCreateCommitOnSave(e.target.checked)}
+                    className="w-4 h-4 rounded text-[var(--accent-primary)] border-[var(--border-subtle)] focus:ring-0"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <GitCommit className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Registrar Git Commit automáticamente al guardar</span>
+                  </span>
+                </label>
+
+                {createCommitOnSave && (
+                  <div className="pl-6 space-y-2.5 pt-1 border-t border-[var(--border-subtle)]">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-[var(--text-muted)] block">
+                        Mensaje del commit (opcional, se autogenera si se deja vacío):
+                      </label>
+                      <input
+                        type="text"
+                        value={commitMessageOnSave}
+                        onChange={(e) => setCommitMessageOnSave(e.target.value)}
+                        placeholder={song ? `update: cambios en "${title || song.title}"` : `feat: nueva composición "${title || 'canción'}"`}
+                        className="w-full px-3 py-1.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                      <input
+                        type="checkbox"
+                        checked={pushOnSave}
+                        onChange={(e) => setPushOnSave(e.target.checked)}
+                        className="w-4 h-4 rounded text-[var(--accent-primary)] border-[var(--border-subtle)] focus:ring-0"
+                      />
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <UploadCloud className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        <span>Hacer <strong>Push</strong> a GitHub inmediatamente tras el commit (git push)</span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </form>
           )}
         </div>
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-t border-[var(--border-subtle)] bg-[var(--bg-modal)]">
-          <span className="text-xs font-mono text-[var(--text-muted)]">
-            Archivo destino: <strong className="text-[var(--text-primary)]">songs/{id || 'cancion'}.md</strong>
-          </span>
+          <div className="flex flex-col text-xs font-mono">
+            <span className="text-[var(--text-muted)]">
+              Archivo destino: <strong className="text-[var(--text-primary)]">songs/{id || 'cancion'}.md</strong>
+            </span>
+            {isSaving && saveStatusMessage && (
+              <span className="text-[var(--accent-primary)] text-[11px] animate-pulse">
+                {saveStatusMessage}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <button
               type="button"
+              disabled={isSaving}
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="button"
+              disabled={isSaving}
               onClick={handleSubmit}
-              className="flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>Guardar Canción</span>
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>{createCommitOnSave && pushOnSave ? 'Guardar, Commit y Push 🚀' : 'Guardar Canción'}</span>
+                </>
+              )}
             </button>
           </div>
         </div>

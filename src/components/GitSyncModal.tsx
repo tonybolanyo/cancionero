@@ -10,12 +10,17 @@ import {
   FileText,
   FolderArchive,
   Terminal,
-  History
+  History,
+  UploadCloud,
+  Send,
+  Save,
+  ExternalLink
 } from 'lucide-react';
 import { Song, GitCommit, GitStatusSummary } from '../types/song';
 import { StorageService } from '../services/storageService';
 import { generateGitRepositoryZip } from '../utils/markdownParser';
 import { useAuth } from '../context/AuthContext';
+import { GitHubSyncService, RemoteConfig } from '../services/githubSyncService';
 
 interface GitSyncModalProps {
   isOpen: boolean;
@@ -30,34 +35,111 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   songs,
   onSongsUpdated
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const defaultAuthor = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
 
   const [activeTab, setActiveTab] = useState<'status' | 'history' | 'export' | 'import' | 'remote'>('status');
   const [commitMessage, setCommitMessage] = useState('');
   const [authorName, setAuthorName] = useState(defaultAuthor);
+  const [autoPushAfterCommit, setAutoPushAfterCommit] = useState(true);
+  const [isPushing, setIsPushing] = useState(false);
   const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const [remoteConfig, setRemoteConfig] = useState<RemoteConfig>(() =>
+    GitHubSyncService.getRemoteConfig(user?.login)
+  );
+  const [remoteOwnerInput, setRemoteOwnerInput] = useState(remoteConfig.owner);
+  const [remoteRepoInput, setRemoteRepoInput] = useState(remoteConfig.repo);
+  const [remoteBranchInput, setRemoteBranchInput] = useState(remoteConfig.branch);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mdFileInputRef = useRef<HTMLInputElement>(null);
 
   const gitStatus: GitStatusSummary = StorageService.getGitStatus();
   const commits: GitCommit[] = StorageService.getCommits();
+  const unpushedCount = StorageService.getUnpushedCommitsCount();
+  const lastPushTime = GitHubSyncService.getLastPushTime();
 
   if (!isOpen) return null;
 
-  const handleCreateCommit = (e: React.FormEvent) => {
+  const handleCreateCommit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commitMessage.trim()) {
       setNotification({ message: 'Por favor escribe un mensaje de commit descriptivo.', type: 'error' });
       return;
     }
 
-    const { commit } = StorageService.createGitCommit(commitMessage, authorName);
+    const currentMsg = commitMessage.trim();
+    const { commit } = StorageService.createGitCommit(currentMsg, authorName);
     setCommitMessage('');
+
+    if (autoPushAfterCommit) {
+      setIsPushing(true);
+      try {
+        const pushResult = await GitHubSyncService.pushFullCatalog(
+          songs,
+          `feat(sync): [${commit.hash}] ${currentMsg}`,
+          token,
+          remoteConfig
+        );
+        setNotification({
+          message: `Commit [${commit.hash}] registrado y Push a GitHub completado: ${pushResult.message}`,
+          type: pushResult.success ? 'success' : 'error'
+        });
+      } catch (err: any) {
+        setNotification({
+          message: `Commit [${commit.hash}] guardado, pero ocurrió un problema al hacer push: ${err.message}`,
+          type: 'error'
+        });
+      } finally {
+        setIsPushing(false);
+      }
+    } else {
+      setNotification({
+        message: `Commit registrado con éxito: [${commit.hash}] "${commit.message}". Recuerda hacer Push para enviarlo a GitHub.`,
+        type: 'success'
+      });
+    }
+    setTimeout(() => setNotification(null), 6000);
+  };
+
+  const handleManualPush = async () => {
+    setIsPushing(true);
+    setNotification(null);
+    try {
+      const pushResult = await GitHubSyncService.pushFullCatalog(
+        songs,
+        `sync: sincronización manual del cancionero (${songs.length} temas)`,
+        token,
+        remoteConfig
+      );
+      setNotification({
+        message: pushResult.message,
+        type: pushResult.success ? 'success' : 'error'
+      });
+    } catch (err: any) {
+      setNotification({
+        message: 'Error al ejecutar push: ' + err.message,
+        type: 'error'
+      });
+    } finally {
+      setIsPushing(false);
+      setTimeout(() => setNotification(null), 6000);
+    }
+  };
+
+  const handleSaveRemoteConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: RemoteConfig = {
+      owner: remoteOwnerInput.trim().toLowerCase(),
+      repo: remoteRepoInput.trim(),
+      branch: remoteBranchInput.trim() || 'main'
+    };
+    GitHubSyncService.saveRemoteConfig(updated);
+    setRemoteConfig(updated);
     setNotification({
-      message: `Commit registrado con éxito: [${commit.hash}] "${commit.message}"`,
+      message: `Configuración remota guardada: ${updated.owner}/${updated.repo}@${updated.branch}`,
       type: 'success'
     });
     setTimeout(() => setNotification(null), 4000);
@@ -341,6 +423,22 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                 />
               </div>
 
+              {/* Push option checkbox */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={autoPushAfterCommit}
+                    onChange={(e) => setAutoPushAfterCommit(e.target.checked)}
+                    className="w-4 h-4 rounded text-[var(--accent-primary)] border-[var(--border-subtle)] focus:ring-0"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <UploadCloud className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Ejecutar operación <strong>"push"</strong> a GitHub automáticamente tras el commit (git push origin {remoteConfig.branch})</span>
+                  </span>
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-[var(--text-primary)] block">
@@ -357,14 +455,80 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                 <div className="flex items-end">
                   <button
                     type="submit"
-                    className="w-full py-2.5 px-4 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    disabled={isPushing}
+                    className="w-full py-2.5 px-4 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
                   >
-                    <GitCommitIcon className="w-4 h-4" />
-                    <span>Hacer Commit (git commit -m)</span>
+                    {isPushing ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                        <span>Haciendo Commit y Push...</span>
+                      </>
+                    ) : (
+                      <>
+                        <GitCommitIcon className="w-4 h-4" />
+                        <span>{autoPushAfterCommit ? 'Hacer Commit y Push a Remoto 🚀' : 'Hacer Commit Local'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </form>
+
+            {/* Remote Push & Sync Card */}
+            <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold flex items-center gap-1.5">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Sincronización Remota (GitHub Push)</span>
+                  </h4>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Repositorio: <strong className="text-[var(--text-primary)] font-mono">{remoteConfig.owner}/{remoteConfig.repo}</strong> en rama <strong className="text-[var(--text-primary)] font-mono">{remoteConfig.branch}</strong>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleManualPush}
+                    disabled={isPushing}
+                    className="py-2 px-3 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Enviar cambios al repositorio GitHub"
+                  >
+                    {isPushing ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                        <span>Haciendo Push...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Hacer Push ahora</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
+                <div>
+                  <span>Commits locales pendientes de Push: </span>
+                  <span className={`font-mono font-bold ${unpushedCount > 0 ? 'text-[var(--accent-primary)]' : 'text-emerald-500'}`}>
+                    {unpushedCount} {unpushedCount === 1 ? 'commit' : 'commits'}
+                  </span>
+                </div>
+                {lastPushTime && (
+                  <div>
+                    Último push: {new Date(lastPushTime).toLocaleString('es-ES', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -558,32 +722,122 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
           </div>
         )}
 
-        {/* Tab 5: Remote Git Instructions */}
+        {/* Tab 5: Remote Git Configuration & Direct Push */}
         {activeTab === 'remote' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[var(--bg-surface)]">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold">
-              Cómo sincronizar con tu repositorio en GitHub o GitLab
-            </h4>
-            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-              Como cada canción se almacena como un archivo de texto independiente sin bases de datos propietarias,
-              puedes versionar todo con Git estándar en tu terminal:
-            </p>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-[var(--bg-surface)]">
+            {/* Interactive Remote Repo Config Form */}
+            <form onSubmit={handleSaveRemoteConfig} className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold flex items-center gap-1.5">
+                  <UploadCloud className="w-4 h-4" />
+                  <span>Configuración del Repositorio Remoto (GitHub)</span>
+                </h4>
+                <a
+                  href={`https://github.com/${remoteConfig.owner}/${remoteConfig.repo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--accent-primary)] flex items-center gap-1"
+                >
+                  <span>Abrir en GitHub</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-code)] border border-[var(--border-subtle)] font-mono text-xs text-[var(--text-primary)] space-y-2 select-all leading-relaxed">
-              <div className="text-[var(--text-muted)]"># 1. Descomprime el zip en tu carpeta de proyectos</div>
-              <div className="text-[var(--accent-primary)] font-semibold">cd ~/cancionero-tony</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git init</div>
-              <div className="text-[var(--text-muted)]"># 2. Conecta con tu repositorio en GitHub</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git remote add origin git@github.com:tony/cancionero.git</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git branch -M main</div>
-              <div className="text-[var(--text-muted)]"># 3. Registra y sube tus temas</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git add songs/*.md catalog.json README.md</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git commit -m "feat: repertorio inicial con letras y acordes"</div>
-              <div className="text-[var(--accent-primary)] font-semibold">git push -u origin main</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[var(--text-primary)] block">
+                    Usuario / Organización
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={remoteOwnerInput}
+                    onChange={(e) => setRemoteOwnerInput(e.target.value)}
+                    placeholder="tonygb"
+                    className="w-full px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[var(--text-primary)] block">
+                    Nombre del Repositorio
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={remoteRepoInput}
+                    onChange={(e) => setRemoteRepoInput(e.target.value)}
+                    placeholder="cancionero"
+                    className="w-full px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[var(--text-primary)] block">
+                    Rama (Branch)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={remoteBranchInput}
+                    onChange={(e) => setRemoteBranchInput(e.target.value)}
+                    placeholder="main"
+                    className="w-full px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <button
+                  type="submit"
+                  className="py-2 px-3 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Guardar configuración remota</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualPush}
+                  disabled={isPushing}
+                  className="py-2 px-4 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  {isPushing ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                      <span>Haciendo Push...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Hacer Push ahora a {remoteConfig.owner}/{remoteConfig.repo}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold">
+                Comandos Git en Terminal (Alternativa local)
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Si prefieres trabajar desde tu ordenador con la consola o VS Code:
+              </p>
+
+              <div className="p-4 rounded-xl bg-[var(--bg-code)] border border-[var(--border-subtle)] font-mono text-xs text-[var(--text-primary)] space-y-2 select-all leading-relaxed">
+                <div className="text-[var(--text-muted)]"># 1. Comprueba o vincula el repositorio remoto</div>
+                <div className="text-[var(--accent-primary)] font-semibold">git remote add origin https://github.com/{remoteConfig.owner}/{remoteConfig.repo}.git</div>
+                <div className="text-[var(--accent-primary)] font-semibold">git branch -M {remoteConfig.branch}</div>
+                <div className="text-[var(--text-muted)]"># 2. Registra los cambios y haz Push</div>
+                <div className="text-[var(--accent-primary)] font-semibold">git add songs/*.md catalog.json</div>
+                <div className="text-[var(--accent-primary)] font-semibold">git commit -m "update: sincronizar letras y canciones"</div>
+                <div className="text-[var(--accent-primary)] font-semibold">git push -u origin {remoteConfig.branch}</div>
+              </div>
             </div>
 
             <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] leading-relaxed">
-              💡 <strong>Ventaja de este flujo</strong>: Tus canciones te pertenecen al 100%. No dependes de bases de datos de terceros ni suscripciones. Puedes abrir cualquier archivo <code className="text-[var(--accent-primary)] font-semibold">.md</code> en Obsidian, VS Code, iA Writer o cualquier editor Markdown.
+              💡 <strong>Push automático</strong>: Al crear commits en la pestaña <em>Estado</em> o al editar canciones, puedes marcar la casilla <strong>"Hacer Push a GitHub tras el commit"</strong> para que los cambios se suban automáticamente a tu rama remota.
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, FileCode } from 'lucide-react';
 import { Song } from '../types/song';
 
 interface SongCardProps {
@@ -10,6 +10,7 @@ interface SongCardProps {
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
+  onRenameFile?: (song: Song) => void;
 }
 
 export const SongCard: React.FC<SongCardProps> = ({
@@ -19,7 +20,8 @@ export const SongCard: React.FC<SongCardProps> = ({
   onDownloadMd,
   isAuthor,
   onViewHistory,
-  onSelectTag
+  onSelectTag,
+  onRenameFile
 }) => {
   // Extract first 2-3 lines of lyrics for preview
   const lyricPreview = song.lyrics
@@ -175,6 +177,15 @@ export const SongCard: React.FC<SongCardProps> = ({
                   title="Historial de versiones Git de este tema (Solo autor)"
                 >
                   <History className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onRenameFile && (
+                <button
+                  onClick={() => onRenameFile(song)}
+                  className="p-1.5 hover:text-[var(--accent-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                  title="Renombrar archivo songs/[nombre].md (Solo autor)"
+                >
+                  <FileCode className="w-3.5 h-3.5" />
                 </button>
               )}
               <button

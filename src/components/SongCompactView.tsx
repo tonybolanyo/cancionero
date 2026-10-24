@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Song } from '../types/song';
-import { Play, FileText, Edit3, Download, History, ArrowUpDown, Disc, Music, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, ArrowUpDown, Disc, Music, ArrowUp, ArrowDown, FileCode } from 'lucide-react';
 
 interface SongCompactViewProps {
   songs: Song[];
@@ -9,6 +9,7 @@ interface SongCompactViewProps {
   onDownloadMd: (song: Song) => void;
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
+  onRenameFile?: (song: Song) => void;
 }
 
 type SortField = 'title' | 'year' | 'key' | 'tempo' | 'genre' | 'status';
@@ -21,6 +22,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
   onDownloadMd,
   isAuthor,
   onViewHistory,
+  onRenameFile,
 }) => {
   const [sortField, setSortField] = useState<SortField>('title');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -290,6 +292,15 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
                               title="Historial de versiones Git"
                             >
                               <History className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {onRenameFile && (
+                            <button
+                              onClick={() => onRenameFile(song)}
+                              className="p-1 hover:text-[var(--accent-primary)] rounded hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                              title="Renombrar archivo songs/[nombre].md"
+                            >
+                              <FileCode className="w-3.5 h-3.5" />
                             </button>
                           )}
                           <button

@@ -210,6 +210,103 @@ export class StorageService {
   }
 
   /**
+   * Rename a song file (id) from songs/oldId.md to songs/newId.md
+   * updates the songs collection, snapshots, and optionally records a Git commit
+   */
+  static renameSongFile(
+    oldId: string,
+    newIdRaw: string,
+    autoCommit: boolean = true
+  ): { success: boolean; error?: string; songs: Song[]; renamedSong?: Song } {
+    const cleanNewId = newIdRaw
+      .trim()
+      .toLowerCase()
+      .replace(/\.md$/i, '')
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (!cleanNewId) {
+      return {
+        success: false,
+        error: 'El nombre del archivo no puede estar vacío y debe contener caracteres válidos (a-z, 0-9, guiones).',
+        songs: this.getSongs()
+      };
+    }
+
+    if (cleanNewId === oldId) {
+      return {
+        success: true,
+        songs: this.getSongs(),
+        renamedSong: this.getSongs().find(s => s.id === oldId)
+      };
+    }
+
+    const songs = this.getSongs();
+    if (songs.some(s => s.id === cleanNewId)) {
+      return {
+        success: false,
+        error: `Ya existe otra canción con el archivo "songs/${cleanNewId}.md". Elige otro nombre.`,
+        songs
+      };
+    }
+
+    const songIndex = songs.findIndex(s => s.id === oldId);
+    if (songIndex === -1) {
+      return {
+        success: false,
+        error: `No se encontró la canción original con identificador "${oldId}".`,
+        songs
+      };
+    }
+
+    const targetSong = songs[songIndex];
+    const renamedSong: Song = {
+      ...targetSong,
+      id: cleanNewId,
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedSongs = [...songs];
+    updatedSongs[songIndex] = renamedSong;
+    this.saveSongs(updatedSongs);
+
+    // Update snapshot: move snapshot[oldId] to snapshot[cleanNewId]
+    const snapshot = this.getSnapshot();
+    if (snapshot[oldId]) {
+      snapshot[cleanNewId] = songToMarkdown(renamedSong);
+      delete snapshot[oldId];
+      try {
+        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(snapshot));
+      } catch (err) {
+        console.warn('Failed to update snapshot on rename', err);
+      }
+    }
+
+    if (autoCommit) {
+      this.createGitCommit(
+        `refactor(files): renombrar 'songs/${oldId}.md' a 'songs/${cleanNewId}.md'`
+      );
+    }
+
+    return {
+      success: true,
+      songs: updatedSongs,
+      renamedSong
+    };
+  }
+
+  /**
+   * Count how many commits have been created locally since the last push
+   */
+  static getUnpushedCommitsCount(): number {
+    const commits = this.getCommits();
+    const lastPushed = localStorage.getItem('tony_cancionero_last_push_v1');
+    if (!lastPushed) return commits.length;
+    const lastPushedTime = new Date(lastPushed).getTime();
+    return commits.filter(c => new Date(c.timestamp).getTime() > lastPushedTime).length;
+  }
+
+  /**
    * Get Git commit history
    */
   static getCommits(): GitCommit[] {

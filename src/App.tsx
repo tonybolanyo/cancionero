@@ -15,6 +15,7 @@ import { GitSyncModal } from './components/GitSyncModal';
 import { AboutModal } from './components/AboutModal';
 import { GitHubAuthModal } from './components/GitHubAuthModal';
 import { VersionHistory } from './components/VersionHistory';
+import { RenameFileModal } from './components/RenameFileModal';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
@@ -57,11 +58,13 @@ function CancioneroApp() {
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [historySong, setHistorySong] = useState<Song | null>(null);
+  const [renamingSong, setRenamingSong] = useState<Song | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState<boolean>(false);
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState<boolean>(false);
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
@@ -137,6 +140,24 @@ function CancioneroApp() {
     }
     setHistorySong(song);
     setIsHistoryModalOpen(true);
+  };
+
+  const handleOpenRename = (song: Song) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setRenamingSong(song);
+    setIsRenameModalOpen(true);
+  };
+
+  const handleRenameSuccess = (renamedSong: Song, updatedSongs: Song[]) => {
+    setSongs(updatedSongs);
+    checkGitStatus();
+    if (selectedSong && selectedSong.id === renamingSong?.id) {
+      setSelectedSong(renamedSong);
+    }
+    setRenamingSong(null);
   };
 
   const handleSongRestored = (restoredSong: Song) => {
@@ -376,6 +397,7 @@ function CancioneroApp() {
                       isAuthor={isAuthor}
                       onViewHistory={handleViewHistory}
                       onSelectTag={setTagFilter}
+                      onRenameFile={handleOpenRename}
                     />
                   ))}
                 </div>
@@ -394,6 +416,7 @@ function CancioneroApp() {
                       isAuthor={isAuthor}
                       onViewHistory={handleViewHistory}
                       onSelectTag={setTagFilter}
+                      onRenameFile={handleOpenRename}
                     />
                   ))}
                 </div>
@@ -408,6 +431,7 @@ function CancioneroApp() {
                   onDownloadMd={(s) => handleDownloadMd(s)}
                   isAuthor={isAuthor}
                   onViewHistory={handleViewHistory}
+                  onRenameFile={handleOpenRename}
                 />
               )}
             </>
@@ -524,6 +548,7 @@ function CancioneroApp() {
           onDownloadMd={handleDownloadMd}
           isAuthor={isAuthor}
           onViewHistory={handleViewHistory}
+          onRenameFile={handleOpenRename}
         />
       )}
 
@@ -576,6 +601,19 @@ function CancioneroApp() {
           }}
           onRestoreSong={handleSongRestored}
           isAuthor={isAuthor}
+        />
+      )}
+
+      {/* Rename Song File Modal (Author Only) */}
+      {isRenameModalOpen && renamingSong && (
+        <RenameFileModal
+          song={renamingSong}
+          isOpen={isRenameModalOpen}
+          onClose={() => {
+            setIsRenameModalOpen(false);
+            setRenamingSong(null);
+          }}
+          onRenameSuccess={handleRenameSuccess}
         />
       )}
     </div>
