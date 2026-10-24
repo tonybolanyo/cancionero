@@ -1,5 +1,7 @@
 export type SongStatus = 'published' | 'draft' | 'private';
 
+export type SongViewMode = 'grid' | 'expanded' | 'compact';
+
 export interface Song {
   id: string; // unique slug e.g. 'noches-de-cristal'
   title: string;

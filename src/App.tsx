@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Song, SongStatus } from './types/song';
+import { Song, SongStatus, SongViewMode } from './types/song';
 import { StorageService } from './services/storageService';
 import { songToMarkdown } from './utils/markdownParser';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { SongFilters } from './components/SongFilters';
 import { SongCard } from './components/SongCard';
+import { SongExpandedRow } from './components/SongExpandedRow';
+import { SongCompactView } from './components/SongCompactView';
 import { SongDashboard } from './components/SongDashboard';
 import { SongDetailModal } from './components/SongDetailModal';
 import { SongEditorModal } from './components/SongEditorModal';
@@ -30,6 +32,26 @@ function CancioneroApp() {
   const [keyFilter, setKeyFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [activeNavTab, setActiveNavTab] = useState<'all' | 'published' | 'drafts' | 'private' | 'dashboard'>('all');
+  const [viewMode, setViewMode] = useState<SongViewMode>(() => {
+    try {
+      const saved = localStorage.getItem('cancionero_view_mode');
+      if (saved === 'grid' || saved === 'expanded' || saved === 'compact') {
+        return saved;
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+    return 'grid';
+  });
+
+  const handleViewModeChange = (mode: SongViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('cancionero_view_mode', mode);
+    } catch (e) {
+      console.warn('Could not save viewMode to localStorage', e);
+    }
+  };
 
   // Modal states
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -198,15 +220,22 @@ function CancioneroApp() {
         }
       }
 
-      // Search query
+      // Search query: accent-insensitive across title, lyrics, notes, tags, genre, key, year, tuning
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const inTitle = song.title.toLowerCase().includes(q);
-        const inGenre = song.genre?.toLowerCase().includes(q);
-        const inLyrics = song.lyrics.toLowerCase().includes(q);
-        const inNotes = song.notes?.toLowerCase().includes(q);
-        const inTags = song.tags?.some(t => t.toLowerCase().includes(q));
-        return inTitle || inGenre || inLyrics || inNotes || !!inTags;
+        const normalize = (text: string) =>
+          text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+        const q = normalize(searchQuery.trim());
+        const inTitle = normalize(song.title).includes(q);
+        const inGenre = song.genre ? normalize(song.genre).includes(q) : false;
+        const inLyrics = normalize(song.lyrics).includes(q);
+        const inNotes = song.notes ? normalize(song.notes).includes(q) : false;
+        const inTags = song.tags?.some(t => normalize(t).includes(q));
+        const inKey = song.key ? normalize(song.key).includes(q) : false;
+        const inYear = song.year ? song.year.toString().includes(q) : false;
+        const inTuning = song.tuning ? normalize(song.tuning).includes(q) : false;
+
+        return inTitle || inGenre || inLyrics || inNotes || !!inTags || inKey || inYear || inTuning;
       }
 
       return true;
@@ -326,24 +355,62 @@ function CancioneroApp() {
             counts={counts}
             isAuthor={isAuthor}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+            filteredCount={filteredSongs.length}
           />
 
-          {/* Song Grid */}
+          {/* Song Catalog Views */}
           {filteredSongs.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredSongs.map((song) => (
-                <SongCard
-                  key={song.id}
-                  song={song}
+            <>
+              {/* Vista 1: Cuadrícula de tarjetas visuales (Vista actual) */}
+              {viewMode === 'grid' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredSongs.map((song) => (
+                    <SongCard
+                      key={song.id}
+                      song={song}
+                      onSelect={(s) => setSelectedSong(s)}
+                      onEdit={(s) => handleEditSong(s)}
+                      onDownloadMd={(s) => handleDownloadMd(s)}
+                      isAuthor={isAuthor}
+                      onViewHistory={handleViewHistory}
+                      onSelectTag={setTagFilter}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Vista 2: Lista ampliada (Filas detalladas con letra extendida y notas) */}
+              {viewMode === 'expanded' && (
+                <div className="flex flex-col gap-4">
+                  {filteredSongs.map((song) => (
+                    <SongExpandedRow
+                      key={song.id}
+                      song={song}
+                      onSelect={(s) => setSelectedSong(s)}
+                      onEdit={(s) => handleEditSong(s)}
+                      onDownloadMd={(s) => handleDownloadMd(s)}
+                      isAuthor={isAuthor}
+                      onViewHistory={handleViewHistory}
+                      onSelectTag={setTagFilter}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Vista 3: Lista más comprimida (Tabla de atril/repertorio densa y ordenable) */}
+              {viewMode === 'compact' && (
+                <SongCompactView
+                  songs={filteredSongs}
                   onSelect={(s) => setSelectedSong(s)}
                   onEdit={(s) => handleEditSong(s)}
                   onDownloadMd={(s) => handleDownloadMd(s)}
                   isAuthor={isAuthor}
                   onViewHistory={handleViewHistory}
-                  onSelectTag={setTagFilter}
                 />
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             /* Graceful empty state */
             <div className="p-12 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] max-w-lg mx-auto my-8 shadow-sm">

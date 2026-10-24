@@ -29,11 +29,18 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: npm ci
-      - run: npm run build
-
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          VITE_BASE_URL: ${{ steps.pages.outputs.base_path || '/cancionero/' }}
+          VITE_GITHUB_ALLOWED_USER: ${{ vars.VITE_GITHUB_ALLOWED_USER || 'tonygb' }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

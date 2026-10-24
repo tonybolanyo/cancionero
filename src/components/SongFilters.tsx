@@ -1,6 +1,6 @@
-import React from 'react';
-import { Search, X, Lock, Tag, RotateCcw } from 'lucide-react';
-import { SongStatus } from '../types/song';
+import React, { useRef, useEffect } from 'react';
+import { Search, X, Lock, Tag, RotateCcw, LayoutGrid, List, AlignJustify } from 'lucide-react';
+import { SongStatus, SongViewMode } from '../types/song';
 
 interface SongFiltersProps {
   searchQuery: string;
@@ -23,6 +23,9 @@ interface SongFiltersProps {
   };
   isAuthor: boolean;
   onOpenAuthModal: () => void;
+  viewMode: SongViewMode;
+  onViewModeChange: (mode: SongViewMode) => void;
+  filteredCount?: number;
 }
 
 export const SongFilters: React.FC<SongFiltersProps> = ({
@@ -40,72 +43,163 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
   availableTags,
   counts,
   isAuthor,
-  onOpenAuthModal
+  onOpenAuthModal,
+  viewMode,
+  onViewModeChange,
+  filteredCount,
 }) => {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Global hotkey: press '/' or 'Ctrl+K' / 'Cmd+K' to focus search input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Do not trigger if already typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+        return;
+      }
+      if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'k')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="space-y-4 mb-8">
-      {/* Top search & quick controls row */}
-      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
+      {/* Top search & view mode switcher row */}
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
         {/* Search input with clean affordance */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 max-w-lg">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar por título, verso, género o notas..."
-            className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-colors shadow-sm"
+            placeholder="Buscar por título, verso, tonalidad, género, año..."
+            className="w-full pl-10 pr-20 py-2.5 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-colors shadow-sm"
           />
-          {searchQuery && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {searchQuery ? (
+              <button
+                onClick={() => {
+                  onSearchChange('');
+                  searchInputRef.current?.focus();
+                }}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-full hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+                title="Borrar búsqueda"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : (
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded shadow-2xs">
+                /
+              </kbd>
+            )}
+          </div>
         </div>
 
-        {/* Secondary filters: Tag, Platform and Musical Key */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Tag selector dropdown */}
-          <select
-            value={tagFilter}
-            onChange={(e) => onTagChange(e.target.value)}
-            className="px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer shadow-sm"
-          >
-            <option value="all">Todas las etiquetas ({availableTags.length})</option>
-            {availableTags.map(({ tag, count }) => (
-              <option key={tag} value={tag}>#{tag} ({count})</option>
-            ))}
-          </select>
+        {/* View mode switcher & secondary filters */}
+        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3">
+          {/* View Mode Switcher Button Group */}
+          <div className="flex items-center p-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-xl shrink-0 shadow-xs">
+            <button
+              onClick={() => onViewModeChange('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+              }`}
+              title="Vista de cuadrícula (Tarjetas visuales con acordes y reproductores)"
+              aria-label="Vista cuadrícula"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tarjetas</span>
+            </button>
 
-          {/* Platform selector */}
-          <select
-            value={platformFilter}
-            onChange={(e) => onPlatformChange(e.target.value as any)}
-            className="px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer shadow-sm"
-          >
-            <option value="all">Todas las plataformas de audio</option>
-            <option value="spotify">Solo en Spotify</option>
-            <option value="youtube">Solo en YouTube</option>
-            <option value="soundcloud">Solo en SoundCloud</option>
-            <option value="audio">Con audio directo / maquetas</option>
-          </select>
+            <button
+              onClick={() => onViewModeChange('expanded')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'expanded'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+              }`}
+              title="Vista de lista ampliada (Filas detalladas con letra extendida y notas)"
+              aria-label="Vista lista ampliada"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lista ampliada</span>
+            </button>
 
-          {/* Key selector */}
-          <select
-            value={keyFilter}
-            onChange={(e) => onKeyChange(e.target.value)}
-            className="px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer shadow-sm"
-          >
-            <option value="all">Todas las tonalidades</option>
-            {availableKeys.map(k => (
-              <option key={k} value={k}>Tonalidad: {k}</option>
-            ))}
-          </select>
+            <button
+              onClick={() => onViewModeChange('compact')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'compact'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+              }`}
+              title="Vista compacta (Tabla de atril/repertorio densa y ordenable por tonalidad o tempo)"
+              aria-label="Vista compacta"
+            >
+              <AlignJustify className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Comprimida</span>
+            </button>
+          </div>
+
+          {/* Secondary filter dropdowns: Key & Platform */}
+          <div className="flex items-center gap-2">
+            {/* Key selector */}
+            <select
+              value={keyFilter}
+              onChange={(e) => onKeyChange(e.target.value)}
+              className="px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer shadow-xs"
+            >
+              <option value="all">Todas las tonalidades</option>
+              {availableKeys.map(k => (
+                <option key={k} value={k}>Tono: {k}</option>
+              ))}
+            </select>
+
+            {/* Platform selector */}
+            <select
+              value={platformFilter}
+              onChange={(e) => onPlatformChange(e.target.value as any)}
+              className="px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer shadow-xs"
+            >
+              <option value="all">Plataformas de audio</option>
+              <option value="spotify">Spotify</option>
+              <option value="youtube">YouTube</option>
+              <option value="soundcloud">SoundCloud</option>
+              <option value="audio">Maquetas directas</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Active search or active tag summary notification */}
+      {searchQuery && (
+        <div className="flex items-center justify-between px-3.5 py-2 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Búsqueda:</span>
+            <span className="font-serif italic font-bold text-[var(--text-primary)]">"{searchQuery}"</span>
+            {filteredCount !== undefined && (
+              <span className="text-[var(--text-muted)] font-mono">
+                · {filteredCount} {filteredCount === 1 ? 'coincidencia' : 'coincidencias'}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => onSearchChange('')}
+            className="text-[var(--accent-primary)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Limpiar búsqueda</span>
+          </button>
+        </div>
+      )}
 
       {/* Interactive Thematic Tag Filter Row */}
       {availableTags.length > 0 && (
@@ -134,7 +228,7 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
                 onClick={() => onTagChange(isSelected ? 'all' : tag)}
                 className={`px-2.5 py-1 rounded-md text-xs font-mono transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 border ${
                   isSelected
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)] font-semibold shadow-sm'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)] font-semibold shadow-xs'
                     : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:text-[var(--text-primary)]'
                 }`}
                 title={`Filtrar por etiqueta "${tag}" (${count} ${count === 1 ? 'canción' : 'canciones'})`}
@@ -168,7 +262,7 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
           onClick={() => onStatusChange('all')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
             statusFilter === 'all'
-              ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-sm'
+              ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
           }`}
         >
@@ -179,7 +273,7 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
           onClick={() => onStatusChange('published')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
             statusFilter === 'published'
-              ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-sm'
+              ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
           }`}
         >
@@ -193,7 +287,7 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
               onClick={() => onStatusChange('draft')}
               className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
                 statusFilter === 'draft'
-                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-sm'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
               }`}
             >
@@ -204,7 +298,7 @@ export const SongFilters: React.FC<SongFiltersProps> = ({
               onClick={() => onStatusChange('private')}
               className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
                 statusFilter === 'private'
-                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-sm'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
               }`}
             >
