@@ -1,6 +1,6 @@
 ---
 id: "no-lo-cuento"
-title: "No lo cuento-"
+title: "No lo cuento"
 status: "published"
 year: 2026
 genre: "Canción de Autor"
@@ -10,7 +10,7 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 tags: ["inédita"]
 createdAt: "2026-10-18T20:15:30.781Z"
-updatedAt: "2026-10-25T17:12:33.138Z"
+updatedAt: "2026-10-25T17:13:48.825Z"
 ---
 ## Estrofa 1
 Hoy amanece distinto,  
