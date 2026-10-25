@@ -28,6 +28,7 @@
     "tempo": 71,
     "timeSignature": "4/4",
     "tuning": "Estándar",
+    "audioUrl": "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3",
     "notes": "Inspirada en los acantilados de la costa gallega. Compás en 3/4 estilo vals marino con afinación Drop D para darle profundidad al bajo.",
     "tags": [
       "acústico",
@@ -49,6 +50,7 @@
     "tempo": 90,
     "timeSignature": "4/4",
     "tuning": "Estándar (EADGBE)",
+    "audioUrl": "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3",
     "tags": [
       "acústico",
       "inédita"
@@ -67,6 +69,7 @@
     "tempo": 179,
     "timeSignature": "4/4",
     "tuning": "Estándar (EADGBE)",
+    "audioUrl": "https://cdn.freesound.org/previews/689/689320_5674468-lq.mp3",
     "tags": [
       "íntima",
       "acústico",
@@ -103,6 +106,7 @@
     "tempo": 87,
     "timeSignature": "4/4",
     "tuning": "Estándar (EADGBE)",
+    "audioUrl": "https://cdn.freesound.org/previews/612/612095_5674468-lq.mp3",
     "tags": [
       "acústico",
       "guitarra",
@@ -166,5 +170,26 @@
     "lyrics": "## Estrofa 1\nEn mis noches de luna y desvelo,\nEres mi calma, mi único consuelo.\nCuerdas que cantan secretos al viento,\nMarcando el ritmo de mi propio aliento.\n\n## Estrofa 2\nTan vieja y gastada pero sigues viva,\ncomo un faro en la sombra cautiva.\nCon cada acorde, compartes mi pena\nY, en tu madera, grabo mi condena.\n\n## Estribillo\nOh guitarra, mi fiel compañera,\nen tu voz, resuena mi historia entera.\nLloras y ríes junto a mi alma sincera,\nMi refugio eterno,[silence] mi primavera...\n\n## Estrofa 3\nEres un puente hacia otros paisajes,\ndibujas colores en blancos pasajes.\nCada acorde me arrastra profundo;\nMe cuentas verdades del loco mundo.\n\n## Puente\nAunque el tiempo te arranque pedazos,\nSeguirás vibrando siempre en mis brazos.\nJunco que se dobla, mas jamás se quiebra,\nEn tus notas, duerme la vida entera.\n\n## Estribillo\nOh guitarra, mi fiel compañera,\nEn tu voz, resuena mi historia entera.\nLloras y ríes junto a mi alma sincera,\nMi refugio eterno, mi primavera...\n\nMi refugio eterno, mi primavera...",
     "createdAt": "2026-10-25T19:06:50.676Z",
     "updatedAt": "2026-10-25T19:07:40.675Z"
+  },
+  {
+    "id": "memoria-del-agua",
+    "title": "Memoria del Agua",
+    "status": "draft",
+    "year": 2026,
+    "genre": "Poesía Musicalizada",
+    "key": "C#m",
+    "tempo": 78,
+    "timeSignature": "6/8",
+    "tuning": "DADGAD (Cejilla al 2)",
+    "notes": "Composición modal en DADGAD. Muy etérea. Falta grabar maqueta de voz con micro de condensador.",
+    "tags": [
+      "maqueta",
+      "poesía",
+      "modal",
+      "DADGAD"
+    ],
+    "lyrics": "## Estrofa 1\n[C#m] Dicen que el río que baja del puerto\n[A] guarda los nombres de los que se fueron,\n[E] que si te agachas con el oído despierto\n[B] oyes sus risas en los aguaceros.\n\n## Estrofa 2\n[C#m] Yo vine aquí sin maleta ni rumbo,\n[A] solo con esta madera curvada,\n[E] para cantar lo que pasa en un segundo\n[B] cuando no queda razón ni coartada.\n\n## Estribillo (En prueba)\n[A] El agua no olvida la [E] piedra,\n[B] la piedra no frena el [C#m] caudal.\n[A] Todo lo dulce se [E] enreda\n[B] cuando regresa al canal.",
+    "createdAt": "2026-07-04T18:00:00Z",
+    "updatedAt": "2026-10-25T21:15:05.387Z"
   }
 ]
