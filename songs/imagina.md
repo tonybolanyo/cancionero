@@ -8,10 +8,10 @@ key: "G"
 tempo: 71
 timeSignature: "4/4"
 tuning: "Estándar"
-notes: "Inspirada en los acantilados de la costa gallega. Compás en 3/4 estilo vals marino con afinación Drop D para darle profundidad al bajo."
+audioUrl: "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3"
 tags: ["acústico", "maqueta", "guitarra", "inédita"]
 createdAt: "2025-02-14T09:00:00Z"
-updatedAt: "2026-10-25T17:24:40.779Z"
+updatedAt: "2026-10-25T21:36:15.319Z"
 ---
 ## Estrofa 1
 Imagina que hoy es lunes,
