@@ -10,7 +10,7 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 tags: ["íntima", "acústico", "inédita"]
 createdAt: "2025-06-01T15:00:00Z"
-updatedAt: "2026-10-25T18:50:27.692Z"
+updatedAt: "2026-10-25T21:37:37.493Z"
 ---
 ## Intro
 
