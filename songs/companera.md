@@ -2,7 +2,7 @@
 id: "companera"
 title: "Compañera"
 status: "published"
-year: 2026
+year: 2025
 genre: "Cantautor"
 key: "C#m"
 tempo: 95
@@ -10,7 +10,7 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 tags: ["acústico", "inédita"]
 createdAt: "2026-10-25T19:06:50.676Z"
-updatedAt: "2026-10-25T19:06:50.676Z"
+updatedAt: "2026-10-25T19:07:40.675Z"
 ---
 ## Estrofa 1
 En mis noches de luna y desvelo,
