@@ -28,6 +28,11 @@ Aplicación web moderna desarrollada en **React 19**, **Vite** y **Tailwind CSS*
 * 🏷️ **Renombrado de archivos Markdown (`songs/*.md`)**:
   * Opción para renombrar archivos desde el editor, visor de detalles, tarjetas o tabla de canciones.
   * Migración automática de contenido en snapshots y opción de commit/push inmediato del renombrado.
+* 🎙️ **Detector Automático de Audio (MP3 / WAV) con IA & DSP**:
+  * Sube maquetas o grabaciones en formato `.mp3` o `.wav` para detectar automáticamente **tempo / BPMs**, **tonalidad**, **escala musical**, **compás** y **progresión de acordes**.
+  * Previsualización y reproductor integrado de audio.
+  * Botón para transferir con 1 clic los datos detectados al formulario y plantilla de acordes en la letra.
+  * **Arquitectura Segura para Código Abierto**: Cero secretos ni API keys en el repositorio público. El modelo de IA se consulta a través de proxy seguro en el servidor mediante la variable secreta `GEMINI_API_KEY`. En despliegues estáticos en GitHub Pages sin servidor, el analizador conmuta automáticamente al motor nativo **Web Audio API DSP** del navegador, garantizando funcionamiento sin claves ni dependencias externas.
 * 🔐 **Seguridad sin secretos en el repositorio**:
   * Acceso a la sección de autor protegido exclusivamente para tu usuario de GitHub.
   * No hay tokens, contraseñas ni claves API expuestas en el código público.

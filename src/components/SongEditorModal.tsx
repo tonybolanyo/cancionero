@@ -5,6 +5,7 @@ import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -187,6 +188,28 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setMode('form');
     } catch (e: any) {
       setParseError('No se pudo convertir el Markdown al formulario. Revisa la sintaxis del frontmatter YAML.');
+    }
+  };
+
+  const handleApplyAudioDetection = (data: {
+    tempo: number;
+    key: string;
+    timeSignature: string;
+    tuning?: string;
+    audioUrl?: string;
+    chordProgression?: string;
+    suggestedLyricsChords?: string;
+  }) => {
+    if (data.tempo) setTempo(data.tempo.toString());
+    if (data.key) setKey(data.key);
+    if (data.timeSignature) setTimeSignature(data.timeSignature);
+    if (data.tuning) setTuning(data.tuning);
+    if (data.audioUrl) setAudioUrl(data.audioUrl);
+    if (data.chordProgression && !notes) {
+      setNotes(`Progresión armónica detectada: ${data.chordProgression}`);
+    }
+    if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe el primer verso aquí'))) {
+      setLyrics(data.suggestedLyricsChords);
     }
   };
 
@@ -439,6 +462,14 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                   Ruta del archivo en el repositorio Git. Si lo modificas, se renombrará automáticamente al guardar.
                 </p>
               </div>
+
+              {/* Audio Upload & Detection Section (MP3 / WAV) */}
+              <AudioAnalyzerSection
+                onApplyDetection={handleApplyAudioDetection}
+                currentKey={key}
+                currentTempo={tempo}
+                currentAudioUrl={audioUrl}
+              />
 
               {/* Row 2: Musical metadata */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

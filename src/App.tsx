@@ -16,6 +16,7 @@ import { AboutModal } from './components/AboutModal';
 import { GitHubAuthModal } from './components/GitHubAuthModal';
 import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
+import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
 import { PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
@@ -67,6 +68,7 @@ function CancioneroApp() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState<boolean>(false);
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState<boolean>(false);
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
@@ -149,6 +151,39 @@ function CancioneroApp() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleCreateSongFromAudio = (data: {
+    tempo: number;
+    key: string;
+    timeSignature: string;
+    tuning?: string;
+    audioUrl?: string;
+    chordProgression?: string;
+    suggestedLyricsChords?: string;
+  }) => {
+    const newId = `cancion-${Date.now()}`;
+    const detectedSong: Song = {
+      id: newId,
+      title: 'Nueva Composición',
+      status: 'draft',
+      year: new Date().getFullYear(),
+      genre: 'Canción de Autor',
+      key: data.key || 'Am',
+      tempo: data.tempo || 96,
+      timeSignature: data.timeSignature || '4/4',
+      tuning: data.tuning || 'Estándar (EADGBE)',
+      audioUrl: data.audioUrl,
+      notes: data.chordProgression ? `Progresión armónica detectada: ${data.chordProgression}` : undefined,
+      tags: ['acústico', 'maqueta'],
+      lyrics: data.suggestedLyricsChords || `## Estrofa 1\n[${data.key || 'Am'}] Primer verso de la composición...\n[C] Segundo verso con acordes\n\n## Estribillo\n[G] Y el estribillo asciende aquí...`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    setEditingSong(detectedSong);
+    setIsAudioModalOpen(false);
+    setIsEditorOpen(true);
   };
 
   const handleOpenNewSong = () => {
@@ -395,6 +430,7 @@ function CancioneroApp() {
         hasUncommittedChanges={hasUncommittedChanges}
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenAudioAnalyzer={() => setIsAudioModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -700,6 +736,15 @@ function CancioneroApp() {
             setRenamingSong(null);
           }}
           onRenameSuccess={handleRenameSuccess}
+        />
+      )}
+
+      {/* Standalone Audio Musical Analyzer Modal */}
+      {isAudioModalOpen && (
+        <AudioAnalyzerModal
+          isOpen={isAudioModalOpen}
+          onClose={() => setIsAudioModalOpen(false)}
+          onCreateSongFromAudio={handleCreateSongFromAudio}
         />
       )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck } from 'lucide-react';
+import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { siteMetadata } from '../utils/siteConfig';
@@ -7,6 +7,7 @@ import { siteMetadata } from '../utils/siteConfig';
 interface HeaderProps {
   onOpenNewSong: () => void;
   onOpenGitModal: () => void;
+  onOpenAudioAnalyzer?: () => void;
   onSelectTab: (tab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard') => void;
   activeTab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard';
   hasUncommittedChanges: boolean;
@@ -17,6 +18,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenNewSong,
   onOpenGitModal,
+  onOpenAudioAnalyzer,
   onSelectTab,
   activeTab,
   hasUncommittedChanges,
@@ -143,6 +145,18 @@ export const Header: React.FC<HeaderProps> = ({
           {isAuthor ? (
             /* Authenticated Author Controls */
             <div className="flex items-center gap-2.5">
+              {onOpenAudioAnalyzer && (
+                <button
+                  type="button"
+                  onClick={onOpenAudioAnalyzer}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--accent-primary)] bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle)]/80 border border-[var(--accent-border)] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                  title="Subir archivo de audio (.mp3 o .wav) para detectar tempo, escala y acordes con IA / DSP"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Detector de Audio</span>
+                </button>
+              )}
+
               <button
                 onClick={onOpenNewSong}
                 className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold tracking-wide text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg active:scale-95 transition-all shadow-sm cursor-pointer whitespace-nowrap"
