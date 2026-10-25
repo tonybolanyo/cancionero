@@ -3,14 +3,14 @@ import { X, Save, FileEdit, Code2, AlertCircle, Plus, Tag, GitCommit, UploadClou
 import { Song, SongStatus } from '../types/song';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
-import { GitHubSyncService } from '../services/githubSyncService';
+import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 
 interface SongEditorModalProps {
   song: Song | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (song: Song) => void;
+  onSave: (song: Song, pushResult?: PushResult) => void;
 }
 
 export const SongEditorModal: React.FC<SongEditorModalProps> = ({
@@ -41,10 +41,14 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
 
-  // Git Commit and Push on Save options
-  const [createCommitOnSave, setCreateCommitOnSave] = useState(true);
+  // Git Commit and Push on Save options - Defaults to Auto-Commit enabled
+  const [createCommitOnSave, setCreateCommitOnSave] = useState<boolean>(() =>
+    GitHubSyncService.isAutoCommitEnabled()
+  );
   const [commitMessageOnSave, setCommitMessageOnSave] = useState('');
-  const [pushOnSave, setPushOnSave] = useState(true);
+  const [pushOnSave, setPushOnSave] = useState<boolean>(() =>
+    GitHubSyncService.isAutoCommitEnabled()
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
 
@@ -189,45 +193,40 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    let targetSong: Song;
+
     if (mode === 'raw_markdown') {
       try {
-        const parsed = markdownToSong(rawMarkdown, id);
-        onSave(parsed);
+        targetSong = markdownToSong(rawMarkdown, id);
       } catch (err: any) {
         setParseError('Error de sintaxis en el archivo Markdown. Corrige el frontmatter antes de guardar.');
+        return;
       }
-      return;
-    }
+    } else {
+      if (!title.trim()) {
+        alert('Por favor introduce un título para la canción');
+        return;
+      }
 
-    if (!title.trim()) {
-      alert('Por favor introduce un título para la canción');
-      return;
-    }
+      const cleanSlug = id
+        .trim()
+        .toLowerCase()
+        .replace(/\.md$/i, '')
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-    const cleanSlug = id
-      .trim()
-      .toLowerCase()
-      .replace(/\.md$/i, '')
-      .replace(/[^a-z0-9_-]+/g, '-')
-      .replace(/^-+|-+$/g, '') || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-    setIsSaving(true);
-    setSaveStatusMessage('Guardando cambios locales...');
-
-    try {
       let finalId = cleanSlug;
       // If editing existing song and ID changed, perform file rename
       if (song && song.id !== cleanSlug) {
         const renameRes = StorageService.renameSongFile(song.id, cleanSlug, false);
         if (!renameRes.success) {
           setParseError(renameRes.error || 'Error al renombrar el archivo.');
-          setIsSaving(false);
           return;
         }
         finalId = cleanSlug;
       }
 
-      const updatedSong: Song = {
+      targetSong = {
         id: finalId,
         title: title.trim(),
         status,
@@ -247,37 +246,45 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         createdAt: song?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+    }
 
-      onSave(updatedSong);
+    setIsSaving(true);
+    setSaveStatusMessage('Guardando canción localmente...');
 
-      // Create Git commit if enabled
+    try {
+      let pushResult: PushResult | undefined;
       const defaultMsg = song
-        ? `update: actualizar letra y acordes de "${updatedSong.title}"`
-        : `feat: nueva composición "${updatedSong.title}" en tono ${updatedSong.key}`;
+        ? `update: actualizar letra y acordes de "${targetSong.title}"`
+        : `feat: nueva composición "${targetSong.title}" en tono ${targetSong.key}`;
       const finalMsg = commitMessageOnSave.trim() || defaultMsg;
 
       if (createCommitOnSave) {
-        setSaveStatusMessage('Registrando Git Commit...');
+        setSaveStatusMessage('Creando commit en Git local...');
         const authorStr = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
         StorageService.createGitCommit(finalMsg, authorStr);
 
-        // Push to GitHub if enabled
         if (pushOnSave) {
-          setSaveStatusMessage('Haciendo Push a GitHub...');
-          await GitHubSyncService.pushSongFile(updatedSong, finalMsg, token);
-          if (song && song.id !== finalId) {
+          setSaveStatusMessage('Haciendo Push a GitHub (tonygb/cancionero)...');
+          pushResult = await GitHubSyncService.pushSongFile(targetSong, finalMsg, token);
+
+          if (song && song.id !== targetSong.id) {
             await GitHubSyncService.deleteRemoteFile(
               `songs/${song.id}.md`,
-              `chore(files): eliminar ruta anterior tras renombrar a 'songs/${finalId}.md'`,
+              `chore(files): eliminar ruta anterior tras renombrar a 'songs/${targetSong.id}.md'`,
               token
             );
           }
         }
       }
+
+      onSave(targetSong, pushResult);
     } catch (err: any) {
       console.warn('Error saving song / push', err);
+      // Still save locally even if remote push had network failure
+      onSave(targetSong);
     } finally {
       setIsSaving(false);
+      setSaveStatusMessage(null);
     }
   };
 

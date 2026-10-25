@@ -10,6 +10,7 @@ export interface RemoteConfig {
 
 const STORAGE_KEY_REMOTE = 'tony_cancionero_remote_config_v1';
 const STORAGE_KEY_LAST_PUSH = 'tony_cancionero_last_push_v1';
+const STORAGE_KEY_AUTO_COMMIT = 'tony_cancionero_auto_commit_v1';
 
 export interface PushResult {
   success: boolean;
@@ -17,6 +18,8 @@ export interface PushResult {
   commitSha?: string;
   commitUrl?: string;
   isSimulated?: boolean;
+  requiresPermissions?: boolean;
+  targetRepo?: string;
 }
 
 /**
@@ -34,12 +37,20 @@ function utf8ToBase64(str: string): string {
 export class GitHubSyncService {
   /**
    * Get configured remote repository details
+   * Target: https://github.com/{owner}/{repo} (branch: {branch})
    */
   static getRemoteConfig(userLogin?: string): RemoteConfig {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_REMOTE);
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (parsed.owner && parsed.repo) {
+          return {
+            owner: parsed.owner.toLowerCase().trim(),
+            repo: parsed.repo.trim(),
+            branch: (parsed.branch || 'main').trim()
+          };
+        }
       }
     } catch {
       // ignore
@@ -60,6 +71,32 @@ export class GitHubSyncService {
       localStorage.setItem(STORAGE_KEY_REMOTE, JSON.stringify(config));
     } catch (err) {
       console.warn('Failed to save remote config', err);
+    }
+  }
+
+  /**
+   * Check if Auto-Commit & Auto-Push is enabled (defaults to true)
+   */
+  static isAutoCommitEnabled(): boolean {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_AUTO_COMMIT);
+      if (stored !== null) {
+        return stored === 'true';
+      }
+    } catch {
+      // ignore
+    }
+    return true; // enabled by default
+  }
+
+  /**
+   * Set Auto-Commit & Auto-Push preference
+   */
+  static setAutoCommitEnabled(enabled: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_KEY_AUTO_COMMIT, enabled ? 'true' : 'false');
+    } catch (err) {
+      console.warn('Failed to save auto commit config', err);
     }
   }
 
@@ -116,7 +153,8 @@ export class GitHubSyncService {
   }
 
   /**
-   * Push a single song's Markdown file to the GitHub repository via REST API
+   * Push a single song's Markdown file directly to the GitHub repository
+   * Real endpoint: https://api.github.com/repos/{owner}/{repo}/contents/songs/{id}.md
    */
   static async pushSongFile(
     song: Song,
@@ -126,13 +164,14 @@ export class GitHubSyncService {
   ): Promise<PushResult> {
     const config = customConfig || this.getRemoteConfig();
     const cleanToken = token?.trim();
+    const targetRepo = `${config.owner}/${config.repo}`;
+    const targetUrl = `https://github.com/${targetRepo}`;
 
     if (!cleanToken) {
-      this.recordPushSuccess();
       return {
-        success: true,
-        isSimulated: true,
-        message: `Operación "push" registrada localmente. Inicia sesión con tu token de GitHub para sincronizar directamente con el repositorio remoto.`
+        success: false,
+        targetRepo,
+        message: `No has iniciado sesión con token de GitHub. Para hacer push directo a ${targetRepo}, inicia sesión con tu Personal Access Token.`
       };
     }
 
@@ -150,9 +189,9 @@ export class GitHubSyncService {
         cleanToken
       );
 
-      // 2. Put file contents (creates or updates)
+      // 2. Put file contents directly via GitHub REST API
       const putBody: any = {
-        message: commitMessage || `update: sincronizar "${song.title}" (${path})`,
+        message: commitMessage || `update(song): ${song.title} (${path})`,
         content: contentBase64,
         branch: config.branch
       };
@@ -176,46 +215,47 @@ export class GitHubSyncService {
       if (response.ok) {
         const data = await response.json();
         const sha = data.commit?.sha?.substring(0, 7) || 'HEAD';
-        const commitUrl = data.commit?.html_url || `https://github.com/${config.owner}/${config.repo}/commits/${config.branch}`;
+        const commitUrl = data.commit?.html_url || `${targetUrl}/commit/${data.commit?.sha || ''}`;
         this.recordPushSuccess();
         return {
           success: true,
           commitSha: sha,
           commitUrl,
-          message: `Push completado con éxito a GitHub: [${sha}] ${config.owner}/${config.repo}@${config.branch}`
+          targetRepo,
+          message: `Push completado con éxito a GitHub: [${sha}] en ${targetUrl}/tree/${config.branch}/${path}`
         };
       }
 
       // If repo not found or lacks contents write scope
       if (response.status === 404) {
-        this.recordPushSuccess();
         return {
-          success: true,
-          isSimulated: true,
-          message: `Push local registrado. El repositorio "${config.owner}/${config.repo}" no se encontró en GitHub o tu token no tiene permisos de lectura sobre él. Puedes empujar tus cambios con: git push origin ${config.branch}`
+          success: false,
+          requiresPermissions: true,
+          targetRepo,
+          message: `GitHub respondió 404 Not Found para "${targetUrl}". Comprueba que el repositorio "${config.repo}" exista en la cuenta @${config.owner} y que tu token de GitHub tenga permisos de acceso ("repo").`
         };
       }
 
       if (response.status === 403 || response.status === 401) {
-        this.recordPushSuccess();
         return {
-          success: true,
-          isSimulated: true,
-          message: `Push local registrado. Tu token de GitHub no cuenta con permisos de escritura ("repo" / "contents:write"). Para push directo desde la web, genera un token con alcance "repo".`
+          success: false,
+          requiresPermissions: true,
+          targetRepo,
+          message: `GitHub denegó el Push (HTTP ${response.status} Forbidden). Tu Personal Access Token necesita permisos de escritura en el repositorio. Asegúrate de generar o editar tu token con el permiso "repo" (o "Contents: Read and write" para tokens Fine-grained) en GitHub.`
         };
       }
 
       const errData = await response.json().catch(() => ({}));
       return {
         success: false,
+        targetRepo,
         message: `Error al hacer push a GitHub (${response.status}): ${errData.message || response.statusText}`
       };
     } catch (err: any) {
-      this.recordPushSuccess();
       return {
-        success: true,
-        isSimulated: true,
-        message: `Push local completado. Error de red con GitHub: ${err.message}. Puedes ejecutar en tu terminal: git push origin ${config.branch}`
+        success: false,
+        targetRepo,
+        message: `Error de conexión con api.github.com: ${err.message}`
       };
     }
   }
@@ -231,17 +271,17 @@ export class GitHubSyncService {
   ): Promise<PushResult> {
     const config = customConfig || this.getRemoteConfig();
     const cleanToken = token?.trim();
+    const targetRepo = `${config.owner}/${config.repo}`;
+    const targetUrl = `https://github.com/${targetRepo}`;
 
     if (!cleanToken) {
-      this.recordPushSuccess();
       return {
-        success: true,
-        isSimulated: true,
-        message: `Push registrado localmente en tu navegador. Puedes exportar el repositorio en ZIP o sincronizar con Git en tu terminal.`
+        success: false,
+        targetRepo,
+        message: `No has iniciado sesión con token de GitHub. Para hacer push a ${targetRepo}, inicia sesión con tu token.`
       };
     }
 
-    // Push catalog.json
     try {
       const catalogJson = JSON.stringify(songs, null, 2);
       const catalogBase64 = utf8ToBase64(catalogJson);
@@ -265,7 +305,7 @@ export class GitHubSyncService {
             Accept: 'application/vnd.github.v3+json'
           },
           body: JSON.stringify({
-            message: commitMessage || `sync: actualización del catálogo (${songs.length} temas)`,
+            message: commitMessage || `sync(catalog): actualización del catálogo (${songs.length} temas)`,
             content: catalogBase64,
             sha: existingSha || undefined,
             branch: config.branch
@@ -276,27 +316,46 @@ export class GitHubSyncService {
       if (response.ok) {
         const data = await response.json();
         const sha = data.commit?.sha?.substring(0, 7) || 'HEAD';
+        const commitUrl = data.commit?.html_url || `${targetUrl}/commit/${data.commit?.sha || ''}`;
         this.recordPushSuccess();
         return {
           success: true,
           commitSha: sha,
-          commitUrl: data.commit?.html_url || `https://github.com/${config.owner}/${config.repo}`,
-          message: `Push completado: catálogo actualizado en GitHub [${sha}] en ${config.owner}/${config.repo}@${config.branch}`
+          commitUrl,
+          targetRepo,
+          message: `Push completado a GitHub: catálogo sincronizado en ${targetUrl} [${sha}]`
         };
       }
 
-      this.recordPushSuccess();
+      if (response.status === 403 || response.status === 401) {
+        return {
+          success: false,
+          requiresPermissions: true,
+          targetRepo,
+          message: `GitHub denegó el Push (HTTP ${response.status}). Tu Personal Access Token necesita permisos de escritura ("repo" o "Contents: Read and write") en ${targetUrl}.`
+        };
+      }
+
+      if (response.status === 404) {
+        return {
+          success: false,
+          requiresPermissions: true,
+          targetRepo,
+          message: `GitHub respondió 404 Not Found en ${targetUrl}. Comprueba que el repositorio exista y tu token tenga permiso "repo".`
+        };
+      }
+
+      const errData = await response.json().catch(() => ({}));
       return {
-        success: true,
-        isSimulated: true,
-        message: `Push local completado. Código HTTP ${response.status} de GitHub. Para sincronizar tu repositorio remoto completo usa: git push origin ${config.branch}`
+        success: false,
+        targetRepo,
+        message: `Error al hacer push a GitHub (${response.status}): ${errData.message || response.statusText}`
       };
     } catch (err: any) {
-      this.recordPushSuccess();
       return {
-        success: true,
-        isSimulated: true,
-        message: `Push local completado. Para sincronizar con GitHub: git push origin ${config.branch}`
+        success: false,
+        targetRepo,
+        message: `Error de conexión con api.github.com: ${err.message}`
       };
     }
   }

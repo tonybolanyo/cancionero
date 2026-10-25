@@ -225,13 +225,13 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                     Personal Access Token (PAT) de GitHub de @{authorizedUsername}
                   </label>
                   <a
-                    href="https://github.com/settings/tokens/new?description=Cancionero+Tony+Author+Mode&scopes=read:user"
+                    href="https://github.com/settings/tokens/new?description=Cancionero+Tony+Auto+Commit+and+Push&scopes=repo,read:user"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-[var(--accent-primary)] hover:underline flex items-center gap-1 font-medium"
-                    title="Crear un token en tu cuenta de GitHub con permiso read:user"
+                    className="text-[11px] text-[var(--accent-primary)] hover:underline flex items-center gap-1 font-semibold"
+                    title="Crear un token en GitHub con alcance 'repo' para permitir auto-commit y push"
                   >
-                    <span>Generar token</span>
+                    <span>Generar token con 'repo'</span>
                     <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </div>
@@ -256,12 +256,20 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                   </button>
                 </div>
 
-                <div className="text-[11px] text-[var(--text-muted)] space-y-1 leading-relaxed">
+                <div className="text-[11px] text-[var(--text-muted)] space-y-1.5 leading-relaxed p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)]">
                   <p>
-                    • Solo requiere el permiso de lectura básica de perfil (<code className="text-[var(--accent-primary)] font-semibold font-mono">read:user</code>).
+                    🔑 <strong>Permisos recomendados para Auto-Commit y Push</strong>:
                   </p>
-                  <p>
-                    • Si cualquier otra persona introduce un token de una cuenta distinta, el sistema rechazará la autenticación inmediatamente.
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>
+                      <strong>Token Clásico</strong>: Marca el permiso <code className="text-[var(--accent-primary)] font-semibold font-mono">repo</code> (o <code className="text-[var(--accent-primary)] font-semibold font-mono">public_repo</code> si el repositorio es público) y <code className="font-mono">read:user</code>.
+                    </li>
+                    <li>
+                      <strong>Token Fine-grained</strong>: Selecciona el repositorio <code className="text-[var(--text-primary)] font-mono font-semibold">cancionero</code> y en <em>Repository permissions</em> otorga <code className="text-[var(--accent-primary)] font-semibold font-mono">Contents: Read and write</code>.
+                    </li>
+                  </ul>
+                  <p className="text-[10px] text-[var(--text-muted)] pt-0.5 italic">
+                    Con este permiso, cada vez que crees, edites o renombres una canción, se hará automáticamente el commit y el <strong>push directo a github.com/{authorizedUsername}/cancionero</strong>.
                   </p>
                 </div>
               </div>

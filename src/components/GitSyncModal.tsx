@@ -46,6 +46,22 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const [autoCommitGlobal, setAutoCommitGlobal] = useState<boolean>(() =>
+    GitHubSyncService.isAutoCommitEnabled()
+  );
+
+  const handleToggleAutoCommit = (enabled: boolean) => {
+    setAutoCommitGlobal(enabled);
+    GitHubSyncService.setAutoCommitEnabled(enabled);
+    setNotification({
+      message: enabled
+        ? 'Auto-Commit y Auto-Push activado. Cada cambio de canción se enviará automáticamente a GitHub.'
+        : 'Auto-Commit y Auto-Push desactivado.',
+      type: 'success'
+    });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
   const [remoteConfig, setRemoteConfig] = useState<RemoteConfig>(() =>
     GitHubSyncService.getRemoteConfig(user?.login)
   );
@@ -527,6 +543,71 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                     })}
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Auto-Commit & Auto-Push Configuration & Destination Card */}
+            <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
+                    <UploadCloud className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--text-primary)]">
+                      Auto-Commit & Auto-Push a GitHub
+                    </h4>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      Sube automáticamente cada cambio a tu repositorio remoto
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoCommitGlobal}
+                    onChange={(e) => handleToggleAutoCommit(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent-primary)]"></div>
+                  <span className="ml-2 text-xs font-medium text-[var(--text-primary)]">
+                    {autoCommitGlobal ? 'Activado' : 'Desactivado'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="p-3 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-2 text-xs">
+                <div className="flex items-start gap-2">
+                  <span className="font-semibold text-[var(--text-primary)] shrink-0">📍 ¿Dónde hace push?</span>
+                  <div className="text-[var(--text-secondary)] space-y-1">
+                    <p>
+                      Los commits se suben directamente al repositorio de GitHub:
+                    </p>
+                    <div className="font-mono text-[11px] p-1.5 rounded bg-[var(--bg-code)] border border-[var(--border-subtle)] text-[var(--accent-primary)] flex items-center justify-between">
+                      <span>https://github.com/{remoteConfig.owner}/{remoteConfig.repo} (rama: {remoteConfig.branch})</span>
+                      <a
+                        href={`https://github.com/${remoteConfig.owner}/${remoteConfig.repo}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[var(--text-muted)] hover:text-[var(--accent-primary)] ml-2"
+                        title="Abrir repositorio en GitHub"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      Archivos sincronizados: <code className="font-mono text-[var(--text-primary)]">songs/*.md</code> (una por canción) y el índice <code className="font-mono text-[var(--text-primary)]">catalog.json</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 pt-1.5 border-t border-[var(--border-subtle)]">
+                  <span className="font-semibold text-[var(--text-primary)] shrink-0">🔐 Permisos del Token:</span>
+                  <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                    Para que GitHub permita hacer Push mediante su API REST, tu Personal Access Token debe tener el permiso <strong className="text-[var(--accent-primary)] font-mono">repo</strong> (o para fine-grained tokens: permiso en repositorio <code className="font-mono">cancionero</code> de <strong className="text-[var(--accent-primary)] font-mono">Contents: Read and write</strong>).
+                  </p>
+                </div>
               </div>
             </div>
           </div>

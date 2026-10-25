@@ -16,6 +16,8 @@ import { AboutModal } from './components/AboutModal';
 import { GitHubAuthModal } from './components/GitHubAuthModal';
 import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
+import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
+import { PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
@@ -68,6 +70,7 @@ function CancioneroApp() {
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
+  const [gitToast, setGitToast] = useState<ToastData | null>(null);
 
   useEffect(() => {
     checkGitStatus();
@@ -91,7 +94,7 @@ function CancioneroApp() {
     checkGitStatus();
   };
 
-  const handleSaveSong = (song: Song) => {
+  const handleSaveSong = (song: Song, pushResult?: PushResult) => {
     const updated = StorageService.upsertSong(song);
     setSongs(updated);
     checkGitStatus();
@@ -99,6 +102,39 @@ function CancioneroApp() {
     setEditingSong(null);
     if (selectedSong && selectedSong.id === song.id) {
       setSelectedSong(song);
+    }
+
+    if (pushResult) {
+      if (pushResult.success) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'success',
+          title: 'Git Push Exitoso a GitHub 🚀',
+          message: pushResult.message,
+          commitHash: pushResult.commitSha,
+          commitUrl: pushResult.commitUrl,
+          targetRepo: pushResult.targetRepo
+        });
+      } else if (pushResult.requiresPermissions) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'warning',
+          title: 'Permisos de GitHub Requeridos',
+          message: pushResult.message,
+          requiresPermissions: true,
+          targetRepo: pushResult.targetRepo,
+          actionLabel: 'Revisar Token en GitHub',
+          onAction: () => setIsAuthModalOpen(true)
+        });
+      } else {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'error',
+          title: 'Error de Git Push a GitHub',
+          message: pushResult.message,
+          targetRepo: pushResult.targetRepo
+        });
+      }
     }
   };
 
@@ -151,16 +187,41 @@ function CancioneroApp() {
     setIsRenameModalOpen(true);
   };
 
-  const handleRenameSuccess = (renamedSong: Song, updatedSongs: Song[]) => {
+  const handleRenameSuccess = (renamedSong: Song, updatedSongs: Song[], pushResult?: PushResult) => {
     setSongs(updatedSongs);
     checkGitStatus();
     if (selectedSong && selectedSong.id === renamingSong?.id) {
       setSelectedSong(renamedSong);
     }
     setRenamingSong(null);
+
+    if (pushResult) {
+      if (pushResult.success) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'success',
+          title: 'Archivo Renombrado y Subido a GitHub 🚀',
+          message: pushResult.message,
+          commitHash: pushResult.commitSha,
+          commitUrl: pushResult.commitUrl,
+          targetRepo: pushResult.targetRepo
+        });
+      } else if (pushResult.requiresPermissions) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'warning',
+          title: 'Permisos de GitHub Requeridos',
+          message: pushResult.message,
+          requiresPermissions: true,
+          targetRepo: pushResult.targetRepo,
+          actionLabel: 'Revisar Token en GitHub',
+          onAction: () => setIsAuthModalOpen(true)
+        });
+      }
+    }
   };
 
-  const handleSongRestored = (restoredSong: Song) => {
+  const handleSongRestored = (restoredSong: Song, pushResult?: PushResult) => {
     const updated = StorageService.getSongs();
     setSongs(updated);
     checkGitStatus();
@@ -168,6 +229,31 @@ function CancioneroApp() {
       setSelectedSong(restoredSong);
     }
     setHistorySong(restoredSong);
+
+    if (pushResult) {
+      if (pushResult.success) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'success',
+          title: 'Versión Restaurada y Subida a GitHub 🚀',
+          message: pushResult.message,
+          commitHash: pushResult.commitSha,
+          commitUrl: pushResult.commitUrl,
+          targetRepo: pushResult.targetRepo
+        });
+      } else if (pushResult.requiresPermissions) {
+        setGitToast({
+          id: `toast-${Date.now()}`,
+          type: 'warning',
+          title: 'Permisos de GitHub Requeridos',
+          message: pushResult.message,
+          requiresPermissions: true,
+          targetRepo: pushResult.targetRepo,
+          actionLabel: 'Revisar Token en GitHub',
+          onAction: () => setIsAuthModalOpen(true)
+        });
+      }
+    }
   };
 
   // Available unique musical keys for filter
@@ -616,6 +702,12 @@ function CancioneroApp() {
           onRenameSuccess={handleRenameSuccess}
         />
       )}
+
+      {/* Real-time Global Git Push & Commit Notification Toast */}
+      <GitNotificationToast
+        toast={gitToast}
+        onDismiss={() => setGitToast(null)}
+      />
     </div>
   );
 }

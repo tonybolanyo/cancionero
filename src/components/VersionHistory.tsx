@@ -16,12 +16,14 @@ import {
 import { Song } from '../types/song';
 import { StorageService, SongVersionRecord } from '../services/storageService';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
+import { GitHubSyncService, PushResult } from '../services/githubSyncService';
+import { useAuth } from '../context/AuthContext';
 
 interface VersionHistoryProps {
   song: Song | null;
   isOpen: boolean;
   onClose: () => void;
-  onRestoreSong: (restoredSong: Song) => void;
+  onRestoreSong: (restoredSong: Song, pushResult?: PushResult) => void;
   isAuthor: boolean;
 }
 
@@ -32,6 +34,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   onRestoreSong,
   isAuthor
 }) => {
+  const { token } = useAuth();
   const [selectedRecordIndex, setSelectedRecordIndex] = useState<number>(0);
   const [viewTab, setViewTab] = useState<'diff' | 'lyrics' | 'raw'>('diff');
   const [copied, setCopied] = useState<boolean>(false);
@@ -113,7 +116,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
     );
   }
 
-  const handleRestore = () => {
+  const handleRestore = async () => {
     if (!selectedRecord) return;
     const confirmRestore = confirm(
       `¿Deseas restaurar la canción a la versión del commit [${selectedRecord.commit.hash}] "${selectedRecord.commit.message}"? Se creará un nuevo commit de restauración en Git.`
@@ -125,7 +128,22 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
       selectedRecord.markdown,
       selectedRecord.commit.hash
     );
-    onRestoreSong(restored);
+
+    let pushRes: PushResult | undefined;
+    if (GitHubSyncService.isAutoCommitEnabled() && token) {
+      setRestoreNotice('Haciendo Push de la versión restaurada a GitHub...');
+      try {
+        pushRes = await GitHubSyncService.pushSongFile(
+          restored,
+          `revert(song): restaurar "${restored.title}" al commit [${selectedRecord.commit.hash}]`,
+          token
+        );
+      } catch (e) {
+        console.warn('Push on restore failed', e);
+      }
+    }
+
+    onRestoreSong(restored, pushRes);
     setRestoreNotice(`Canción restaurada exitosamente a la versión [${selectedRecord.commit.hash}].`);
     setTimeout(() => {
       setRestoreNotice(null);

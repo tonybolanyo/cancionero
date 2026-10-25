@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { X, FileText, Check, AlertCircle, ArrowRight, UploadCloud, GitCommit } from 'lucide-react';
 import { Song } from '../types/song';
 import { StorageService } from '../services/storageService';
-import { GitHubSyncService } from '../services/githubSyncService';
+import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 
 interface RenameFileModalProps {
   song: Song | null;
   isOpen: boolean;
   onClose: () => void;
-  onRenameSuccess: (renamedSong: Song, updatedSongs: Song[]) => void;
+  onRenameSuccess: (renamedSong: Song, updatedSongs: Song[], pushResult?: PushResult) => void;
 }
 
 export const RenameFileModal: React.FC<RenameFileModalProps> = ({
@@ -21,7 +21,9 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
   const { token } = useAuth();
   const [newSlug, setNewSlug] = useState('');
   const [autoCommit, setAutoCommit] = useState(true);
-  const [autoPush, setAutoPush] = useState(false);
+  const [autoPush, setAutoPush] = useState<boolean>(() =>
+    GitHubSyncService.isAutoCommitEnabled()
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -80,18 +82,20 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
         return;
       }
 
+      let pushRes: PushResult | undefined;
+
       // If user chose to push to remote GitHub repository
       if (autoCommit && autoPush) {
         const commitMsg = `refactor(files): renombrar 'songs/${song.id}.md' a 'songs/${clean}.md'`;
-        
+
         // 1. Push the new file to GitHub
-        await GitHubSyncService.pushSongFile(
+        pushRes = await GitHubSyncService.pushSongFile(
           result.renamedSong,
           commitMsg,
           token
         );
 
-        // 2. Delete the old file path on GitHub if token is available
+        // 2. Delete the old file path on GitHub
         await GitHubSyncService.deleteRemoteFile(
           `songs/${song.id}.md`,
           `chore(files): eliminar ruta anterior tras renombrar a 'songs/${clean}.md'`,
@@ -99,7 +103,7 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
         );
       }
 
-      onRenameSuccess(result.renamedSong, result.songs);
+      onRenameSuccess(result.renamedSong, result.songs, pushRes);
       onClose();
     } catch (err: any) {
       setErrorMessage('Ocurrió un error inesperado: ' + (err.message || 'Error desconocido'));
