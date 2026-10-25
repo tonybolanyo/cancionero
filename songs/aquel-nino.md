@@ -1,7 +1,7 @@
 ---
 id: "aquel-nino"
 title: "Aquel niño"
-status: "draft"
+status: "published"
 year: 2026
 genre: "Canción de Autor"
 key: "F#"
@@ -10,9 +10,9 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 audioUrl: "blob:https://tonygb.com/f7c8e48f-45dc-4601-9d4d-1ffeb09c8354"
 notes: "Progresión armónica principal  F# - B - C# - D#m"
-tags: ["acústico"]
+tags: ["acústico", "inédita", "guitarra", "íntima"]
 createdAt: "2026-10-25T21:49:55.386Z"
-updatedAt: "2026-10-25T21:49:55.386Z"
+updatedAt: "2026-10-25T21:51:11.206Z"
 ---
 ## I
 Aquel niño inocente,
