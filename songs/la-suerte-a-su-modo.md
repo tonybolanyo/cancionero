@@ -10,7 +10,7 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 tags: ["acústico", "inédita"]
 createdAt: "2025-02-14T09:00:00Z"
-updatedAt: "2026-10-25T18:57:51.964Z"
+updatedAt: "2026-10-25T21:37:20.970Z"
 ---
 ## Estrofa 1
 Hoy se torció la mañana temprano,
