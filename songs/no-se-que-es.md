@@ -10,7 +10,7 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 tags: ["acústico", "guitarra", "inédita"]
 createdAt: "2024-04-10T12:00:00Z"
-updatedAt: "2026-10-25T17:19:31.964Z"
+updatedAt: "2026-10-25T21:37:58.323Z"
 ---
 ## Estrofa 1
 Cuando me quedo sin palabras,
