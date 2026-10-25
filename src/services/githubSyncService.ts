@@ -1,4 +1,5 @@
 import { Song } from '../types/song';
+import { StorageService } from './storageService';
 import { songToMarkdown } from '../utils/markdownParser';
 import { AUTHORIZED_GITHUB_USER } from '../utils/authConfig';
 
@@ -31,6 +32,16 @@ function utf8ToBase64(str: string): string {
     encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
       return String.fromCharCode(parseInt(p1, 16));
     })
+  );
+}
+
+function base64ToUtf8(value: string): string {
+  const normalized = value.replace(/\s/g, '');
+  return decodeURIComponent(
+    atob(normalized)
+      .split('')
+      .map(char => `%${(`00${char.charCodeAt(0).toString(16)}`).slice(-2)}`)
+      .join('')
   );
 }
 
@@ -119,6 +130,120 @@ export class GitHubSyncService {
       localStorage.setItem(STORAGE_KEY_LAST_PUSH, new Date().toISOString());
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * Pull the remote catalog.json from GitHub and merge it with the local catalog.
+   * This keeps browser-to-browser synchronization without overwriting newer local edits.
+   */
+  static async syncCatalogFromRemote(
+    token?: string | null,
+    customConfig?: RemoteConfig
+  ): Promise<{ success: boolean; message: string; songs?: Song[]; source?: 'remote' | 'local' }> {
+    const config = customConfig || this.getRemoteConfig();
+    const cleanToken = token?.trim();
+    const targetRepo = `${config.owner}/${config.repo}`;
+
+    if (!cleanToken) {
+      return {
+        success: false,
+        message: `No hay token de GitHub cargado para sincronizar con ${targetRepo}.`,
+        source: 'local'
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
+        {
+          headers: {
+            Authorization: `Bearer ${cleanToken}`,
+            Accept: 'application/vnd.github.v3+json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            success: false,
+            message: `No existe catalog.json en ${targetRepo} (${config.branch}).`,
+            source: 'local'
+          };
+        }
+
+        const errData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          message: `GitHub respondió ${response.status}: ${errData.message || response.statusText}`,
+          source: 'local'
+        };
+      }
+
+      const data = await response.json();
+      const encodedContent = typeof data?.content === 'string' ? data.content : null;
+      if (!encodedContent) {
+        return {
+          success: false,
+          message: 'GitHub no devolvió contenido para catalog.json.',
+          source: 'local'
+        };
+      }
+
+      const remoteJson = base64ToUtf8(encodedContent);
+      const remoteSongs = JSON.parse(remoteJson) as Song[];
+      if (!Array.isArray(remoteSongs)) {
+        return {
+          success: false,
+          message: 'El contenido remoto de catalog.json no es un array válido de canciones.',
+          source: 'local'
+        };
+      }
+
+      const localSongs = StorageService.getSongs();
+      const mergedSongs = StorageService.mergeSongsByUpdatedAt(localSongs, remoteSongs);
+
+      const remoteTimestamp = remoteSongs.reduce((max, song) => {
+        const value = Date.parse(song.updatedAt || new Date(0).toISOString());
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+      }, 0);
+
+      const localTimestamp = localSongs.reduce((max, song) => {
+        const value = Date.parse(song.updatedAt || new Date(0).toISOString());
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+      }, 0);
+
+      const shouldUseRemote = remoteSongs.length > 0 && (
+        localSongs.length === 0 || remoteTimestamp > localTimestamp || remoteTimestamp === localTimestamp
+      );
+
+      const finalSongs = shouldUseRemote ? mergedSongs : localSongs;
+      if (shouldUseRemote) {
+        StorageService.saveSongs(finalSongs);
+        StorageService.saveSnapshot(finalSongs);
+      }
+
+      try {
+        localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
+      } catch {
+        // ignore storage errors
+      }
+
+      return {
+        success: true,
+        message: shouldUseRemote
+          ? `Sincronizado desde GitHub (${targetRepo}) con ${finalSongs.length} canciones.`
+          : 'Se mantuvieron los cambios locales porque eran más recientes que el remoto.',
+        songs: finalSongs,
+        source: shouldUseRemote ? 'remote' : 'local'
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Error al sincronizar catalog.json con GitHub: ${err.message || 'desconocido'}`,
+        source: 'local'
+      };
     }
   }
 

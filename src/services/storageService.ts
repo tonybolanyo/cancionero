@@ -144,6 +144,35 @@ updatedAt: "2026-02-10T10:00:00Z"
 
 export class StorageService {
   /**
+   * Merge two song catalogs preferring the most recent updatedAt value for each song.
+   */
+  static mergeSongsByUpdatedAt(localSongs: Song[], remoteSongs: Song[]): Song[] {
+    const merged = new Map<string, Song>();
+
+    const pickLatest = (existing: Song | undefined, candidate: Song): Song => {
+      if (!existing) return candidate;
+      const existingTs = Date.parse(existing.updatedAt || new Date(0).toISOString());
+      const candidateTs = Date.parse(candidate.updatedAt || new Date(0).toISOString());
+      return Number.isFinite(candidateTs) && candidateTs > existingTs ? candidate : existing;
+    };
+
+    localSongs.forEach(song => {
+      merged.set(song.id, song);
+    });
+
+    remoteSongs.forEach(song => {
+      const existing = merged.get(song.id);
+      merged.set(song.id, pickLatest(existing, song));
+    });
+
+    return Array.from(merged.values()).sort((a, b) => {
+      const aTs = Date.parse(a.updatedAt || new Date(0).toISOString());
+      const bTs = Date.parse(b.updatedAt || new Date(0).toISOString());
+      return bTs - aTs;
+    });
+  }
+
+  /**
    * Load all songs from local storage or initial seed
    */
   static getSongs(): Song[] {

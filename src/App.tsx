@@ -18,14 +18,14 @@ import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
 import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
-import { PushResult } from './services/githubSyncService';
+import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
 import { siteMetadata } from './utils/siteConfig';
 
 function CancioneroApp() {
-  const { isAuthor } = useAuth();
+  const { isAuthor, token, user } = useAuth();
 
   const [songs, setSongs] = useState<Song[]>(() => {
     return StorageService.getSongs();
@@ -77,6 +77,30 @@ function CancioneroApp() {
   useEffect(() => {
     checkGitStatus();
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+
+    let isMounted = true;
+    const syncCatalog = async () => {
+      const result = await GitHubSyncService.syncCatalogFromRemote(
+        token,
+        GitHubSyncService.getRemoteConfig(user?.login)
+      );
+
+      if (!isMounted || !result.success || !result.songs) {
+        return;
+      }
+
+      setSongs(result.songs);
+      checkGitStatus();
+    };
+
+    void syncCatalog();
+    return () => {
+      isMounted = false;
+    };
+  }, [token, user?.login]);
 
   // If user logs out and was on drafts or private tab, reset to 'all'
   useEffect(() => {
