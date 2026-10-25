@@ -5,6 +5,17 @@ import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 const STORAGE_KEY_SONGS = 'tony_cancionero_songs_v1';
 const STORAGE_KEY_COMMITS = 'tony_cancionero_git_commits_v1';
 const STORAGE_KEY_LAST_COMMITTED_SNAPSHOT = 'tony_cancionero_git_snapshot_v1';
+const STORAGE_KEY_BACKUPS = 'tony_cancionero_backup_points_v1';
+
+export interface SongBackupPoint {
+  id: string;
+  timestamp: string;
+  name: string;
+  reason: 'pre_import_json' | 'pre_import_md' | 'pre_sync' | 'pre_reset' | 'manual';
+  songCount: number;
+  songsJson: string;
+  songsSummary: Array<{ id: string; title: string; key: string; status: string }>;
+}
 
 export interface SongVersionRecord {
   commit: GitCommit;
@@ -498,6 +509,11 @@ export class StorageService {
    * Reset data to initial demo state
    */
   static resetToDefault(): Song[] {
+    // Create automatic safety backup point before resetting
+    this.createBackupPoint(
+      'Backup automático previo a restablecer catálogo inicial de demostración',
+      'pre_reset'
+    );
     this.saveSongs(INITIAL_SONGS);
     this.saveSnapshot(INITIAL_SONGS);
     const initialCommits = createInitialCommits();
@@ -508,12 +524,19 @@ export class StorageService {
   /**
    * Import songs from JSON string
    */
-  static importFromJson(jsonString: string): { success: boolean; count: number; error?: string } {
+  static importFromJson(jsonString: string): { success: boolean; count: number; error?: string; backup?: SongBackupPoint } {
     try {
       const data = JSON.parse(jsonString);
       if (!Array.isArray(data)) {
         throw new Error('El archivo JSON debe contener un arreglo de canciones.');
       }
+
+      // Automatic backup point before mass JSON import
+      const backup = this.createBackupPoint(
+        `Backup automático previo a importar archivo JSON (${data.length} temas)`,
+        'pre_import_json'
+      );
+
       const existing = this.getSongs();
       const existingMap = new Map(existing.map(s => [s.id, s]));
 
@@ -532,7 +555,7 @@ export class StorageService {
 
       const merged = Array.from(existingMap.values());
       this.saveSongs(merged);
-      return { success: true, count: addedOrUpdated };
+      return { success: true, count: addedOrUpdated, backup };
     } catch (e: any) {
       return { success: false, count: 0, error: e.message || 'Error al procesar JSON' };
     }
@@ -549,6 +572,136 @@ export class StorageService {
       return { success: true, song };
     } catch (e: any) {
       return { success: false, error: e.message || 'Error al procesar Markdown' };
+    }
+  }
+
+  /**
+   * Retrieve all saved backup points (restore points)
+   */
+  static getBackupPoints(): SongBackupPoint[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_BACKUPS);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (err) {
+      console.warn('Error reading backup points from localStorage:', err);
+    }
+    return [];
+  }
+
+  /**
+   * Save backup points list to localStorage (retains up to 20 most recent points)
+   */
+  static saveBackupPoints(backups: SongBackupPoint[]): void {
+    try {
+      const trimmed = backups.slice(0, 20);
+      localStorage.setItem(STORAGE_KEY_BACKUPS, JSON.stringify(trimmed));
+    } catch (err) {
+      console.warn('Error saving backup points to localStorage:', err);
+    }
+  }
+
+  /**
+   * Create an automatic or manual restore point of the entire songs catalog
+   */
+  static createBackupPoint(
+    name: string,
+    reason: SongBackupPoint['reason'] = 'manual'
+  ): SongBackupPoint {
+    const currentSongs = this.getSongs();
+    const songsJson = JSON.stringify(currentSongs, null, 2);
+
+    const backupPoint: SongBackupPoint = {
+      id: `backup-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      name: name.trim() || `Punto de restauración (${new Date().toLocaleTimeString('es-ES')})`,
+      reason,
+      songCount: currentSongs.length,
+      songsJson,
+      songsSummary: currentSongs.map(s => ({
+        id: s.id,
+        title: s.title,
+        key: s.key,
+        status: s.status
+      }))
+    };
+
+    const currentBackups = this.getBackupPoints();
+    const updated = [backupPoint, ...currentBackups];
+    this.saveBackupPoints(updated);
+
+    return backupPoint;
+  }
+
+  /**
+   * Revert the entire songs catalog to a previously saved backup point
+   */
+  static restoreBackupPoint(backupId: string): {
+    success: boolean;
+    songs?: Song[];
+    backup?: SongBackupPoint;
+    error?: string;
+  } {
+    try {
+      const backups = this.getBackupPoints();
+      const target = backups.find(b => b.id === backupId);
+
+      if (!target) {
+        return { success: false, error: 'Punto de restauración no encontrado.' };
+      }
+
+      // Create a safety checkpoint of current state before restoring
+      this.createBackupPoint(
+        `Punto de seguridad previo a revertir a "${target.name}"`,
+        'manual'
+      );
+
+      const parsedSongs: Song[] = JSON.parse(target.songsJson);
+      if (!Array.isArray(parsedSongs)) {
+        throw new Error('El contenido del backup no es un catálogo de canciones válido.');
+      }
+
+      // Save restored songs
+      this.saveSongs(parsedSongs);
+      this.saveSnapshot(parsedSongs);
+
+      // Create a Git commit marking this restoration
+      this.createGitCommit(
+        `revert: revertir cancionero completo al punto de restauración '${target.name}' (${parsedSongs.length} temas)`
+      );
+
+      return {
+        success: true,
+        songs: parsedSongs,
+        backup: target
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'Error al restaurar el punto de backup.'
+      };
+    }
+  }
+
+  /**
+   * Delete a specific backup point
+   */
+  static deleteBackupPoint(backupId: string): boolean {
+    const backups = this.getBackupPoints();
+    const filtered = backups.filter(b => b.id !== backupId);
+    this.saveBackupPoints(filtered);
+    return true;
+  }
+
+  /**
+   * Clear all backup points
+   */
+  static clearAllBackups(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEY_BACKUPS);
+    } catch (e) {
+      console.warn('Error clearing backups', e);
     }
   }
 }
