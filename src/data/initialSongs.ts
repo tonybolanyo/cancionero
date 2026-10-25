@@ -3,7 +3,7 @@ import { markdownToSong } from '../utils/markdownParser';
 
 // Dynamically load every song markdown file from /src/songs/
 // This ensures each song lives in its own dedicated .md file in the repo
-const songFiles = import.meta.glob('../songs/*.md', {
+const songFiles = import.meta.glob('../../songs/*.md', {
   query: '?raw',
   import: 'default',
   eager: true
