@@ -11,7 +11,7 @@ tuning: "Estándar (EADGBE)"
 audioUrl: "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3"
 tags: ["acústico", "inédita"]
 createdAt: "2025-02-14T09:00:00Z"
-updatedAt: "2026-10-25T18:55:05.902Z"
+updatedAt: "2026-10-25T18:57:51.964Z"
 ---
 ## Estrofa 1
 Hoy se torció la mañana temprano,
