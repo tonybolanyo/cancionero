@@ -79,8 +79,6 @@ function CancioneroApp() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
-
     let isMounted = true;
     const syncCatalog = async () => {
       const result = await GitHubSyncService.syncCatalogFromRemote(

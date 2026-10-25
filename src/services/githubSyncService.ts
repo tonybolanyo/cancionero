@@ -145,22 +145,19 @@ export class GitHubSyncService {
     const cleanToken = token?.trim();
     const targetRepo = `${config.owner}/${config.repo}`;
 
-    if (!cleanToken) {
-      return {
-        success: false,
-        message: `No hay token de GitHub cargado para sincronizar con ${targetRepo}.`,
-        source: 'local'
-      };
-    }
-
     try {
+      const headers: HeadersInit = {
+        Accept: 'application/vnd.github.v3+json'
+      };
+
+      if (cleanToken) {
+        (headers as Record<string, string>).Authorization = `Bearer ${cleanToken}`;
+      }
+
       const response = await fetch(
         `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
         {
-          headers: {
-            Authorization: `Bearer ${cleanToken}`,
-            Accept: 'application/vnd.github.v3+json'
-          }
+          headers
         }
       );
 
