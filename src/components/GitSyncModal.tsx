@@ -177,6 +177,30 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     }
   };
 
+  const handlePullFromRemote = async () => {
+    setIsPushing(true);
+    setNotification(null);
+
+    try {
+      const result = await GitHubSyncService.syncCatalogFromRemote(token, remoteConfig);
+      if (result.songs) {
+        onSongsUpdated(result.songs);
+      }
+      setNotification({
+        message: result.message,
+        type: result.success ? 'success' : 'error'
+      });
+    } catch (err: any) {
+      setNotification({
+        message: 'Error al sincronizar desde GitHub: ' + err.message,
+        type: 'error'
+      });
+    } finally {
+      setIsPushing(false);
+      setTimeout(() => setNotification(null), 6000);
+    }
+  };
+
   const handleSaveRemoteConfig = (e: React.FormEvent) => {
     e.preventDefault();
     const updated: RemoteConfig = {
@@ -625,6 +649,26 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePullFromRemote}
+                    disabled={isPushing}
+                    className="py-2 px-3 text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Traer la versión remota del catálogo desde GitHub"
+                  >
+                    {isPushing ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-[var(--text-primary)] border-t-transparent rounded-full animate-spin" />
+                        <span>Sincronizando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Sincronizar desde GitHub</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleManualPush}
