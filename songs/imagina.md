@@ -8,7 +8,6 @@ key: "G"
 tempo: 71
 timeSignature: "4/4"
 tuning: "Estándar"
-audioUrl: "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3"
 notes: "Inspirada en los acantilados de la costa gallega. Compás en 3/4 estilo vals marino con afinación Drop D para darle profundidad al bajo."
 tags: ["acústico", "maqueta", "guitarra", "inédita"]
 createdAt: "2025-02-14T09:00:00Z"

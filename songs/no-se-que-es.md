@@ -8,7 +8,6 @@ key: "Em"
 tempo: 87
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "https://cdn.freesound.org/previews/612/612095_5674468-lq.mp3"
 tags: ["acústico", "guitarra", "inédita"]
 createdAt: "2024-04-10T12:00:00Z"
 updatedAt: "2026-10-25T17:19:31.964Z"

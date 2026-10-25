@@ -8,7 +8,6 @@ key: "D"
 tempo: 179
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "https://cdn.freesound.org/previews/689/689320_5674468-lq.mp3"
 tags: ["íntima", "acústico", "inédita"]
 createdAt: "2025-06-01T15:00:00Z"
 updatedAt: "2026-10-25T18:50:27.692Z"

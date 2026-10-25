@@ -8,7 +8,6 @@ key: "A"
 tempo: 90
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "https://cdn.freesound.org/previews/566/566435_5674468-lq.mp3"
 tags: ["acústico", "inédita"]
 createdAt: "2025-02-14T09:00:00Z"
 updatedAt: "2026-10-25T18:57:51.964Z"
