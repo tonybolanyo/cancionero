@@ -2,7 +2,7 @@
 id: "todo-lo-contrario"
 title: "Todo lo contrario"
 status: "published"
-year: 2026
+year: 2025
 genre: "Canción de Autor"
 key: "F#"
 tempo: 68
@@ -12,7 +12,7 @@ audioUrl: "blob:https://tonygb.com/cd3c76b2-86a8-4aa3-9665-034c6d47021a"
 notes: "Poema de Mario Benedetti.\nProgresión armónica: F# - B - C# - D#m"
 tags: ["acústico", "inédita", "poesía"]
 createdAt: "2026-10-26T19:52:12.135Z"
-updatedAt: "2026-10-26T19:52:12.135Z"
+updatedAt: "2026-10-26T19:53:49.764Z"
 ---
 Colecciono pronósticos
 anuncios y matices
