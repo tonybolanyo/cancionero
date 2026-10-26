@@ -199,6 +199,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     audioUrl?: string;
     chordProgression?: string;
     suggestedLyricsChords?: string;
+    tempoOffset?: number;
   }) => {
     if (data.tempo) setTempo(data.tempo.toString());
     if (data.key) setKey(data.key);
@@ -206,7 +207,10 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     if (data.tuning) setTuning(data.tuning);
     if (data.audioUrl) setAudioUrl(data.audioUrl);
     if (data.chordProgression && !notes) {
-      setNotes(`Progresión armónica detectada: ${data.chordProgression}`);
+      const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
+        ? ` (offset 1er beat: ${data.tempoOffset.toFixed(3)}s)`
+        : '';
+      setNotes(`Progresión armónica detectada: ${data.chordProgression}${offsetNote}`);
     }
     if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe el primer verso aquí'))) {
       setLyrics(data.suggestedLyricsChords);

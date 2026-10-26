@@ -15,10 +15,13 @@ import {
   RotateCcw,
   ShieldCheck,
   CheckCircle2,
-  Wand2
+  Wand2,
+  SlidersHorizontal,
+  Timer
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
+import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tempo';
 
 interface AudioAnalyzerSectionProps {
   onApplyDetection: (data: {
@@ -29,6 +32,7 @@ interface AudioAnalyzerSectionProps {
     audioUrl?: string;
     chordProgression?: string;
     suggestedLyricsChords?: string;
+    tempoOffset?: number;
   }) => void;
   currentKey?: string;
   currentTempo?: string;
@@ -50,13 +54,61 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [applied, setApplied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Dedicated Tempo (web-audio-beat-detector) states
+  const [tempoAnalysis, setTempoAnalysis] = useState<TempoAnalysis | null>(null);
+  const [isCalculatingTempo, setIsCalculatingTempo] = useState<boolean>(false);
+  const [tempoError, setTempoError] = useState<string | null>(null);
+  const [minTempo, setMinTempo] = useState<number>(60);
+  const [maxTempo, setMaxTempo] = useState<number>(180);
+  const [showTempoSettings, setShowTempoSettings] = useState<boolean>(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleCalculateTempo = async (overrideFile?: File, customMin?: number, customMax?: number) => {
+    const targetFile = overrideFile || file;
+    if (!targetFile) return;
+
+    setIsCalculatingTempo(true);
+    setTempoError(null);
+
+    let ctx: AudioContext | null = null;
+    try {
+      const { audioBuffer, audioContext } = await decodeAudioBuffer(targetFile);
+      ctx = audioContext;
+      const res = await analyzeTempo(audioBuffer, {
+        minTempo: customMin ?? minTempo,
+        maxTempo: customMax ?? maxTempo
+      });
+      setTempoAnalysis(res);
+      setAnalysisResult(prev =>
+        prev
+          ? {
+              ...prev,
+              tempo: res.bpm,
+              tempoOffset: res.offset,
+              rawTempo: res.tempo
+            }
+          : null
+      );
+    } catch (err: any) {
+      setTempoError(err.message || 'Error al calcular tempo y offset del primer beat.');
+    } finally {
+      if (ctx && ctx.state !== 'closed') {
+        try {
+          await ctx.close();
+        } catch {}
+      }
+      setIsCalculatingTempo(false);
+    }
+  };
 
   const handleFileSelected = (selectedFile: File) => {
     setError(null);
     setApplied(false);
     setAnalysisResult(null);
+    setTempoAnalysis(null);
+    setTempoError(null);
 
     const validExtensions = ['.mp3', '.wav'];
     const hasValidExt = validExtensions.some(ext =>
@@ -71,6 +123,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setFile(selectedFile);
     const objectUrl = URL.createObjectURL(selectedFile);
     setAudioUrl(objectUrl);
+
+    // Auto calculate tempo & beat offset in background
+    void handleCalculateTempo(selectedFile);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -94,6 +149,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       });
 
       setAnalysisResult(result);
+      if (result.tempoOffset !== undefined) {
+        setTempoAnalysis({
+          bpm: result.tempo,
+          offset: result.tempoOffset,
+          tempo: result.rawTempo ?? result.tempo
+        });
+      } else if (!tempoAnalysis) {
+        void handleCalculateTempo(file);
+      }
     } catch (err: any) {
       setError(err.message || 'Error al analizar el archivo de audio.');
     } finally {
@@ -102,17 +166,34 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     }
   };
 
+  const handleApplyOnlyTempo = () => {
+    if (!tempoAnalysis) return;
+    onApplyDetection({
+      tempo: tempoAnalysis.bpm,
+      key: currentKey || analysisResult?.key || 'Am',
+      timeSignature: analysisResult?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      audioUrl: audioUrl || undefined,
+      chordProgression: analysisResult?.chordProgression,
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis.offset
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 2500);
+  };
+
   const handleApplyAll = () => {
     if (!analysisResult) return;
 
     onApplyDetection({
-      tempo: analysisResult.tempo,
+      tempo: tempoAnalysis?.bpm || analysisResult.tempo,
       key: analysisResult.key,
       timeSignature: analysisResult.timeSignature || '4/4',
       tuning: analysisResult.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
       chordProgression: analysisResult.chordProgression,
-      suggestedLyricsChords: analysisResult.suggestedLyricsChords
+      suggestedLyricsChords: analysisResult.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult.tempoOffset
     });
 
     setApplied(true);
@@ -148,7 +229,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </h4>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
                 <Sparkles className="w-2.5 h-2.5" />
-                <span>IA & DSP</span>
+                <span>DSP Local & Beat Worker</span>
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-muted)]">
@@ -259,7 +340,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{analysisResult ? 'Reanalizar Audio' : 'Detectar con IA / DSP'}</span>
+                    <span>{analysisResult ? 'Reanalizar Audio' : 'Analizar Audio (DSP Local)'}</span>
                   </>
                 )}
               </button>
@@ -290,6 +371,172 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           onEnded={() => setIsPlaying(false)}
           className="hidden"
         />
+      )}
+
+      {/* Sección / Tarjeta "Tempo" con BPM, offset del primer beat, estado de carga, error y recalcular */}
+      {file && (
+        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
+                <Gauge className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
+                  Sección Tempo & Primer Beat
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
+                  web-audio-beat-detector
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setShowTempoSettings(!showTempoSettings)}
+                className={`p-1.5 rounded-lg border transition-colors cursor-pointer text-xs flex items-center gap-1 ${
+                  showTempoSettings
+                    ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--accent-border)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-surface-subtle)]'
+                }`}
+                title="Configurar rango de búsqueda de BPM"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-mono">{minTempo}-{maxTempo}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleCalculateTempo()}
+                disabled={isCalculatingTempo}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                title="Recalcular BPM y offset del primer beat con Web Audio"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${isCalculatingTempo ? 'animate-spin' : ''}`} />
+                <span>{isCalculatingTempo ? 'Calculando...' : 'Recalcular'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Configuración de Rango (minTempo y maxTempo) */}
+          {showTempoSettings && (
+            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex flex-wrap items-center gap-3 text-xs">
+              <span className="font-medium text-[var(--text-secondary)]">Rango esperado:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[var(--text-muted)] font-mono text-[11px]">Mín:</span>
+                <input
+                  type="number"
+                  min={40}
+                  max={200}
+                  value={minTempo}
+                  onChange={(e) => setMinTempo(Math.max(30, Number(e.target.value) || 60))}
+                  className="w-16 px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-center text-xs"
+                />
+                <span className="text-[var(--text-muted)] font-mono text-[11px]">BPM</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[var(--text-muted)] font-mono text-[11px]">Máx:</span>
+                <input
+                  type="number"
+                  min={80}
+                  max={300}
+                  value={maxTempo}
+                  onChange={(e) => setMaxTempo(Math.max(minTempo + 10, Number(e.target.value) || 180))}
+                  className="w-16 px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-center text-xs"
+                />
+                <span className="text-[var(--text-muted)] font-mono text-[11px]">BPM</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCalculateTempo(file, minTempo, maxTempo)}
+                disabled={isCalculatingTempo}
+                className="ml-auto px-2.5 py-1 rounded bg-[var(--accent-primary)] text-[var(--accent-text)] text-[11px] font-semibold hover:bg-[var(--accent-hover)] transition-colors cursor-pointer"
+              >
+                Aplicar y recalcular
+              </button>
+            </div>
+          )}
+
+          {/* Estado de carga */}
+          {isCalculatingTempo && (
+            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
+              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Detectando pulsos rítmicos y calculando offset del primer beat en segundo plano...</span>
+            </div>
+          )}
+
+          {/* Estado de error */}
+          {tempoError && !isCalculatingTempo && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold">Error al estimar tempo</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{tempoError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCalculateTempo()}
+                className="text-[11px] underline hover:no-underline font-medium shrink-0 cursor-pointer"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {/* Valores: BPM y Offset */}
+          {tempoAnalysis && !isCalculatingTempo && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
+              <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                    <Gauge className="w-3 h-3 text-[var(--accent-primary)]" />
+                    <span>Tempo Detectado</span>
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-2xl font-bold font-mono text-[var(--text-primary)]">
+                      {tempoAnalysis.bpm}
+                    </span>
+                    <span className="text-xs font-mono text-[var(--text-muted)]">BPM</span>
+                    {tempoAnalysis.tempo && Math.abs(tempoAnalysis.tempo - tempoAnalysis.bpm) > 0.05 && (
+                      <span className="text-[10px] font-mono text-[var(--text-muted)] opacity-75" title="Tempo continuo exacto">
+                        ({tempoAnalysis.tempo})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleApplyOnlyTempo}
+                  className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                  title="Usar este BPM en el formulario"
+                >
+                  Usar BPM
+                </button>
+              </div>
+
+              <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-0.5">
+                <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
+                  <span>Offset del Primer Beat</span>
+                </span>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
+                    {tempoAnalysis.offset.toFixed(3)}
+                  </span>
+                  <span className="text-xs font-mono text-[var(--text-muted)]">s</span>
+                  <span className="text-[11px] font-mono text-[var(--text-muted)] opacity-80">
+                    ({Math.round(tempoAnalysis.offset * 1000)} ms)
+                  </span>
+                </div>
+                <p className="text-[10px] text-[var(--text-muted)]">
+                  Desfase temporal exacto hasta el primer golpe rítmico
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Analysis in progress status */}
@@ -350,6 +597,11 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 </span>
                 <span className="text-[11px] text-[var(--text-muted)] font-mono">BPM</span>
               </div>
+              {analysisResult.tempoOffset !== undefined && (
+                <div className="text-[10px] font-mono text-[var(--text-muted)]">
+                  Offset: {analysisResult.tempoOffset.toFixed(3)}s
+                </div>
+              )}
             </div>
 
             {/* Key */}

@@ -5,6 +5,8 @@
  * Completely client-side: 0 API keys required, works offline and on GitHub Pages!
  */
 
+import { analyzeTempo } from '../lib/audio/tempo';
+
 export interface DetectedChord {
   timestamp: string;
   seconds?: number;
@@ -15,6 +17,8 @@ export interface DetectedChord {
 export interface AudioAnalysisResult {
   tempo: number;
   tempoConfidence?: number;
+  tempoOffset?: number;
+  rawTempo?: number;
   key: string;
   scale: string;
   timeSignature: string;
@@ -270,7 +274,24 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     const arrayBuffer = await file.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-    const { bpm, confidence } = detectBPM(audioBuffer);
+    let bpm: number;
+    let confidence: number;
+    let tempoOffset = 0;
+    let rawTempo: number | undefined;
+
+    try {
+      const tempoRes = await analyzeTempo(audioBuffer, { minTempo: 60, maxTempo: 180 });
+      bpm = tempoRes.bpm;
+      tempoOffset = tempoRes.offset;
+      rawTempo = tempoRes.tempo;
+      confidence = 0.95;
+    } catch {
+      // Fallback to internal autocorrelation if beat detector encounters difficulties
+      const dspBpm = detectBPM(audioBuffer);
+      bpm = dspBpm.bpm;
+      confidence = dspBpm.confidence;
+    }
+
     const { key, scale, harmonicChords } = detectKey(audioBuffer);
     const duration = Math.round(audioBuffer.duration);
 
@@ -294,6 +315,8 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     return {
       tempo: bpm,
       tempoConfidence: confidence,
+      tempoOffset,
+      rawTempo,
       key,
       scale,
       timeSignature: '4/4',
@@ -301,7 +324,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       durationSeconds: duration,
       chordProgression: progressionStr,
       chords: chordTimeline,
-      musicalNotes: `Análisis de audio procesado por DSP local. Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM. Progresión tonal recomendada: ${progressionStr}.`,
+      musicalNotes: `Análisis de audio procesado por DSP local. Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal recomendada: ${progressionStr}.`,
       suggestedLyricsChords: `## Estrofa\n[${mainProg[0] || 'Am'}] Primer verso de la maqueta...\n[${mainProg[1] || 'C'}] Segundo verso con melodía\n\n## Estribillo\n[${mainProg[2] || 'G'}] El estribillo asciende aquí\n[${mainProg[3] || 'F'}] Resolviendo en cadencia`,
       source: 'client_dsp'
     };

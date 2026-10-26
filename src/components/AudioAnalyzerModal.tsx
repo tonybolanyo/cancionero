@@ -13,6 +13,7 @@ interface AudioAnalyzerModalProps {
     audioUrl?: string;
     chordProgression?: string;
     suggestedLyricsChords?: string;
+    tempoOffset?: number;
   }) => void;
 }
 
@@ -31,6 +32,7 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
     audioUrl?: string;
     chordProgression?: string;
     suggestedLyricsChords?: string;
+    tempoOffset?: number;
   }) => {
     if (onCreateSongFromAudio) {
       onCreateSongFromAudio(data);

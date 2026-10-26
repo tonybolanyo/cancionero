@@ -113,10 +113,26 @@ Detecta de forma rigurosa:
         analysis: parsed
       });
     } catch (err: any) {
-      console.error('Audio analysis API error:', err);
-      return res.status(500).json({
+      const isDepleted =
+        err?.status === 'RESOURCE_EXHAUSTED' ||
+        err?.status === 402 ||
+        String(err?.message).includes('402') ||
+        String(err?.message).includes('prepayment credits are depleted') ||
+        String(err?.message).includes('RESOURCE_EXHAUSTED');
+
+      if (isDepleted) {
+        console.warn('Audio analysis API: Gemini prepayment credits depleted. Delegating to client-side Web Audio DSP.');
+        return res.status(200).json({
+          success: false,
+          creditsDepleted: true,
+          error: 'Créditos de prepago agotados en AI Studio. Procesamiento delegado al motor local Web Audio DSP.'
+        });
+      }
+
+      console.warn('Audio analysis API warning:', err.message || err);
+      return res.status(200).json({
         success: false,
-        error: err.message || 'Error procesando el análisis de audio con el modelo IA.'
+        error: err.message || 'Error procesando el análisis con el modelo IA. Usa el motor local Web Audio.'
       });
     }
   });

@@ -209,8 +209,16 @@ function CancioneroApp() {
     audioUrl?: string;
     chordProgression?: string;
     suggestedLyricsChords?: string;
+    tempoOffset?: number;
   }) => {
     const newId = `cancion-${Date.now()}`;
+    const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
+      ? ` (offset 1er beat: ${data.tempoOffset.toFixed(3)}s)`
+      : '';
+    const initialNotes = data.chordProgression
+      ? `Progresión armónica detectada: ${data.chordProgression}${offsetNote}`
+      : (offsetNote ? `Offset primer beat: ${data.tempoOffset?.toFixed(3)}s` : undefined);
+
     const detectedSong: Song = {
       id: newId,
       title: 'Nueva Composición',
@@ -222,7 +230,7 @@ function CancioneroApp() {
       timeSignature: data.timeSignature || '4/4',
       tuning: data.tuning || 'Estándar (EADGBE)',
       audioUrl: data.audioUrl,
-      notes: data.chordProgression ? `Progresión armónica detectada: ${data.chordProgression}` : undefined,
+      notes: initialNotes,
       tags: ['acústico', 'maqueta'],
       lyrics: data.suggestedLyricsChords || `## Estrofa 1\n[${data.key || 'Am'}] Primer verso de la composición...\n[C] Segundo verso con acordes\n\n## Estribillo\n[G] Y el estribillo asciende aquí...`,
       createdAt: new Date().toISOString(),

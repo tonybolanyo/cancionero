@@ -24,7 +24,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "web-audio-beat-detector": "^8.2.39"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
