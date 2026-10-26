@@ -22,6 +22,8 @@ import {
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
 import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tempo';
+import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
+import { BeatTimeline } from './BeatTimeline';
 
 interface AudioAnalyzerSectionProps {
   onApplyDetection: (data: {
@@ -62,6 +64,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [maxTempo, setMaxTempo] = useState<number>(180);
   const [showTempoSettings, setShowTempoSettings] = useState<boolean>(false);
 
+  // Onsets & Beat Grid (@audio/beat) states
+  const [decodedAudioBuffer, setDecodedAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [beatAnalysis, setBeatAnalysis] = useState<BeatAnalysis | null>(null);
+  const [isAnalyzingBeats, setIsAnalyzingBeats] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -70,15 +79,23 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     if (!targetFile) return;
 
     setIsCalculatingTempo(true);
+    setIsAnalyzingBeats(true);
     setTempoError(null);
 
     let ctx: AudioContext | null = null;
     try {
       const { audioBuffer, audioContext } = await decodeAudioBuffer(targetFile);
       ctx = audioContext;
+      setDecodedAudioBuffer(audioBuffer);
+      setDuration(audioBuffer.duration);
+
+      const minT = customMin ?? minTempo;
+      const maxT = customMax ?? maxTempo;
+
+      // 1. Analyze tempo & beat offset with web-audio-beat-detector
       const res = await analyzeTempo(audioBuffer, {
-        minTempo: customMin ?? minTempo,
-        maxTempo: customMax ?? maxTempo
+        minTempo: minT,
+        maxTempo: maxT
       });
       setTempoAnalysis(res);
       setAnalysisResult(prev =>
@@ -91,6 +108,17 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
             }
           : null
       );
+
+      // 2. Analyze onsets and beat grid with @audio/beat via Web Worker
+      try {
+        const beats = await analyzeBeatsAndOnsets(audioBuffer, {
+          minBpm: minT,
+          maxBpm: maxT
+        });
+        setBeatAnalysis(beats);
+      } catch (beatErr: any) {
+        console.warn('Onsets / Beat grid analysis warning:', beatErr);
+      }
     } catch (err: any) {
       setTempoError(err.message || 'Error al calcular tempo y offset del primer beat.');
     } finally {
@@ -100,6 +128,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         } catch {}
       }
       setIsCalculatingTempo(false);
+      setIsAnalyzingBeats(false);
+    }
+  };
+
+  const handleSeek = (targetTime: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = targetTime;
+      setCurrentTime(targetTime);
     }
   };
 
@@ -109,6 +145,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setAnalysisResult(null);
     setTempoAnalysis(null);
     setTempoError(null);
+    setDecodedAudioBuffer(null);
+    setBeatAnalysis(null);
+    setCurrentTime(0);
 
     const validExtensions = ['.mp3', '.wav'];
     const hasValidExt = validExtensions.some(ext =>
@@ -124,7 +163,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     const objectUrl = URL.createObjectURL(selectedFile);
     setAudioUrl(objectUrl);
 
-    // Auto calculate tempo & beat offset in background
+    // Auto calculate tempo & beat offset and onsets in background
     void handleCalculateTempo(selectedFile);
   };
 
@@ -363,13 +402,30 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         )}
       </div>
 
-      {/* Hidden audio element for playback preview */}
+      {/* Hidden audio element for playback preview and timing synchronization */}
       {audioUrl && (
         <audio
           ref={audioRef}
           src={audioUrl}
+          onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+          onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
           onEnded={() => setIsPlaying(false)}
           className="hidden"
+        />
+      )}
+
+      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets y Beat Grid en Canvas) */}
+      {file && (
+        <BeatTimeline
+          audioBuffer={decodedAudioBuffer}
+          beatAnalysis={beatAnalysis}
+          currentTime={currentTime}
+          duration={duration || (decodedAudioBuffer?.duration ?? 0)}
+          isPlaying={isPlaying}
+          onSeek={handleSeek}
+          onTogglePlay={togglePlayback}
+          isLoading={isAnalyzingBeats}
+          onRecalculate={() => handleCalculateTempo(file)}
         />
       )}
 

@@ -5,6 +5,7 @@
     "": {
       "name": "react-example",
       "dependencies": {
+        "@audio/beat": "^3.1.0",
         "@google/genai": "^2.4.0",
         "@tailwindcss/vite": "^4.3.3",
         "@vitejs/plugin-react": "^6.1.1",
@@ -34,6 +35,18 @@
     },
   },
   "packages": {
+    "@audio/beat": ["@audio/beat@3.1.0", "", { "dependencies": { "@audio/beat-detect": "^1.1.0", "@audio/beat-onset": "^1.0.4", "@audio/beat-tempo": "^2.0.0", "@audio/beat-track": "^1.1.0", "@audio/onset": "^1.0.3" } }, "sha512-nuOelDvYuePuQ0YxOT1wr0z0NCrJG6pbUN0CQCu/53Y+zdxxN5NiTt0HiTynAmENPhWVpjWHcGnsOcTtnP2FdQ=="],
+
+    "@audio/beat-detect": ["@audio/beat-detect@1.1.0", "", { "dependencies": { "@audio/beat-tempo": "^2.0.0", "@audio/onset": "^1.0.3" } }, "sha512-yO7DuuVunglnbZ+BdRF+9iQmK/Ssnc4Dg0dagyPdSsUnbPvP+EXPriF5AFG8zhQ30KFU6tOkZZ0IjXpGxYHgbA=="],
+
+    "@audio/beat-onset": ["@audio/beat-onset@1.0.4", "", { "dependencies": { "@audio/onset": "^1.0.0", "fourier-transform": "^2.2.0", "window-function": "^3.0.0" } }, "sha512-zZJoiGVXdqvmN7OIkchDKUdQOzFtR0WxuqSpAANei1TuZA/LdmDio4KA7E+QvH/3zNRU8o4IwihSkr9mYE2l5w=="],
+
+    "@audio/beat-tempo": ["@audio/beat-tempo@2.0.0", "", { "dependencies": { "@audio/onset": "^1.0.3" } }, "sha512-dcv8dV9YyxH9W8/OFPdmRL1hRqKPNSzfArcc7KL+IoLJv+jpDCxbjndPPKJKwqH0ZuV+gZAwM+VHbJ6nBoyPgA=="],
+
+    "@audio/beat-track": ["@audio/beat-track@1.1.0", "", { "dependencies": { "@audio/beat-tempo": "^2.0.0", "@audio/onset": "^1.0.3" } }, "sha512-dWuQWU2+iLeamcg1Nx2Bxy3yC0igo+Mr5r1E76DnOWNcX9eY5+axYtSoMloe0FCvYFmc2076L5OpC650tJH5bA=="],
+
+    "@audio/onset": ["@audio/onset@1.0.3", "", { "dependencies": { "fourier-transform": "^2.2.0", "window-function": "^3.0.0" } }, "sha512-zt/RDdOt6WhSbtd+GCtCg62PvNFynjR3/Sm0suJJfRcRVXM3VDWz3E6Sz27oSOOyEx8Ds6GWJg1XRqY/Wp8J3Q=="],
+
     "@babel/runtime": ["@babel/runtime@7.29.10", "", {}, "sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
@@ -426,6 +439,8 @@
 
     "forwarded": ["forwarded@0.2.0", "", {}, "sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow=="],
 
+    "fourier-transform": ["fourier-transform@2.5.1", "", {}, "sha512-9LLx88HeCiipLu0TAMqI25UrHYR5IxFzRcmzxMdWEwGAZPSVQH9Ucqm/h5LMebcRcxU6cuuj9yaCf2/b7RdzMw=="],
+
     "fraction.js": ["fraction.js@5.3.4", "", {}, "sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ=="],
 
     "framer-motion": ["framer-motion@12.43.0", "", { "dependencies": { "motion-dom": "^12.43.0", "motion-utils": "^12.39.0", "tslib": "^2.4.0" }, "peerDependencies": { "@emotion/is-prop-valid": "*", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["@emotion/is-prop-valid", "react", "react-dom"] }, "sha512-1eaL3RvR/kAlbG7UYcpMptEyzPoENO0c6w7ZnB3/hh2vSAz/6uGAFn6fdoqTBguNstf3MsFhJHsD/0DHiclG+g=="],
@@ -697,6 +712,8 @@
     "web-audio-beat-detector-worker": ["web-audio-beat-detector-worker@6.0.14", "", { "dependencies": { "@babel/runtime": "^7.29.7", "tslib": "^2.8.1", "worker-factory": "^7.0.50" } }, "sha512-HM9HuqPd/7++orFk10FuNBiHjoqTGaEIpPPnxA9g8ue1XKN7eQ/jU7P5WX2CsfEYsa9RT+v7R+ocjQrYeDRmcQ=="],
 
     "web-streams-polyfill": ["web-streams-polyfill@3.3.3", "", {}, "sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw=="],
+
+    "window-function": ["window-function@3.0.3", "", {}, "sha512-iSmD/0wDE9diI0TGqSn9ht7FhpTUsNrYkj0nb7Hmu7Ej4a6s+dLnCb0IaFIMFKno0brw5eingn6QouoMArIzvw=="],
 
     "worker-factory": ["worker-factory@7.0.50", "", { "dependencies": { "@babel/runtime": "^7.29.7", "fast-unique-numbers": "^9.0.27", "tslib": "^2.8.1" } }, "sha512-hhwc0G+sFwM4qBuhJIUBn2p1Jf8v/FwmLUANBf/Q+Lt2uI8mfIZQhXaZQACodQD4R7Zp6cn/6702bIvNn2puJQ=="],
 
