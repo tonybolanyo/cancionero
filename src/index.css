@@ -96,13 +96,87 @@
   background: var(--scrollbar-thumb-hover);
 }
 
-/* Print styles for lyrics */
+/* =========================================================================
+   ESTILOS DE IMPRESIÓN ESTILIZADA PARA MÚSICOS (ATRIL / PARTITURAS)
+   ========================================================================= */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1.2cm 1.5cm 1.2cm;
   }
-  .no-print {
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar elementos de navegación y UI general */
+  body > #root > div > header,
+  body > #root > div > main,
+  body > #root > div > footer,
+  header,
+  footer,
+  nav,
+  iframe,
+  audio,
+  video,
+  button,
+  .no-print,
+  .screen-only {
     display: none !important;
+  }
+
+  /* Desactivar posicionamiento fijo y scroll de modales al imprimir */
+  .modal-print-container {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    backdrop-filter: none !important;
+    display: block !important;
+  }
+
+  .modal-print-container * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hoja de partitura para atril (visible solo al imprimir) */
+  .musician-print-sheet {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: var(--font-serif), Georgia, serif !important;
+  }
+
+  /* Control de saltos de página para atril */
+  .musician-print-section {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .musician-print-section-header {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }

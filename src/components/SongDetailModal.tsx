@@ -257,14 +257,111 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     });
   };
 
+  /**
+   * Render lyrics and chords specially styled for musicians on music stands (Atril).
+   * Uses larger, bolder typography, high-contrast black on white, and avoids splitting verses across pages.
+   */
+  const renderMusicianPrintLyrics = (text: string) => {
+    const lines = text.split('\n');
+    const sections: { title?: string; isChorus?: boolean; lines: string[] }[] = [];
+    let currentSection: { title?: string; isChorus?: boolean; lines: string[] } = { lines: [] };
+
+    lines.forEach((line) => {
+      if (line.startsWith('##') || line.startsWith('#')) {
+        if (currentSection.lines.length > 0 || currentSection.title) {
+          sections.push(currentSection);
+        }
+        const title = line.replace(/^#+\s*/, '');
+        const isChorus = title.toLowerCase().includes('estribillo') || title.toLowerCase().includes('coro');
+        currentSection = { title, isChorus, lines: [] };
+      } else {
+        currentSection.lines.push(line);
+      }
+    });
+    if (currentSection.lines.length > 0 || currentSection.title) {
+      sections.push(currentSection);
+    }
+
+    return sections.map((sec, sIdx) => (
+      <div key={sIdx} className="musician-print-section mb-6 break-inside-avoid page-break-inside-avoid">
+        {sec.title && (
+          <div className="musician-print-section-header pb-1 mb-2.5 border-b-2 border-black/80 break-after-avoid page-break-after-avoid">
+            <span className={`text-xs font-mono font-bold uppercase tracking-wider ${
+              sec.isChorus ? 'text-black font-extrabold' : 'text-gray-800'
+            }`}>
+              {sec.isChorus ? `[ ${sec.title.toUpperCase()} ]` : sec.title.toUpperCase()}
+            </span>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {sec.lines.map((line, lIdx) => {
+            if (!line.trim()) {
+              return <div key={lIdx} className="h-3.5" />;
+            }
+
+            if (showChords && /\[([A-G][#b]?[^\]]*)\]/.test(line)) {
+              if (chordPosition === 'above') {
+                const segments = parseLyricLine(line);
+                return (
+                  <div key={lIdx} className="flex flex-wrap items-end my-1 font-serif text-black leading-none">
+                    {segments.map((segment, segIdx) => {
+                      const hasChord = !!segment.chord;
+                      return (
+                        <span key={segIdx} className="inline-flex flex-col justify-end align-bottom">
+                          <span className={`font-mono font-bold text-sm leading-none pb-1 ${
+                            hasChord ? 'text-black pr-2' : 'text-transparent'
+                          }`}>
+                            {hasChord ? segment.chord : '\u00A0'}
+                          </span>
+                          <span className="font-serif text-[18px] leading-snug whitespace-pre text-black font-normal">
+                            {segment.text || (hasChord ? '\u00A0' : '')}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // Inline chords
+              const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
+              return (
+                <p key={lIdx} className="font-serif text-[18px] leading-relaxed text-black my-1 flex flex-wrap items-baseline gap-1">
+                  {parts.map((part, pIdx) => {
+                    if (part.startsWith('[') && part.endsWith(']')) {
+                      return (
+                        <strong key={pIdx} className="font-mono text-sm font-bold text-black border border-black rounded px-1.5 py-0.5 bg-gray-100">
+                          {part.slice(1, -1)}
+                        </strong>
+                      );
+                    }
+                    return <span key={pIdx}>{part}</span>;
+                  })}
+                </p>
+              );
+            }
+
+            const cleanLine = line.replace(/\[[^\]]+\]/g, '');
+            return (
+              <p key={lIdx} className="font-serif text-[18px] leading-relaxed text-black my-1">
+                {cleanLine}
+              </p>
+            );
+          })}
+        </div>
+      </div>
+    ));
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden modal-print-container print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:inset-auto">
       <div 
         ref={scrollContainerRef}
-        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200"
+        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200 print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:max-h-none print:w-full print:shadow-none print:border-none print:rounded-none"
       >
         {/* Sticky Header with Action Controls */}
-        <div className="sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 bg-[var(--bg-header)] backdrop-blur-md border-b border-[var(--border-subtle)]">
+        <div className="sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 bg-[var(--bg-header)] backdrop-blur-md border-b border-[var(--border-subtle)] no-print print:hidden">
           <div className="min-w-0 pr-4">
             {/* Unboxed Metadata with typographic separators (NO PILLS) */}
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)] font-medium mb-1">

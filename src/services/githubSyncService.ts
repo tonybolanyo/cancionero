@@ -134,8 +134,9 @@ export class GitHubSyncService {
   }
 
   /**
-   * Pull the remote catalog.json from GitHub and merge it with the local catalog.
-   * This keeps browser-to-browser synchronization without overwriting newer local edits.
+   * Pull the remote catalog.json from GitHub / CDN / local deployment and reconcile it with local storage.
+   * Enables seamless cross-device synchronization and instant updates for visitors without requiring
+   * manual cache clearing or interventions.
    */
   static async syncCatalogFromRemote(
     token?: string | null,
@@ -145,103 +146,136 @@ export class GitHubSyncService {
     const cleanToken = token?.trim();
     const targetRepo = `${config.owner}/${config.repo}`;
 
-    try {
-      const headers: HeadersInit = {
-        Accept: 'application/vnd.github.v3+json'
-      };
+    let remoteSongs: Song[] | null = null;
+    let sourceLabel = '';
 
-      if (cleanToken) {
-        (headers as Record<string, string>).Authorization = `Bearer ${cleanToken}`;
-      }
-
-      const response = await fetch(
-        `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
-        {
-          headers
-        }
-      );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return {
-            success: false,
-            message: `No existe catalog.json en ${targetRepo} (${config.branch}).`,
-            source: 'local'
-          };
-        }
-
-        const errData = await response.json().catch(() => ({}));
-        return {
-          success: false,
-          message: `GitHub respondió ${response.status}: ${errData.message || response.statusText}`,
-          source: 'local'
-        };
-      }
-
-      const data = await response.json();
-      const encodedContent = typeof data?.content === 'string' ? data.content : null;
-      if (!encodedContent) {
-        return {
-          success: false,
-          message: 'GitHub no devolvió contenido para catalog.json.',
-          source: 'local'
-        };
-      }
-
-      const remoteJson = base64ToUtf8(encodedContent);
-      const remoteSongs = JSON.parse(remoteJson) as Song[];
-      if (!Array.isArray(remoteSongs)) {
-        return {
-          success: false,
-          message: 'El contenido remoto de catalog.json no es un array válido de canciones.',
-          source: 'local'
-        };
-      }
-
-      const localSongs = StorageService.getSongs();
-      const mergedSongs = StorageService.mergeSongsByUpdatedAt(localSongs, remoteSongs);
-
-      const remoteTimestamp = remoteSongs.reduce((max, song) => {
-        const value = Date.parse(song.updatedAt || new Date(0).toISOString());
-        return Number.isFinite(value) ? Math.max(max, value) : max;
-      }, 0);
-
-      const localTimestamp = localSongs.reduce((max, song) => {
-        const value = Date.parse(song.updatedAt || new Date(0).toISOString());
-        return Number.isFinite(value) ? Math.max(max, value) : max;
-      }, 0);
-
-      const shouldUseRemote = remoteSongs.length > 0 && (
-        localSongs.length === 0 || remoteTimestamp > localTimestamp || remoteTimestamp === localTimestamp
-      );
-
-      const finalSongs = shouldUseRemote ? mergedSongs : localSongs;
-      if (shouldUseRemote) {
-        StorageService.saveSongs(finalSongs);
-        StorageService.saveSnapshot(finalSongs);
-      }
-
+    // 1. Authenticated GitHub API (if token provided)
+    if (cleanToken) {
       try {
-        localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
-      } catch {
-        // ignore storage errors
-      }
+        const response = await fetch(
+          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+              Authorization: `Bearer ${cleanToken}`
+            }
+          }
+        );
 
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.content) {
+            const jsonStr = base64ToUtf8(data.content);
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              remoteSongs = parsed;
+              sourceLabel = `GitHub API (${targetRepo})`;
+              try {
+                localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Sync via authenticated GitHub API failed, checking fallbacks:', err);
+      }
+    }
+
+    // 2. GitHub Raw Content CDN (No 60 req/hr IP limit, generous CORS, instant reflection of git push)
+    if (!remoteSongs) {
+      try {
+        const rawUrl = `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/catalog.json?_t=${Date.now()}`;
+        const rawRes = await fetch(rawUrl, {
+          cache: 'no-cache',
+          headers: { Accept: 'application/json' }
+        });
+        if (rawRes.ok) {
+          const parsed = await rawRes.json();
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            remoteSongs = parsed;
+            sourceLabel = `GitHub CDN (${targetRepo}@${config.branch})`;
+          }
+        }
+      } catch (err) {
+        console.warn('Sync via GitHub CDN failed, checking static fallback:', err);
+      }
+    }
+
+    // 3. Static deployment catalog (served from the same domain / GitHub Pages / host)
+    if (!remoteSongs) {
+      const base = import.meta.env.BASE_URL || '/';
+      const candidateUrls = [
+        `${base.endsWith('/') ? base : base + '/'}catalog.json?_t=${Date.now()}`,
+        `/catalog.json?_t=${Date.now()}`
+      ];
+      for (const url of candidateUrls) {
+        try {
+          const staticRes = await fetch(url, { cache: 'no-cache' });
+          if (staticRes.ok) {
+            const parsed = await staticRes.json();
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              remoteSongs = parsed;
+              sourceLabel = `Catálogo estático desplegado (${url})`;
+              break;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // 4. Unauthenticated GitHub API contents endpoint as final network attempt
+    if (!remoteSongs && !cleanToken) {
+      try {
+        const unauthRes = await fetch(
+          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
+          { headers: { Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (unauthRes.ok) {
+          const data = await unauthRes.json();
+          if (data?.content) {
+            const jsonStr = base64ToUtf8(data.content);
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              remoteSongs = parsed;
+              sourceLabel = `GitHub API pública (${targetRepo})`;
+              try {
+                localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Sync via unauthenticated GitHub API failed:', err);
+      }
+    }
+
+    // Fallback: If no remote catalog was reachable (e.g. offline), use locally stored/bundled songs
+    if (!remoteSongs || remoteSongs.length === 0) {
+      const current = StorageService.getSongs();
       return {
         success: true,
-        message: shouldUseRemote
-          ? `Sincronizado desde GitHub (${targetRepo}) con ${finalSongs.length} canciones.`
-          : 'Se mantuvieron los cambios locales porque eran más recientes que el remoto.',
-        songs: finalSongs,
-        source: shouldUseRemote ? 'remote' : 'local'
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        message: `Error al sincronizar catalog.json con GitHub: ${err.message || 'desconocido'}`,
+        message: 'No se pudo contactar con el repositorio remoto. Se mantienen las canciones locales/empaquetadas.',
+        songs: current,
         source: 'local'
       };
     }
+
+    // Reconcile retrieved catalog with local songs
+    const localSongs = StorageService.getSongs();
+    const { songs: reconciledSongs, hasChanges } = StorageService.reconcileWithCatalog(
+      localSongs,
+      remoteSongs,
+      sourceLabel
+    );
+
+    return {
+      success: true,
+      message: hasChanges
+        ? `Sincronizadas ${reconciledSongs.length} canciones actualizadas desde ${sourceLabel}.`
+        : `El cancionero está completamente al día con ${sourceLabel} (${reconciledSongs.length} temas).`,
+      songs: reconciledSongs,
+      source: 'remote'
+    };
   }
 
   /**

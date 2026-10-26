@@ -129,6 +129,16 @@ Detecta de forma rigurosa:
     });
   });
 
+  // Direct endpoint to serve fresh catalog.json with no-cache headers
+  app.get(['/catalog.json', '/cancionero/catalog.json'], (req, res) => {
+    const catalogPath = path.resolve(__dirname, 'catalog.json');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Content-Type', 'application/json');
+    res.sendFile(catalogPath);
+  });
+
   // Serve Vite in dev mode or static files in production
   if (!isProd) {
     const vite = await createViteServer({

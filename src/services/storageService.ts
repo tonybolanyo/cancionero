@@ -145,56 +145,167 @@ updatedAt: "2026-02-10T10:00:00Z"
 export class StorageService {
   /**
    * Merge two song catalogs preferring the most recent updatedAt value for each song.
+   * Kept for backwards compatibility and delegates to reconcileWithCatalog.
    */
   static mergeSongsByUpdatedAt(localSongs: Song[], remoteSongs: Song[]): Song[] {
-    const merged = new Map<string, Song>();
-
-    const pickLatest = (existing: Song | undefined, candidate: Song): Song => {
-      if (!existing) return candidate;
-      const existingTs = Date.parse(existing.updatedAt || new Date(0).toISOString());
-      const candidateTs = Date.parse(candidate.updatedAt || new Date(0).toISOString());
-      return Number.isFinite(candidateTs) && candidateTs > existingTs ? candidate : existing;
-    };
-
-    localSongs.forEach(song => {
-      merged.set(song.id, song);
-    });
-
-    remoteSongs.forEach(song => {
-      const existing = merged.get(song.id);
-      merged.set(song.id, pickLatest(existing, song));
-    });
-
-    return Array.from(merged.values()).sort((a, b) => {
-      const aTs = Date.parse(a.updatedAt || new Date(0).toISOString());
-      const bTs = Date.parse(b.updatedAt || new Date(0).toISOString());
-      return bTs - aTs;
-    });
+    return this.reconcileWithCatalog(localSongs, remoteSongs, 'catálogo remoto').songs;
   }
 
   /**
-   * Load all songs from local storage or initial seed
+   * Reconciles local stored songs with an incoming catalog of songs (from bundled .md files or remote catalog.json).
+   * Ensures new songs in the repository appear automatically, updated songs are merged, and local uncommitted
+   * drafts by an author are preserved without requiring manual actions or clearing localStorage.
+   */
+  static reconcileWithCatalog(
+    localSongs: Song[],
+    incomingSongs: Song[],
+    sourceName: string = 'remoto/empaquetado'
+  ): { songs: Song[]; hasChanges: boolean } {
+    if (!Array.isArray(incomingSongs) || incomingSongs.length === 0) {
+      return { songs: localSongs, hasChanges: false };
+    }
+
+    const snapshot = this.getSnapshot();
+    const localMap = new Map<string, Song>();
+    (localSongs || []).forEach(s => localMap.set(s.id, s));
+
+    const nextSnapshot: Record<string, string> = { ...snapshot };
+    let hasChanges = false;
+
+    const handledIds = new Set<string>();
+    const reconciledSongs: Song[] = [];
+
+    // 1. Process incoming songs from repository/catalog
+    for (const incomingSong of incomingSongs) {
+      handledIds.add(incomingSong.id);
+      const localSong = localMap.get(incomingSong.id);
+
+      if (!localSong) {
+        // New song from repository! Add it seamlessly.
+        reconciledSongs.push(incomingSong);
+        nextSnapshot[incomingSong.id] = songToMarkdown(incomingSong);
+        hasChanges = true;
+        continue;
+      }
+
+      const committedMarkdown = snapshot[localSong.id];
+      const localMarkdown = songToMarkdown(localSong);
+      const incomingMarkdown = songToMarkdown(incomingSong);
+
+      // Check if user has uncommitted changes locally
+      const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
+
+      if (!isLocallyModified) {
+        // Local song has NO uncommitted edits (either a visitor or an author whose work was committed).
+        // If incoming song is different in any way (lyrics, chords, key, tempo, tags, status, updatedAt),
+        // adopt the incoming repository version.
+        const isDifferent = localMarkdown.trim() !== incomingMarkdown.trim() ||
+          localSong.status !== incomingSong.status ||
+          localSong.genre !== incomingSong.genre ||
+          localSong.key !== incomingSong.key ||
+          localSong.tempo !== incomingSong.tempo ||
+          JSON.stringify(localSong.tags || []) !== JSON.stringify(incomingSong.tags || []);
+
+        if (isDifferent) {
+          reconciledSongs.push(incomingSong);
+          nextSnapshot[incomingSong.id] = incomingMarkdown;
+          hasChanges = true;
+        } else {
+          // If tags were missing in local, adopt tags from incoming
+          if ((!localSong.tags || localSong.tags.length === 0) && incomingSong.tags && incomingSong.tags.length > 0) {
+            reconciledSongs.push({ ...localSong, tags: incomingSong.tags });
+            hasChanges = true;
+          } else {
+            reconciledSongs.push(localSong);
+          }
+        }
+      } else {
+        // Local song has uncommitted edits on this device.
+        const localTs = Date.parse(localSong.updatedAt || '0');
+        const incomingTs = Date.parse(incomingSong.updatedAt || '0');
+
+        if (Number.isFinite(incomingTs) && Number.isFinite(localTs) && incomingTs > localTs) {
+          // The incoming version from the repo is strictly newer than when the local draft was touched.
+          // Backup local state first so user work is never lost:
+          try {
+            this.createBackupPoint(
+              `Backup automático antes de actualizar "${localSong.title}" desde ${sourceName}`,
+              'pre_sync'
+            );
+          } catch {
+            // ignore backup failure
+          }
+          reconciledSongs.push(incomingSong);
+          nextSnapshot[incomingSong.id] = incomingMarkdown;
+          hasChanges = true;
+        } else {
+          // Keep the local uncommitted draft intact so author work is preserved
+          reconciledSongs.push(localSong);
+        }
+      }
+    }
+
+    // 2. Process local songs that were NOT in incomingSongs
+    for (const localSong of (localSongs || [])) {
+      if (handledIds.has(localSong.id)) continue;
+
+      const committedMarkdown = snapshot[localSong.id];
+      const localMarkdown = songToMarkdown(localSong);
+      const isLocallyCreated = committedMarkdown === undefined;
+      const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
+
+      if (isLocallyCreated || isLocallyModified) {
+        // Author created or modified this song locally, keep it!
+        reconciledSongs.push(localSong);
+      } else {
+        // This song was previously committed but has been deleted from the repository.
+        // Since local user made no edits to it, remove it cleanly.
+        delete nextSnapshot[localSong.id];
+        hasChanges = true;
+      }
+    }
+
+    // 3. Sort reconciled songs consistently (published first, then drafts, then private; then year/recency)
+    reconciledSongs.sort((a, b) => {
+      const statusOrder: Record<string, number> = { published: 1, draft: 2, private: 3 };
+      const orderDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
+      if (orderDiff !== 0) return orderDiff;
+      const bTs = Date.parse(b.updatedAt || new Date(0).toISOString());
+      const aTs = Date.parse(a.updatedAt || new Date(0).toISOString());
+      if (bTs !== aTs) return bTs - aTs;
+      return (b.year || 0) - (a.year || 0);
+    });
+
+    if (hasChanges) {
+      this.saveSongs(reconciledSongs);
+      try {
+        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(nextSnapshot));
+      } catch (err) {
+        console.warn('Failed to update snapshot during catalog reconciliation', err);
+      }
+    }
+
+    return { songs: reconciledSongs, hasChanges };
+  }
+
+  /**
+   * Load all songs from local storage, seamlessly reconciling with bundled repository songs.
+   * Any newly pushed songs or updates in the repository are automatically incorporated
+   * for every visitor on any device without requiring manual cache clearing.
    */
   static getSongs(): Song[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_SONGS);
       if (stored) {
-        const songs: Song[] = JSON.parse(stored);
-        let updated = false;
-        const migrated = songs.map(song => {
-          if (!song.tags || song.tags.length === 0) {
-            const initial = INITIAL_SONGS.find(i => i.id === song.id);
-            if (initial?.tags) {
-              updated = true;
-              return { ...song, tags: initial.tags };
-            }
-          }
-          return song;
-        });
-        if (updated) {
-          this.saveSongs(migrated);
+        const localSongs: Song[] = JSON.parse(stored);
+        if (Array.isArray(localSongs) && localSongs.length > 0) {
+          const { songs: reconciled } = this.reconcileWithCatalog(
+            localSongs,
+            INITIAL_SONGS,
+            'repositorio empaquetado (INITIAL_SONGS)'
+          );
+          return reconciled;
         }
-        return migrated;
       }
     } catch (e) {
       console.warn('Failed to parse songs from storage', e);

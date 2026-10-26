@@ -80,23 +80,49 @@ function CancioneroApp() {
 
   useEffect(() => {
     let isMounted = true;
+    let isSyncing = false;
+
     const syncCatalog = async () => {
-      const result = await GitHubSyncService.syncCatalogFromRemote(
-        token,
-        GitHubSyncService.getRemoteConfig(user?.login)
-      );
+      if (isSyncing) return;
+      isSyncing = true;
+      try {
+        const result = await GitHubSyncService.syncCatalogFromRemote(
+          token,
+          GitHubSyncService.getRemoteConfig(user?.login)
+        );
 
-      if (!isMounted || !result.success || !result.songs) {
-        return;
+        if (!isMounted || !result.success || !result.songs) {
+          return;
+        }
+
+        setSongs(result.songs);
+        checkGitStatus();
+      } catch (err) {
+        console.warn('Auto sync catalog error:', err);
+      } finally {
+        isSyncing = false;
       }
-
-      setSongs(result.songs);
-      checkGitStatus();
     };
 
     void syncCatalog();
+
+    // Auto-sync whenever user returns to the tab or network reconnects
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncCatalog();
+      }
+    };
+    const handleOnline = () => {
+      void syncCatalog();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
     };
   }, [token, user?.login]);
 
