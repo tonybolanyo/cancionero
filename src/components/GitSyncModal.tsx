@@ -177,12 +177,12 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     }
   };
 
-  const handlePullFromRemote = async () => {
+  const handlePullFromRemote = async (forceReload = false) => {
     setIsPushing(true);
     setNotification(null);
 
     try {
-      const result = await GitHubSyncService.syncCatalogFromRemote(token, remoteConfig);
+      const result = await GitHubSyncService.syncCatalogFromRemote(token, remoteConfig, { forceReload });
       if (result.songs) {
         onSongsUpdated(result.songs);
       }
@@ -651,10 +651,10 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handlePullFromRemote}
+                    onClick={(e) => handlePullFromRemote(e.shiftKey)}
                     disabled={isPushing}
                     className="py-2 px-3 text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
-                    title="Traer la versión remota del catálogo desde GitHub"
+                    title="Traer la versión remota desde GitHub (Valida con cabeceras ETag 304 / no-cache. Mantén Shift al hacer clic para forzar recarga completa)"
                   >
                     {isPushing ? (
                       <>
@@ -692,11 +692,19 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
-                <div>
-                  <span>Commits locales pendientes de Push: </span>
-                  <span className={`font-mono font-bold ${unpushedCount > 0 ? 'text-[var(--accent-primary)]' : 'text-emerald-500'}`}>
-                    {unpushedCount} {unpushedCount === 1 ? 'commit' : 'commits'}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <span>Commits locales pendientes: </span>
+                    <span className={`font-mono font-bold ${unpushedCount > 0 ? 'text-[var(--accent-primary)]' : 'text-emerald-500'}`}>
+                      {unpushedCount} {unpushedCount === 1 ? 'commit' : 'commits'}
+                    </span>
+                  </div>
+                  {GitHubSyncService.getCatalogETag() && (
+                    <div className="hidden sm:inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] opacity-80" title={`ETag activo: ${GitHubSyncService.getCatalogETag()}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                      <span className="font-mono">ETag: {GitHubSyncService.getCatalogETag()?.replace(/"/g, '').substring(0, 12)}...</span>
+                    </div>
+                  )}
                 </div>
                 {lastPushTime && (
                   <div>

@@ -12,6 +12,17 @@ export interface RemoteConfig {
 const STORAGE_KEY_REMOTE = 'tony_cancionero_remote_config_v1';
 const STORAGE_KEY_LAST_PUSH = 'tony_cancionero_last_push_v1';
 const STORAGE_KEY_AUTO_COMMIT = 'tony_cancionero_auto_commit_v1';
+export const STORAGE_KEY_CATALOG_ETAG = 'tony_cancionero_catalog_etag_v1';
+export const STORAGE_KEY_REMOTE_SHA = 'tony_cancionero_remote_sha_v1';
+
+export interface CatalogSyncResult {
+  success: boolean;
+  message: string;
+  songs?: Song[];
+  source?: 'remote' | 'local';
+  notModified?: boolean;
+  etag?: string | null;
+}
 
 export interface PushResult {
   success: boolean;
@@ -134,35 +145,103 @@ export class GitHubSyncService {
   }
 
   /**
+   * Retrieve stored catalog ETag
+   */
+  static getCatalogETag(): string | null {
+    try {
+      return localStorage.getItem(STORAGE_KEY_CATALOG_ETAG);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save catalog ETag to localStorage
+   */
+  static saveCatalogETag(etag: string): void {
+    try {
+      if (etag && typeof etag === 'string') {
+        localStorage.setItem(STORAGE_KEY_CATALOG_ETAG, etag.trim());
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Clear catalog ETag to force an unconditional fetch on the next sync
+   */
+  static clearCatalogETag(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEY_CATALOG_ETAG);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
    * Pull the remote catalog.json from GitHub / CDN / local deployment and reconcile it with local storage.
-   * Enables seamless cross-device synchronization and instant updates for visitors without requiring
-   * manual cache clearing or interventions.
+   * Utilizes GitHub API ETag headers (If-None-Match -> 304 Not Modified) to validate whether remote content
+   * has changed before downloading, with robust no-cache fallbacks and cache-busting to ensure cross-device
+   * updates are immediately detected without manual intervention or page reloads.
    */
   static async syncCatalogFromRemote(
     token?: string | null,
-    customConfig?: RemoteConfig
-  ): Promise<{ success: boolean; message: string; songs?: Song[]; source?: 'remote' | 'local' }> {
+    customConfig?: RemoteConfig,
+    options?: { forceReload?: boolean }
+  ): Promise<CatalogSyncResult> {
     const config = customConfig || this.getRemoteConfig();
     const cleanToken = token?.trim();
     const targetRepo = `${config.owner}/${config.repo}`;
+    const storedEtag = options?.forceReload ? null : this.getCatalogETag();
 
     let remoteSongs: Song[] | null = null;
     let sourceLabel = '';
+    let matchedEtag = false;
+    let matchedSource = '';
+    let newEtagToSave: string | null = null;
+    let fetchedSha: string | null = null;
+
+    // Strict no-cache headers to bypass intermediate cache proxies
+    const noCacheHeaders: Record<string, string> = {
+      'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0'
+    };
 
     // 1. Authenticated GitHub API (if token provided)
+    // Uses ETag If-None-Match to detect 304 Not Modified instantly without payload transfer
     if (cleanToken) {
       try {
+        const headers: Record<string, string> = {
+          Accept: 'application/vnd.github.v3+json',
+          Authorization: `Bearer ${cleanToken}`,
+          ...noCacheHeaders
+        };
+        if (storedEtag) {
+          headers['If-None-Match'] = storedEtag;
+        }
+
         const response = await fetch(
-          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
+          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${encodeURIComponent(config.branch)}&_t=${Date.now()}`,
           {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-              Authorization: `Bearer ${cleanToken}`
-            }
+            headers,
+            cache: 'no-cache'
           }
         );
 
-        if (response.ok) {
+        if (response.status === 304) {
+          matchedEtag = true;
+          matchedSource = `GitHub API (${targetRepo})`;
+          const respEtag = response.headers.get('etag');
+          if (respEtag) {
+            this.saveCatalogETag(respEtag);
+          }
+        } else if (response.ok) {
+          const respEtag = response.headers.get('etag');
+          if (respEtag) {
+            newEtagToSave = respEtag;
+          }
           const data = await response.json();
           if (data?.content) {
             const jsonStr = base64ToUtf8(data.content);
@@ -170,9 +249,7 @@ export class GitHubSyncService {
             if (Array.isArray(parsed) && parsed.length > 0) {
               remoteSongs = parsed;
               sourceLabel = `GitHub API (${targetRepo})`;
-              try {
-                localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
-              } catch {}
+              fetchedSha = data.sha || null;
             }
           }
         }
@@ -181,15 +258,48 @@ export class GitHubSyncService {
       }
     }
 
+    // If validated via 304, the remote catalog has not changed at all. Return immediately without payload overhead!
+    if (matchedEtag) {
+      const current = StorageService.getSongs();
+      return {
+        success: true,
+        message: `El catálogo remoto no ha cambiado (validado por ETag 304 en ${matchedSource || targetRepo}).`,
+        songs: current,
+        source: 'remote',
+        notModified: true,
+        etag: storedEtag
+      };
+    }
+
     // 2. GitHub Raw Content CDN (No 60 req/hr IP limit, generous CORS, instant reflection of git push)
     if (!remoteSongs) {
       try {
         const rawUrl = `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/catalog.json?_t=${Date.now()}`;
+        const rawHeaders: Record<string, string> = {
+          Accept: 'application/json',
+          ...noCacheHeaders
+        };
+        if (storedEtag) {
+          rawHeaders['If-None-Match'] = storedEtag;
+        }
+
         const rawRes = await fetch(rawUrl, {
           cache: 'no-cache',
-          headers: { Accept: 'application/json' }
+          headers: rawHeaders
         });
-        if (rawRes.ok) {
+
+        if (rawRes.status === 304) {
+          matchedEtag = true;
+          matchedSource = `GitHub CDN (${targetRepo}@${config.branch})`;
+          const rawEtag = rawRes.headers.get('etag');
+          if (rawEtag) {
+            this.saveCatalogETag(rawEtag);
+          }
+        } else if (rawRes.ok) {
+          const rawEtag = rawRes.headers.get('etag');
+          if (rawEtag) {
+            newEtagToSave = rawEtag;
+          }
           const parsed = await rawRes.json();
           if (Array.isArray(parsed) && parsed.length > 0) {
             remoteSongs = parsed;
@@ -201,7 +311,19 @@ export class GitHubSyncService {
       }
     }
 
-    // 3. Static deployment catalog (served from the same domain / GitHub Pages / host)
+    if (matchedEtag) {
+      const current = StorageService.getSongs();
+      return {
+        success: true,
+        message: `El catálogo remoto no ha cambiado (validado por ETag 304 en ${matchedSource || targetRepo}).`,
+        songs: current,
+        source: 'remote',
+        notModified: true,
+        etag: storedEtag
+      };
+    }
+
+    // 3. Static deployment catalog (served from the same domain / GitHub Pages / local server with strict no-cache)
     if (!remoteSongs) {
       const base = import.meta.env.BASE_URL || '/';
       const candidateUrls = [
@@ -210,8 +332,32 @@ export class GitHubSyncService {
       ];
       for (const url of candidateUrls) {
         try {
-          const staticRes = await fetch(url, { cache: 'no-cache' });
-          if (staticRes.ok) {
+          const staticHeaders: Record<string, string> = {
+            Accept: 'application/json',
+            ...noCacheHeaders
+          };
+          if (storedEtag) {
+            staticHeaders['If-None-Match'] = storedEtag;
+          }
+
+          const staticRes = await fetch(url, {
+            cache: 'no-cache',
+            headers: staticHeaders
+          });
+
+          if (staticRes.status === 304) {
+            matchedEtag = true;
+            matchedSource = `Catálogo estático desplegado (${url})`;
+            const staticEtag = staticRes.headers.get('etag');
+            if (staticEtag) {
+              this.saveCatalogETag(staticEtag);
+            }
+            break;
+          } else if (staticRes.ok) {
+            const staticEtag = staticRes.headers.get('etag');
+            if (staticEtag) {
+              newEtagToSave = staticEtag;
+            }
             const parsed = await staticRes.json();
             if (Array.isArray(parsed) && parsed.length > 0) {
               remoteSongs = parsed;
@@ -223,14 +369,49 @@ export class GitHubSyncService {
       }
     }
 
+    if (matchedEtag) {
+      const current = StorageService.getSongs();
+      return {
+        success: true,
+        message: `El catálogo remoto no ha cambiado (validado por ETag 304 en ${matchedSource || targetRepo}).`,
+        songs: current,
+        source: 'remote',
+        notModified: true,
+        etag: storedEtag
+      };
+    }
+
     // 4. Unauthenticated GitHub API contents endpoint as final network attempt
     if (!remoteSongs && !cleanToken) {
       try {
+        const unauthHeaders: Record<string, string> = {
+          Accept: 'application/vnd.github.v3+json',
+          ...noCacheHeaders
+        };
+        if (storedEtag) {
+          unauthHeaders['If-None-Match'] = storedEtag;
+        }
+
         const unauthRes = await fetch(
-          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${config.branch}`,
-          { headers: { Accept: 'application/vnd.github.v3+json' } }
+          `https://api.github.com/repos/${config.owner}/${config.repo}/contents/catalog.json?ref=${encodeURIComponent(config.branch)}&_t=${Date.now()}`,
+          {
+            headers: unauthHeaders,
+            cache: 'no-cache'
+          }
         );
-        if (unauthRes.ok) {
+
+        if (unauthRes.status === 304) {
+          matchedEtag = true;
+          matchedSource = `GitHub API pública (${targetRepo})`;
+          const apiEtag = unauthRes.headers.get('etag');
+          if (apiEtag) {
+            this.saveCatalogETag(apiEtag);
+          }
+        } else if (unauthRes.ok) {
+          const apiEtag = unauthRes.headers.get('etag');
+          if (apiEtag) {
+            newEtagToSave = apiEtag;
+          }
           const data = await unauthRes.json();
           if (data?.content) {
             const jsonStr = base64ToUtf8(data.content);
@@ -238,15 +419,35 @@ export class GitHubSyncService {
             if (Array.isArray(parsed) && parsed.length > 0) {
               remoteSongs = parsed;
               sourceLabel = `GitHub API pública (${targetRepo})`;
-              try {
-                localStorage.setItem('tony_cancionero_remote_sha_v1', data.sha || '');
-              } catch {}
+              fetchedSha = data.sha || null;
             }
           }
         }
       } catch (err) {
         console.warn('Sync via unauthenticated GitHub API failed:', err);
       }
+    }
+
+    if (matchedEtag) {
+      const current = StorageService.getSongs();
+      return {
+        success: true,
+        message: `El catálogo remoto no ha cambiado (validado por ETag 304 en ${matchedSource || targetRepo}).`,
+        songs: current,
+        source: 'remote',
+        notModified: true,
+        etag: storedEtag
+      };
+    }
+
+    // Save discovered ETag or remote SHA if fresh catalog was fetched
+    if (newEtagToSave) {
+      this.saveCatalogETag(newEtagToSave);
+    }
+    if (fetchedSha) {
+      try {
+        localStorage.setItem(STORAGE_KEY_REMOTE_SHA, fetchedSha);
+      } catch {}
     }
 
     // Fallback: If no remote catalog was reachable (e.g. offline), use locally stored/bundled songs
@@ -274,7 +475,9 @@ export class GitHubSyncService {
         ? `Sincronizadas ${reconciledSongs.length} canciones actualizadas desde ${sourceLabel}.`
         : `El cancionero está completamente al día con ${sourceLabel} (${reconciledSongs.length} temas).`,
       songs: reconciledSongs,
-      source: 'remote'
+      source: 'remote',
+      notModified: false,
+      etag: newEtagToSave || storedEtag
     };
   }
 
@@ -474,6 +677,12 @@ export class GitHubSyncService {
         const sha = data.commit?.sha?.substring(0, 7) || 'HEAD';
         const commitUrl = data.commit?.html_url || `${targetUrl}/commit/${data.commit?.sha || ''}`;
         this.recordPushSuccess();
+        if (data.content?.sha) {
+          try {
+            localStorage.setItem(STORAGE_KEY_REMOTE_SHA, data.content.sha);
+          } catch {}
+        }
+        this.clearCatalogETag();
         return {
           success: true,
           commitSha: sha,
