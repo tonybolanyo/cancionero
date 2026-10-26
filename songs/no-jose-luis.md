@@ -2,7 +2,7 @@
 id: "no-jose-luis"
 title: "No, José Luis"
 status: "published"
-year: 2026
+year: 2025
 genre: "Cantautor"
 key: "F#"
 tempo: 88
@@ -11,7 +11,7 @@ tuning: "Estándar (EADGBE)"
 audioUrl: "blob:https://tonygb.com/f1671c55-49c4-420b-8de9-86b654f9f3c7"
 tags: ["acústico", "inédita"]
 createdAt: "2026-07-04T18:00:00Z"
-updatedAt: "2026-10-26T21:19:56.512Z"
+updatedAt: "2026-10-26T21:28:56.628Z"
 ---
 ## Intro
 
