@@ -12,7 +12,7 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
       {
-        name: 'sync-catalog-file',
+        name: 'sync-assets-plugin',
         buildStart() {
           try {
             const rootCatalog = path.resolve(__dirname, 'catalog.json');
@@ -24,8 +24,13 @@ export default defineConfig(() => {
             if (fs.existsSync(rootCatalog)) {
               fs.copyFileSync(rootCatalog, publicCatalog);
             }
+            const wasmSource = path.resolve(__dirname, 'node_modules/essentia.js/dist/essentia-wasm.web.wasm');
+            const publicWasm = path.resolve(publicDir, 'essentia-wasm.web.wasm');
+            if (fs.existsSync(wasmSource) && !fs.existsSync(publicWasm)) {
+              fs.copyFileSync(wasmSource, publicWasm);
+            }
           } catch (err) {
-            console.warn('Vite sync-catalog plugin notice:', err);
+            console.warn('Vite assets sync plugin notice:', err);
           }
         }
       }

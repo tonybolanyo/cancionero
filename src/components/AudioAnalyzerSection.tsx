@@ -17,13 +17,18 @@ import {
   CheckCircle2,
   Wand2,
   SlidersHorizontal,
-  Timer
+  Timer,
+  BarChart3,
+  Cpu
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
 import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tempo';
 import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
+import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
+
+const CHROMATIC_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 interface AudioAnalyzerSectionProps {
   onApplyDetection: (data: {
@@ -70,6 +75,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [isAnalyzingBeats, setIsAnalyzingBeats] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
+
+  // Key & Scale estimation with Essentia.js WASM Web Worker
+  const {
+    keyAnalysis,
+    isAnalyzingKey,
+    keyError,
+    analyzeKey,
+    resetKeyAnalysis
+  } = useKeyAnalysis();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -119,6 +133,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       } catch (beatErr: any) {
         console.warn('Onsets / Beat grid analysis warning:', beatErr);
       }
+
+      // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker
+      void analyzeKey(audioBuffer);
     } catch (err: any) {
       setTempoError(err.message || 'Error al calcular tempo y offset del primer beat.');
     } finally {
@@ -147,6 +164,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setTempoError(null);
     setDecodedAudioBuffer(null);
     setBeatAnalysis(null);
+    resetKeyAnalysis();
     setCurrentTime(0);
 
     const validExtensions = ['.mp3', '.wav'];
@@ -163,7 +181,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     const objectUrl = URL.createObjectURL(selectedFile);
     setAudioUrl(objectUrl);
 
-    // Auto calculate tempo & beat offset and onsets in background
+    // Auto calculate tempo & beat offset, onsets and key in background
     void handleCalculateTempo(selectedFile);
   };
 
@@ -205,11 +223,20 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     }
   };
 
+  const getEffectiveKey = () => {
+    if (keyAnalysis) {
+      return keyAnalysis.scale === 'minor'
+        ? (keyAnalysis.key.endsWith('m') ? keyAnalysis.key : `${keyAnalysis.key}m`)
+        : keyAnalysis.key.replace(/m$/, '');
+    }
+    return currentKey || analysisResult?.key || 'Am';
+  };
+
   const handleApplyOnlyTempo = () => {
     if (!tempoAnalysis) return;
     onApplyDetection({
       tempo: tempoAnalysis.bpm,
-      key: currentKey || analysisResult?.key || 'Am',
+      key: getEffectiveKey(),
       timeSignature: analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
@@ -221,18 +248,35 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setTimeout(() => setApplied(false), 2500);
   };
 
+  const handleApplyOnlyKey = () => {
+    if (!keyAnalysis) return;
+    const key = getEffectiveKey();
+    onApplyDetection({
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
+      key,
+      timeSignature: analysisResult?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      audioUrl: audioUrl || undefined,
+      chordProgression: analysisResult?.chordProgression,
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 2500);
+  };
+
   const handleApplyAll = () => {
-    if (!analysisResult) return;
+    if (!analysisResult && !tempoAnalysis && !keyAnalysis) return;
 
     onApplyDetection({
-      tempo: tempoAnalysis?.bpm || analysisResult.tempo,
-      key: analysisResult.key,
-      timeSignature: analysisResult.timeSignature || '4/4',
-      tuning: analysisResult.tuning || 'Estándar (EADGBE)',
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
+      key: getEffectiveKey(),
+      timeSignature: analysisResult?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
-      chordProgression: analysisResult.chordProgression,
-      suggestedLyricsChords: analysisResult.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult.tempoOffset
+      chordProgression: analysisResult?.chordProgression,
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
     });
 
     setApplied(true);
@@ -354,6 +398,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   setFile(null);
                   setAudioUrl('');
                   setAnalysisResult(null);
+                  resetKeyAnalysis();
                   if (audioRef.current) audioRef.current.pause();
                 }}
                 className="px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
@@ -595,6 +640,170 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         </div>
       )}
 
+      {/* Sección / Tarjeta "Tonalidad & Escala" con Essentia.js WASM */}
+      {file && (
+        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
+                <KeyRound className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
+                  Sección Tonalidad & Escala
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
+                  <Cpu className="w-2.5 h-2.5" />
+                  <span>essentia.js WASM Worker</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (decodedAudioBuffer) {
+                    void analyzeKey(decodedAudioBuffer);
+                  } else if (file) {
+                    void handleCalculateTempo(file);
+                  }
+                }}
+                disabled={isAnalyzingKey}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                title="Recalcular tonalidad con Essentia WebAssembly"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${isAnalyzingKey ? 'animate-spin' : ''}`} />
+                <span>{isAnalyzingKey ? 'Analizando...' : 'Recalcular'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Estado de carga */}
+          {isAnalyzingKey && (
+            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
+              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Calculando cromagrama armónico (HPCP) y estimando tonalidad en Web Worker WASM...</span>
+            </div>
+          )}
+
+          {/* Estado de error */}
+          {keyError && !isAnalyzingKey && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold">Error al estimar tonalidad con Essentia</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{keyError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (decodedAudioBuffer) void analyzeKey(decodedAudioBuffer);
+                  else if (file) void handleCalculateTempo(file);
+                }}
+                className="text-[11px] underline hover:no-underline font-medium shrink-0 cursor-pointer"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {/* Resultado de Tonalidad, Escala y Cromagrama */}
+          {keyAnalysis && !isAnalyzingKey && (
+            <div className="space-y-3 pt-0.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                      <KeyRound className="w-3 h-3 text-[var(--accent-primary)]" />
+                      <span>Tonalidad Estimada</span>
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
+                        {getEffectiveKey()}
+                      </span>
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">
+                        Escala {keyAnalysis.scale === 'minor' ? 'Menor' : 'Mayor'}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
+                        {Math.round(keyAnalysis.confidence * 100)}% conf.
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleApplyOnlyKey}
+                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                    title="Usar esta tonalidad en el formulario"
+                  >
+                    Usar Tono
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                    <Cpu className="w-3 h-3 text-[var(--accent-primary)]" />
+                    <span>Algoritmo MIR</span>
+                  </span>
+                  <p className="text-xs font-semibold text-[var(--text-primary)] truncate font-mono">
+                    {keyAnalysis.algorithm}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Procesado 100% en el navegador con WebAssembly en hilo secundario
+                  </p>
+                </div>
+              </div>
+
+              {/* Cromagrama HPCP (12 Clases de Altura) */}
+              {keyAnalysis.chroma && keyAnalysis.chroma.length === 12 && (
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+                      <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Cromagrama Armónico (HPCP de 12 clases de tono)</span>
+                    </span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      Nota tónica detectada: <strong className="text-[var(--accent-primary)]">{keyAnalysis.key}</strong>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-12 gap-1 pt-1 items-end h-20 bg-[var(--bg-modal)] p-2 rounded-lg border border-[var(--border-subtle)]">
+                    {CHROMATIC_NOTES.map((note, idx) => {
+                      const value = keyAnalysis.chroma[idx] ?? 0;
+                      const heightPercent = Math.max(6, Math.round(value * 100));
+                      const isRoot = note === keyAnalysis.key.replace(/m$/, '');
+
+                      return (
+                        <div key={note} className="flex flex-col items-center justify-end h-full group" title={`${note}: ${(value * 100).toFixed(1)}%`}>
+                          <div className="w-full flex items-end justify-center h-12">
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full max-w-[14px] rounded-t transition-all ${
+                                isRoot
+                                  ? 'bg-[var(--accent-primary)] shadow-xs'
+                                  : 'bg-[var(--accent-subtle)] group-hover:bg-[var(--accent-primary)]/60'
+                              }`}
+                            />
+                          </div>
+                          <span
+                            className={`text-[9px] font-mono mt-1 font-semibold ${
+                              isRoot ? 'text-[var(--accent-primary)] scale-110' : 'text-[var(--text-muted)]'
+                            }`}
+                          >
+                            {note}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Analysis in progress status */}
       {isAnalyzing && (
         <div className="p-3.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-3 text-xs text-[var(--accent-primary)] animate-pulse">
@@ -662,16 +871,25 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
             {/* Key */}
             <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                <KeyRound className="w-3 h-3 text-[var(--accent-primary)]" />
-                <span>Tonalidad (Key)</span>
+              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <KeyRound className="w-3 h-3 text-[var(--accent-primary)]" />
+                  <span>Tonalidad (Key)</span>
+                </span>
+                {keyAnalysis && (
+                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-semibold">
+                    Essentia
+                  </span>
+                )}
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-lg font-bold font-mono text-[var(--accent-primary)]">
-                  {analysisResult.key}
+                  {keyAnalysis ? getEffectiveKey() : analysisResult.key}
                 </span>
                 <span className="text-[11px] text-[var(--text-muted)]">
-                  {analysisResult.key.endsWith('m') ? 'Menor' : 'Mayor'}
+                  {keyAnalysis
+                    ? (keyAnalysis.scale === 'minor' ? 'Menor' : 'Mayor')
+                    : (analysisResult.key.endsWith('m') ? 'Menor' : 'Mayor')}
                 </span>
               </div>
             </div>
@@ -683,7 +901,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 <span>Escala</span>
               </span>
               <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                {analysisResult.scale || 'Natural'}
+                {keyAnalysis
+                  ? (keyAnalysis.scale === 'minor' ? 'Menor Natural' : 'Mayor Natural')
+                  : (analysisResult.scale || 'Natural')}
               </p>
             </div>
 
