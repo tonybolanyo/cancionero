@@ -42,3 +42,21 @@ test('extractMonoChannelData handles mono directly without modification', () => 
   assert.ok(Math.abs(mono[1] - (-0.4)) < 1e-6);
   assert.ok(Math.abs(mono[2] - 0.8) < 1e-6);
 });
+
+test('chord segment lookup returns the active chord matching current time', () => {
+  const chords = [
+    { chord: 'C', startTime: 0, endTime: 3.0, strength: 0.8 },
+    { chord: 'G', startTime: 3.0, endTime: 6.0, strength: 0.75 },
+    { chord: 'Am', startTime: 6.0, endTime: 9.0, strength: 0.85 },
+    { chord: 'F', startTime: 9.0, endTime: 12.0, strength: 0.7 }
+  ];
+
+  const getActiveChord = (t: number) => chords.find(c => t >= c.startTime && t < c.endTime);
+
+  assert.strictEqual(getActiveChord(0)?.chord, 'C');
+  assert.strictEqual(getActiveChord(2.9)?.chord, 'C');
+  assert.strictEqual(getActiveChord(3.0)?.chord, 'G');
+  assert.strictEqual(getActiveChord(7.5)?.chord, 'Am');
+  assert.strictEqual(getActiveChord(11.9)?.chord, 'F');
+  assert.strictEqual(getActiveChord(12.5), undefined);
+});

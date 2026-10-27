@@ -15,12 +15,20 @@ if (typeof workerCtx.window === 'undefined') {
 import EssentiaWASM from 'essentia.js/dist/essentia-wasm.web.js';
 import Essentia from 'essentia.js/dist/essentia.js-core.es.js';
 
+export interface ChordSegment {
+  chord: string;
+  startTime: number;
+  endTime: number;
+  strength: number;
+}
+
 export interface KeyAnalysis {
   key: string;
   scale: 'major' | 'minor';
   confidence: number;
   chroma: number[];
   algorithm: string;
+  chords?: ChordSegment[];
 }
 
 export interface KeyWorkerRequest {
@@ -170,18 +178,119 @@ function computeAverageHpcp(essentia: any, signal: Float32Array): number[] {
   return Array.from(avgChroma);
 }
 
+/**
+ * Detects frame-by-frame continuous chords using Essentia's TonalExtractor
+ * (incorporating HPCP calculation and ChordsDetection internally in C++ WASM).
+ * Aggregates and smooths consecutive frames into timed ChordSegments.
+ */
+function extractChordProgression(
+  essentia: any,
+  signal: Float32Array,
+  sampleRate: number
+): ChordSegment[] {
+  const hopSize = signal.length > sampleRate * 75 ? 4096 : 2048;
+  const frameSize = 4096;
+
+  let audioVec: any = null;
+  let tonalRes: any = null;
+
+  try {
+    audioVec = essentia.arrayToVector(signal);
+    tonalRes = essentia.TonalExtractor(audioVec, frameSize, hopSize, 440);
+
+    const progression = tonalRes.chords_progression;
+    const strengthVec = tonalRes.chords_strength;
+    const numFrames = progression && progression.size ? progression.size() : 0;
+
+    if (numFrames === 0) return [];
+
+    const rawSegments: { chord: string; startTime: number; endTime: number; strength: number }[] = [];
+    let current: { chord: string; startTime: number; endTime: number; strengthSum: number; count: number } | null = null;
+
+    for (let i = 0; i < numFrames; i++) {
+      const chord = progression.get(i);
+      const strength = strengthVec ? strengthVec.get(i) : 0.7;
+      const frameTime = (i * hopSize) / sampleRate;
+
+      if (!current || current.chord !== chord) {
+        if (current) {
+          rawSegments.push({
+            chord: current.chord,
+            startTime: Number(current.startTime.toFixed(3)),
+            endTime: Number(frameTime.toFixed(3)),
+            strength: Number((current.strengthSum / current.count).toFixed(2))
+          });
+        }
+        current = {
+          chord,
+          startTime: frameTime,
+          endTime: frameTime + (hopSize / sampleRate),
+          strengthSum: strength,
+          count: 1
+        };
+      } else {
+        current.endTime = frameTime + (hopSize / sampleRate);
+        current.strengthSum += strength;
+        current.count++;
+      }
+    }
+
+    if (current) {
+      rawSegments.push({
+        chord: current.chord,
+        startTime: Number(current.startTime.toFixed(3)),
+        endTime: Number(current.endTime.toFixed(3)),
+        strength: Number((current.strengthSum / current.count).toFixed(2))
+      });
+    }
+
+    // Smooth micro-glitches (< 0.2s) so chord changes correspond to true musical phrasing
+    const smoothed: ChordSegment[] = [];
+    const minChordDuration = 0.2;
+
+    for (const seg of rawSegments) {
+      const dur = seg.endTime - seg.startTime;
+      if (dur < minChordDuration && smoothed.length > 0) {
+        smoothed[smoothed.length - 1].endTime = seg.endTime;
+      } else {
+        if (smoothed.length > 0 && smoothed[smoothed.length - 1].chord === seg.chord) {
+          smoothed[smoothed.length - 1].endTime = seg.endTime;
+        } else {
+          smoothed.push(seg);
+        }
+      }
+    }
+
+    return smoothed;
+  } catch (err) {
+    console.warn('Essentia continuous chord detection warning:', err);
+    return [];
+  } finally {
+    if (tonalRes) {
+      if (tonalRes.chords_progression?.delete) tonalRes.chords_progression.delete();
+      if (tonalRes.chords_strength?.delete) tonalRes.chords_strength.delete();
+      if (tonalRes.hpcp?.delete) tonalRes.hpcp.delete();
+      if (tonalRes.hpcp_highres?.delete) tonalRes.hpcp_highres.delete();
+      if (tonalRes.chords_histogram?.delete) tonalRes.chords_histogram.delete();
+    }
+    if (audioVec?.delete) audioVec.delete();
+  }
+}
+
 self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
   const { id, channelData, sampleRate } = e.data;
 
   try {
     const essentia = await getEssentia();
 
-    // To optimize performance and memory, sample representative audio (up to 45s)
+    // 1. Continuous frame-by-frame chord progression with TonalExtractor (HPCP + ChordsDetection)
+    const chords = extractChordProgression(essentia, channelData, sampleRate);
+
+    // 2. Sample representative audio (up to 45s) for KeyExtractor
     let processedSignal = channelData;
     const maxSamples = Math.floor(sampleRate * 45);
 
     if (channelData.length > maxSamples) {
-      // Offset by 10% to skip silent intros or count-ins
       const startOffset = Math.floor(channelData.length * 0.1);
       const endOffset = Math.min(channelData.length, startOffset + maxSamples);
       processedSignal = channelData.subarray(startOffset, endOffset);
@@ -191,8 +300,6 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
     let keyResult: any = null;
 
     try {
-      // Run Essentia KeyExtractor (HPCP + polyphonic profile correlation)
-      // Profile: 'bgate' (Bivariate Gaussian Tonality Profile) provides robust major/minor key recognition
       keyResult = essentia.KeyExtractor(
         audioVec,
         true, // averageDetuningCorrection
@@ -225,7 +332,8 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
       scale,
       confidence: Number(Math.min(1, Math.max(0, keyResult.strength || 0.75)).toFixed(2)),
       chroma,
-      algorithm: 'Essentia.js KeyExtractor (HPCP WASM)'
+      algorithm: 'Essentia.js (KeyExtractor + ChordsDetection WASM)',
+      chords
     };
 
     const response: KeyWorkerResponse = {

@@ -64,5 +64,33 @@ declare module 'essentia.js/dist/essentia.js-core.es.js' {
     ): {
       hpcp: any;
     };
+    TonalExtractor(
+      signal: any,
+      frameSize?: number,
+      hopSize?: number,
+      tuningFrequency?: number
+    ): {
+      chords_changes_rate: number;
+      chords_histogram: any;
+      chords_key: string;
+      chords_number_rate: number;
+      chords_progression: any;
+      chords_scale: string;
+      chords_strength: any;
+      hpcp: any;
+      hpcp_highres: any;
+      key_key: string;
+      key_scale: string;
+      key_strength: number;
+    };
+    ChordsDetection(
+      pcp: any,
+      hopSize?: number,
+      sampleRate?: number,
+      windowSize?: number
+    ): {
+      chords: any;
+      strength: any;
+    };
   }
 }

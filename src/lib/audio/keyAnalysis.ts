@@ -1,8 +1,8 @@
 import KeyWorker from '../../workers/keyAnalysis.worker?worker';
-import type { KeyWorkerRequest, KeyWorkerResponse, KeyAnalysis } from '../../workers/keyAnalysis.worker';
-import { extractMonoChannelData } from './onsets';
+import type { KeyWorkerRequest, KeyWorkerResponse, KeyAnalysis, ChordSegment } from '../../workers/keyAnalysis.worker';
+import { extractMonoChannelData } from './bufferUtils';
 
-export type { KeyAnalysis };
+export type { KeyAnalysis, ChordSegment };
 
 /**
  * Runs musical key, scale, and chromagram analysis using Essentia.js WASM in a Web Worker.

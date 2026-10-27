@@ -248,16 +248,30 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setTimeout(() => setApplied(false), 2500);
   };
 
+  const getChordProgressionSummary = (): string | undefined => {
+    if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+      const seq: string[] = [];
+      for (const s of keyAnalysis.chords) {
+        if (seq.length === 0 || seq[seq.length - 1] !== s.chord) {
+          seq.push(s.chord);
+        }
+      }
+      return seq.slice(0, 8).join(' - ');
+    }
+    return analysisResult?.chordProgression;
+  };
+
   const handleApplyOnlyKey = () => {
     if (!keyAnalysis) return;
     const key = getEffectiveKey();
+    const chordProgression = getChordProgressionSummary();
     onApplyDetection({
       tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
       key,
       timeSignature: analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
-      chordProgression: analysisResult?.chordProgression,
+      chordProgression,
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
     });
@@ -274,7 +288,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       timeSignature: analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
-      chordProgression: analysisResult?.chordProgression,
+      chordProgression: getChordProgressionSummary(),
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
     });
@@ -459,17 +473,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         />
       )}
 
-      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets y Beat Grid en Canvas) */}
+      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets, Beat Grid y Acordes en Canvas) */}
       {file && (
         <BeatTimeline
           audioBuffer={decodedAudioBuffer}
           beatAnalysis={beatAnalysis}
+          chords={keyAnalysis?.chords}
           currentTime={currentTime}
           duration={duration || (decodedAudioBuffer?.duration ?? 0)}
           isPlaying={isPlaying}
           onSeek={handleSeek}
           onTogglePlay={togglePlayback}
-          isLoading={isAnalyzingBeats}
+          isLoading={isAnalyzingBeats || isAnalyzingKey}
           onRecalculate={() => handleCalculateTempo(file)}
         />
       )}
@@ -794,6 +809,45 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                             {note}
                           </span>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Progresión Continua de Acordes (Essentia ChordsDetection) */}
+              {keyAnalysis.chords && keyAnalysis.chords.length > 0 && (
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
+                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+                      <Music className="w-3.5 h-3.5 text-purple-500" />
+                      <span>Progresión Armónica Continua (ChordsDetection frame a frame)</span>
+                    </span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      {keyAnalysis.chords.length} cambios · Clic para saltar a ese instante
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    {keyAnalysis.chords.map((chordSeg, idx) => {
+                      const isActive = currentTime >= chordSeg.startTime && currentTime < chordSeg.endTime;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSeek(chordSeg.startTime)}
+                          className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                            isActive
+                              ? 'bg-purple-600 text-white shadow-xs scale-105 ring-1 ring-purple-400'
+                              : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-purple-400/60'
+                          }`}
+                          title={`Saltar a ${chordSeg.chord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round(chordSeg.strength * 100)}%)`}
+                        >
+                          <span className="text-[9px] opacity-70">
+                            {Math.floor(chordSeg.startTime / 60)}:{(chordSeg.startTime % 60).toFixed(0).padStart(2, '0')}
+                          </span>
+                          <strong className="text-xs">{chordSeg.chord}</strong>
+                        </button>
                       );
                     })}
                   </div>
