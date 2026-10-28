@@ -8,7 +8,15 @@ export interface ChordSegment {
   confidence: number;
 }
 
-export type ChordType = 'major' | 'minor' | 'power';
+export type ChordType =
+  | 'major'
+  | 'minor'
+  | 'power'
+  | 'dom7'
+  | 'maj7'
+  | 'min7'
+  | 'sus2'
+  | 'sus4';
 
 export interface ChordTemplate {
   chord: string;
@@ -30,10 +38,13 @@ export interface ChordRecognizer {
  * 1. Major Triads: Root (1.0), Major 3rd (0.85), Perfect 5th (0.75)
  * 2. Minor Triads: Root (1.0), Minor 3rd (0.85), Perfect 5th (0.75)
  * 3. Power Chords (5): Root (1.0), Perfect 5th (0.85)
- *
- * (No 7ths, inversions, or tensions as per current scope)
+ * 4. Dominant 7th (7): Root (1.0), Major 3rd (0.85), Perfect 5th (0.70), Minor 7th (0.80)
+ * 5. Major 7th (maj7): Root (1.0), Major 3rd (0.85), Perfect 5th (0.70), Major 7th (0.80)
+ * 6. Minor 7th (m7): Root (1.0), Minor 3rd (0.85), Perfect 5th (0.70), Minor 7th (0.80)
+ * 7. Suspended 2nd (sus2): Root (1.0), Major 2nd (0.85), Perfect 5th (0.75)
+ * 8. Suspended 4th (sus4): Root (1.0), Perfect 4th (0.85), Perfect 5th (0.75)
  */
-export function buildTriadAndPowerTemplates(): ChordTemplate[] {
+export function buildAllChordTemplates(): ChordTemplate[] {
   const templates: ChordTemplate[] = [];
 
   for (let r = 0; r < 12; r++) {
@@ -73,9 +84,79 @@ export function buildTriadAndPowerTemplates(): ChordTemplate[] {
       type: 'power',
       vector: p5
     });
+
+    // 4. Dominant 7th (e.g. C7 = C, E, G, Bb/A#)
+    const d7 = new Float32Array(12);
+    d7[r] = 1.0;
+    d7[(r + 4) % 12] = 0.85;
+    d7[(r + 7) % 12] = 0.70;
+    d7[(r + 10) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}7`,
+      rootIndex: r,
+      type: 'dom7',
+      vector: d7
+    });
+
+    // 5. Major 7th (e.g. Cmaj7 = C, E, G, B)
+    const maj7 = new Float32Array(12);
+    maj7[r] = 1.0;
+    maj7[(r + 4) % 12] = 0.85;
+    maj7[(r + 7) % 12] = 0.70;
+    maj7[(r + 11) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}maj7`,
+      rootIndex: r,
+      type: 'maj7',
+      vector: maj7
+    });
+
+    // 6. Minor 7th (e.g. Cm7 = C, Eb, G, Bb/A#)
+    const m7 = new Float32Array(12);
+    m7[r] = 1.0;
+    m7[(r + 3) % 12] = 0.85;
+    m7[(r + 7) % 12] = 0.70;
+    m7[(r + 10) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}m7`,
+      rootIndex: r,
+      type: 'min7',
+      vector: m7
+    });
+
+    // 7. Suspended 2nd (e.g. Csus2 = C, D, G)
+    const sus2 = new Float32Array(12);
+    sus2[r] = 1.0;
+    sus2[(r + 2) % 12] = 0.85;
+    sus2[(r + 7) % 12] = 0.75;
+    templates.push({
+      chord: `${rootName}sus2`,
+      rootIndex: r,
+      type: 'sus2',
+      vector: sus2
+    });
+
+    // 8. Suspended 4th (e.g. Csus4 = C, F, G)
+    const sus4 = new Float32Array(12);
+    sus4[r] = 1.0;
+    sus4[(r + 5) % 12] = 0.85;
+    sus4[(r + 7) % 12] = 0.75;
+    templates.push({
+      chord: `${rootName}sus4`,
+      rootIndex: r,
+      type: 'sus4',
+      vector: sus4
+    });
   }
 
   return templates;
+}
+
+/**
+ * Backward compatibility alias for template generation.
+ */
+export function buildTriadAndPowerTemplates(): ChordTemplate[] {
+  return buildAllChordTemplates();
 }
 
 function cosineSimilarity(a: number[] | Float32Array, b: Float32Array): number {
@@ -348,3 +429,94 @@ export function downloadChordExport(content: string, filename: string, mimeType:
   document.body.removeChild(anchor);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * Extracts a deduplicated and sanitized chord sequence (ignoring consecutive duplicates and 'N.C.').
+ */
+export function getCleanChordSequence(chords: (ChordSegment | string)[]): string[] {
+  const seq: string[] = [];
+  for (const item of chords) {
+    const chordName = typeof item === 'string' ? item.trim() : item.chord?.trim();
+    if (!chordName || chordName === 'N.C.') continue;
+    if (seq.length === 0 || seq[seq.length - 1] !== chordName) {
+      seq.push(chordName);
+    }
+  }
+  return seq;
+}
+
+/**
+ * Automatically integrates detected musical chords into the song's lyrics editor text.
+ * 
+ * Behavior:
+ * 1. If lyrics are blank or default placeholder: generates a structured song skeleton with verses & chorus.
+ * 2. If lyrics already contain lines of text without chords: prepends the cyclical chord progression
+ *    at the beginning of each non-empty lyric line (skipping Markdown headers like ## Estrofa).
+ * 3. If lyrics already have chords in brackets ([Am], etc.): smoothly replaces existing bracketed chords
+ *    with the newly detected progression while preserving the lyrics.
+ */
+export function insertChordsIntoLyrics(
+  currentLyrics: string,
+  detectedChords: (ChordSegment | string)[]
+): string {
+  const cleanChords = getCleanChordSequence(detectedChords);
+  if (cleanChords.length === 0) {
+    return currentLyrics;
+  }
+
+  const isDefaultOrEmpty =
+    !currentLyrics ||
+    !currentLyrics.trim() ||
+    currentLyrics.includes('Escribe el primer verso aquí') ||
+    currentLyrics.includes('Segundo verso con acordes');
+
+  if (isDefaultOrEmpty) {
+    const c1 = cleanChords[0] || 'C';
+    const c2 = cleanChords[1] || cleanChords[0] || 'G';
+    const c3 = cleanChords[2] || cleanChords[0] || 'Am';
+    const c4 = cleanChords[3] || cleanChords[1] || 'F';
+
+    return [
+      '## Estrofa 1',
+      `[${c1}] Primer verso de la estrofa`,
+      `[${c2}] Segundo verso con melodía`,
+      `[${c3}] Tercer verso en desarrollo`,
+      `[${c4}] Cuarto verso hacia la transición`,
+      '',
+      '## Estribillo',
+      `[${cleanChords[cleanChords.length > 4 ? 4 : 0] || c1}] Línea principal del estribillo`,
+      `[${cleanChords[cleanChords.length > 5 ? 5 : 1] || c2}] Elevación melódica`,
+      `[${cleanChords[cleanChords.length > 6 ? 6 : 2] || c3}] Fuerza armónica`,
+      `[${cleanChords[cleanChords.length > 7 ? 7 : 3] || c4}] Cierre de la sección`,
+      ''
+    ].join('\n');
+  }
+
+  const lines = currentLyrics.split('\n');
+  let chordIndex = 0;
+
+  const updatedLines = lines.map(line => {
+    const trimmed = line.trim();
+
+    // Preserve blank lines and Markdown headers (##, #, etc.)
+    if (!trimmed || trimmed.startsWith('#')) {
+      return line;
+    }
+
+    const chordToInsert = cleanChords[chordIndex % cleanChords.length];
+    chordIndex++;
+
+    // If the line begins with an existing bracketed chord: [Am] Text...
+    if (/^\s*\[[A-G][#b]?[^\]]*\]\s*/.test(line)) {
+      return line.replace(/^\s*\[[A-G][#b]?[^\]]*\]\s*/, `[${chordToInsert}] `);
+    }
+
+    // If the line doesn't have chords, prepend [Chord]
+    const leadingWhitespace = line.match(/^\s*/)?.[0] || '';
+    const cleanText = line.trim();
+    return `${leadingWhitespace}[${chordToInsert}] ${cleanText}`;
+  });
+
+  return updatedLines.join('\n');
+}
+

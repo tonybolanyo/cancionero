@@ -158,3 +158,102 @@ test('exportChordsToCSV produces standard CSV header and row format', async () =
   assert.strictEqual(lines[1], 'C,0.000,2.500,2.500,0.89');
   assert.strictEqual(lines[2], 'G,2.500,5.000,2.500,0.82');
 });
+
+test('TemplateChordRecognizer correctly identifies 7th, maj7, m7, and suspended chords', async () => {
+  const { TemplateChordRecognizer } = await import('../src/lib/audio/chords');
+  const recognizer = new TemplateChordRecognizer();
+
+  // 1. Dominant 7th (C7 = C, E, G, Bb -> indices 0, 4, 7, 10)
+  const c7Chroma = new Float32Array(12);
+  c7Chroma[0] = 1.0;
+  c7Chroma[4] = 0.85;
+  c7Chroma[7] = 0.70;
+  c7Chroma[10] = 0.80;
+  const c7Result = recognizer.recognize(c7Chroma);
+  assert.strictEqual(c7Result.chord, 'C7');
+  assert.ok(c7Result.confidence > 0.85);
+
+  // 2. Major 7th (Cmaj7 = C, E, G, B -> indices 0, 4, 7, 11)
+  const cMaj7Chroma = new Float32Array(12);
+  cMaj7Chroma[0] = 1.0;
+  cMaj7Chroma[4] = 0.85;
+  cMaj7Chroma[7] = 0.70;
+  cMaj7Chroma[11] = 0.80;
+  const cMaj7Result = recognizer.recognize(cMaj7Chroma);
+  assert.strictEqual(cMaj7Result.chord, 'Cmaj7');
+  assert.ok(cMaj7Result.confidence > 0.85);
+
+  // 3. Minor 7th (Am7 = A, C, E, G -> indices 9, 0, 4, 7)
+  const am7Chroma = new Float32Array(12);
+  am7Chroma[9] = 1.0;
+  am7Chroma[0] = 0.85;
+  am7Chroma[4] = 0.70;
+  am7Chroma[7] = 0.80;
+  const am7Result = recognizer.recognize(am7Chroma);
+  assert.strictEqual(am7Result.chord, 'Am7');
+  assert.ok(am7Result.confidence > 0.85);
+
+  // 4. Suspended 2nd (Dsus2 = D, E, A -> indices 2, 4, 9)
+  const dsus2Chroma = new Float32Array(12);
+  dsus2Chroma[2] = 1.0;
+  dsus2Chroma[4] = 0.85;
+  dsus2Chroma[9] = 0.75;
+  const dsus2Result = recognizer.recognize(dsus2Chroma);
+  assert.strictEqual(dsus2Result.chord, 'Dsus2');
+  assert.ok(dsus2Result.confidence > 0.85);
+
+  // 5. Suspended 4th (Dsus4 = D, G, A -> indices 2, 7, 9)
+  const dsus4Chroma = new Float32Array(12);
+  dsus4Chroma[2] = 1.0;
+  dsus4Chroma[7] = 0.85;
+  dsus4Chroma[9] = 0.75;
+  const dsus4Result = recognizer.recognize(dsus4Chroma);
+  assert.strictEqual(dsus4Result.chord, 'Dsus4');
+  assert.ok(dsus4Result.confidence > 0.85);
+});
+
+test('insertChordsIntoLyrics correctly formats lyrics and preserves structure', async () => {
+  const { insertChordsIntoLyrics } = await import('../src/lib/audio/chords');
+  const detectedChords = [
+    { startTime: 0, endTime: 2, chord: 'C', confidence: 0.9 },
+    { startTime: 2, endTime: 4, chord: 'G7', confidence: 0.88 },
+    { startTime: 4, endTime: 6, chord: 'Am7', confidence: 0.85 },
+    { startTime: 6, endTime: 8, chord: 'Fsus2', confidence: 0.87 }
+  ];
+
+  // Case 1: Empty or default placeholder lyrics
+  const generated = insertChordsIntoLyrics('', detectedChords);
+  assert.ok(generated.includes('## Estrofa 1'));
+  assert.ok(generated.includes('[C] Primer verso'));
+  assert.ok(generated.includes('[G7] Segundo verso'));
+  assert.ok(generated.includes('## Estribillo'));
+
+  // Case 2: Custom text verses without chords
+  const customLyrics = [
+    '## Estrofa',
+    'Caminando bajo el cielo',
+    'sintiendo la brisa llegar',
+    'todo vuelve a comenzar',
+    'y la noche se va'
+  ].join('\n');
+
+  const withChords = insertChordsIntoLyrics(customLyrics, detectedChords);
+  assert.ok(withChords.includes('## Estrofa'));
+  assert.ok(withChords.includes('[C] Caminando bajo el cielo'));
+  assert.ok(withChords.includes('[G7] sintiendo la brisa llegar'));
+  assert.ok(withChords.includes('[Am7] todo vuelve a comenzar'));
+  assert.ok(withChords.includes('[Fsus2] y la noche se va'));
+
+  // Case 3: Custom verses with existing outdated bracketed chords
+  const oldChordsLyrics = [
+    '## Estrofa',
+    '[Em] Caminando bajo el cielo',
+    '[D] sintiendo la brisa llegar'
+  ].join('\n');
+
+  const replaced = insertChordsIntoLyrics(oldChordsLyrics, detectedChords);
+  assert.ok(replaced.includes('[C] Caminando bajo el cielo'));
+  assert.ok(replaced.includes('[G7] sintiendo la brisa llegar'));
+  assert.ok(!replaced.includes('[Em]'));
+  assert.ok(!replaced.includes('[D]'));
+});

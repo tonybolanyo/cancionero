@@ -1,11 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileEdit, Code2, AlertCircle, Plus, Tag, GitCommit, UploadCloud, FileText } from 'lucide-react';
+import {
+  X,
+  Save,
+  FileEdit,
+  Code2,
+  AlertCircle,
+  Plus,
+  Tag,
+  GitCommit,
+  UploadCloud,
+  FileText,
+  Wand2,
+  Music,
+  Check,
+  Sparkles
+} from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from './AudioAnalyzerSection';
+import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -41,6 +57,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [lyrics, setLyrics] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
+  const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
+  const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
 
   // Git Commit and Push on Save options - Defaults to Auto-Commit enabled
   const [createCommitOnSave, setCreateCommitOnSave] = useState<boolean>(() =>
@@ -200,6 +218,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
   }) => {
     if (data.tempo) setTempo(data.tempo.toString());
     if (data.key) setKey(data.key);
@@ -212,9 +231,22 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         : '';
       setNotes(`Progresión armónica detectada: ${data.chordProgression}${offsetNote}`);
     }
+    if (data.chords && data.chords.length > 0) {
+      setDetectedChords(data.chords);
+    }
     if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe el primer verso aquí'))) {
       setLyrics(data.suggestedLyricsChords);
     }
+  };
+
+  const handleInsertDetectedChords = (chordsOverride?: ChordSegment[]) => {
+    const list = chordsOverride || detectedChords;
+    if (!list || list.length === 0) return;
+
+    const updated = insertChordsIntoLyrics(lyrics, list);
+    setLyrics(updated);
+    setInsertedChordsFeedback(true);
+    setTimeout(() => setInsertedChordsFeedback(false), 2500);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -470,6 +502,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
               {/* Audio Upload & Detection Section (MP3 / WAV) */}
               <AudioAnalyzerSection
                 onApplyDetection={handleApplyAudioDetection}
+                onInsertChordsIntoLyrics={handleInsertDetectedChords}
                 currentKey={key}
                 currentTempo={tempo}
                 currentAudioUrl={audioUrl}
@@ -704,15 +737,70 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
               </div>
 
               {/* Row 6: Lyrics Editor */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-[var(--text-primary)] block">
-                    Letra de la canción (con acordes opcionales entre corchetes [Am]) *
-                  </label>
-                  <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                    Formato: ## Estrofa 1, ## Estribillo, [Acorde]
-                  </span>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text-primary)] block">
+                      Letra de la canción (con acordes opcionales entre corchetes [Am]) *
+                    </label>
+                    <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                      Formato: ## Estrofa 1, ## Estribillo, [Acorde]
+                    </span>
+                  </div>
+
+                  {/* Botón: Insertar acordes detectados automáticamente */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInsertDetectedChords()}
+                      disabled={detectedChords.length === 0}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                        insertedChordsFeedback
+                          ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-1 ring-emerald-400'
+                          : detectedChords.length > 0
+                          ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30 ring-1 ring-purple-400'
+                          : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)] opacity-55 cursor-not-allowed'
+                      }`}
+                      title={
+                        detectedChords.length > 0
+                          ? `Insertar ${detectedChords.length} acordes detectados (${getCleanChordSequence(detectedChords).join(' - ')}) sobre la letra`
+                          : 'Sube un audio en la sección de arriba para detectar los acordes de tu maqueta'
+                      }
+                    >
+                      {insertedChordsFeedback ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>¡Acordes insertados en la letra!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>
+                            {detectedChords.length > 0
+                              ? `Insertar acordes detectados (${getCleanChordSequence(detectedChords).length})`
+                              : 'Insertar acordes detectados automáticamente'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
+
+                {detectedChords.length > 0 && (
+                  <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs">
+                    <span className="text-purple-700 dark:text-purple-300 font-medium flex items-center gap-1.5 text-[11px]">
+                      <Music className="w-3 h-3 text-purple-500 shrink-0" />
+                      <span>Secuencia detectada para asignar a los versos:</span>
+                      <strong className="font-mono text-purple-600 dark:text-purple-200">
+                        {getCleanChordSequence(detectedChords).join(' · ')}
+                      </strong>
+                    </span>
+                    <span className="text-[10px] text-purple-600/80 font-mono hidden sm:inline">
+                      {detectedChords.length} segmentos alineados con beats
+                    </span>
+                  </div>
+                )}
+
                 <textarea
                   required
                   value={lyrics}

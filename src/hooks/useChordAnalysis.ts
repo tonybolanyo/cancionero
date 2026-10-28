@@ -4,7 +4,8 @@ import {
   analyzeChordsDSP,
   exportChordsToJSON,
   exportChordsToCSV,
-  downloadChordExport
+  downloadChordExport,
+  insertChordsIntoLyrics
 } from '../lib/audio/chords';
 
 export interface UseChordAnalysisReturn {
@@ -15,6 +16,7 @@ export interface UseChordAnalysisReturn {
   resetChords: () => void;
   exportJSON: (songTitle?: string) => void;
   exportCSV: (songTitle?: string) => void;
+  insertIntoLyrics: (currentLyrics: string) => string;
 }
 
 /**
@@ -84,6 +86,14 @@ export function useChordAnalysis(): UseChordAnalysisReturn {
     [chords]
   );
 
+  const insertIntoLyrics = useCallback(
+    (currentLyrics: string) => {
+      if (!chords || chords.length === 0) return currentLyrics;
+      return insertChordsIntoLyrics(currentLyrics, chords);
+    },
+    [chords]
+  );
+
   return {
     chords,
     isAnalyzingChords,
@@ -91,6 +101,7 @@ export function useChordAnalysis(): UseChordAnalysisReturn {
     analyzeChords,
     resetChords,
     exportJSON,
-    exportCSV
+    exportCSV,
+    insertIntoLyrics
   };
 }

@@ -28,7 +28,7 @@ import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tem
 import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
 import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
-import { exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
+import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
 
 const CHROMATIC_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -42,7 +42,9 @@ interface AudioAnalyzerSectionProps {
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
   }) => void;
+  onInsertChordsIntoLyrics?: (chords: ChordSegment[]) => void;
   currentKey?: string;
   currentTempo?: string;
   currentAudioUrl?: string;
@@ -50,6 +52,7 @@ interface AudioAnalyzerSectionProps {
 
 export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   onApplyDetection,
+  onInsertChordsIntoLyrics,
   currentKey,
   currentTempo,
   currentAudioUrl
@@ -291,7 +294,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       audioUrl: audioUrl || undefined,
       chordProgression,
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
+      chords: keyAnalysis?.chords || undefined
     });
     setApplied(true);
     setTimeout(() => setApplied(false), 2500);
@@ -308,7 +312,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       audioUrl: audioUrl || undefined,
       chordProgression: getChordProgressionSummary(),
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
+      chords: keyAnalysis?.chords || undefined
     });
 
     setApplied(true);
@@ -866,6 +871,17 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                           <Download className="w-2.5 h-2.5" />
                           <span>CSV</span>
                         </button>
+                        {onInsertChordsIntoLyrics && (
+                          <button
+                            type="button"
+                            onClick={() => onInsertChordsIntoLyrics(keyAnalysis.chords!)}
+                            className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 hover:bg-purple-500/30 text-purple-700 dark:text-purple-300 border border-purple-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="Insertar esta progresión de acordes automáticamente en el editor de letra"
+                          >
+                            <Wand2 className="w-2.5 h-2.5 text-purple-500" />
+                            <span>Insertar en letra</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
