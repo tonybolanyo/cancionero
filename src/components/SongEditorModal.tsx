@@ -16,7 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
-import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
+import { songToMarkdown, markdownToSong, transposeChord, transposeLyrics } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +59,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
   const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
+  const [transposeOffset, setTransposeOffset] = useState<number>(0);
+  const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
 
   // Git Commit and Push on Save options - Defaults to Auto-Commit enabled
   const [createCommitOnSave, setCreateCommitOnSave] = useState<boolean>(() =>
@@ -118,6 +120,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setTags(song.tags || []);
       setLyrics(song.lyrics);
       setRawMarkdown(songToMarkdown(song));
+      setTransposeOffset(0);
+      setTransposeFeedback(null);
     } else {
       const newId = `cancion-${Date.now()}`;
       setId(newId);
@@ -126,6 +130,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setYear(new Date().getFullYear());
       setGenre('Canción de Autor');
       setKey('Am');
+      setTransposeOffset(0);
+      setTransposeFeedback(null);
       setTempo('96');
       setTimeSignature('4/4');
       setTuning('Estándar (EADGBE)');
@@ -247,6 +253,41 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     setLyrics(updated);
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 2500);
+  };
+
+  const handleTranspose = (semitones: number) => {
+    if (semitones === 0) return;
+
+    // 1. Transpose chords embedded in lyrics [Chord]
+    if (lyrics) {
+      setLyrics(prev => transposeLyrics(prev, semitones));
+    }
+
+    // 2. Transpose primary key field if filled
+    let newKey = key;
+    if (key.trim()) {
+      newKey = transposeChord(key.trim(), semitones);
+      setKey(newKey);
+    }
+
+    // 3. Transpose detected chords in memory to keep consistency
+    if (detectedChords.length > 0) {
+      setDetectedChords(prev =>
+        prev.map(c => ({
+          ...c,
+          chord: transposeChord(c.chord, semitones)
+        }))
+      );
+    }
+
+    // 4. Update session offset and display feedback
+    const newTotalOffset = transposeOffset + semitones;
+    setTransposeOffset(newTotalOffset);
+
+    const sign = semitones > 0 ? `+${semitones}` : `${semitones}`;
+    const keyInfo = key ? ` (${key} → ${newKey})` : '';
+    setTransposeFeedback(`Transpuesto ${sign} semitono${Math.abs(semitones) > 1 ? 's' : ''}${keyInfo}`);
+    setTimeout(() => setTransposeFeedback(null), 2500);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -536,16 +577,43 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[var(--text-primary)] block">
-                    Tonalidad
-                  </label>
-                  <input
-                    type="text"
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    placeholder="Ej. Am, G, D, C#m"
-                    className="w-full px-3.5 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] font-mono shadow-sm"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-[var(--text-primary)] block">
+                      Tonalidad
+                    </label>
+                    {transposeOffset !== 0 && (
+                      <span className="text-[10px] font-mono text-[var(--accent-primary)] font-bold">
+                        {transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset} st
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={key}
+                      onChange={(e) => setKey(e.target.value)}
+                      placeholder="Ej. Am, G, D, C#m"
+                      className="flex-1 min-w-0 px-3 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] font-mono shadow-sm"
+                    />
+                    <div className="flex items-center bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-lg p-0.5 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleTranspose(-1)}
+                        className="px-1.5 py-1 text-[11px] font-mono font-semibold rounded hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                        title="Transponer -1 semitono a acordes y tonalidad"
+                      >
+                        -1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTranspose(1)}
+                        className="px-1.5 py-1 text-[11px] font-mono font-semibold rounded hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                        title="Transponer +1 semitono a acordes y tonalidad"
+                      >
+                        +1
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -748,8 +816,41 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Botón: Insertar acordes detectados automáticamente */}
-                  <div className="flex items-center gap-2">
+                  {/* Botones: Transponer acordes e Insertar acordes detectados */}
+                  <div className="flex items-center flex-wrap gap-2">
+                    {/* Selector interactivo de Transposición [-1 Semitono] / [+1 Semitono] */}
+                    <div className="flex items-center bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg p-0.5 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleTranspose(-1)}
+                        className="px-2.5 py-1 text-xs font-mono font-semibold rounded bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                        title="Bajar 1 semitono a todos los acordes de la letra y a la tonalidad"
+                      >
+                        -1 Semitono
+                      </button>
+
+                      <span
+                        className={`text-xs font-mono px-2 py-0.5 rounded font-bold ${
+                          transposeOffset !== 0
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                            : 'text-[var(--text-muted)]'
+                        }`}
+                        title={`Desfase acumulado de transposición: ${transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset} semitonos`}
+                      >
+                        {transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset} st
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTranspose(1)}
+                        className="px-2.5 py-1 text-xs font-mono font-semibold rounded bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                        title="Subir 1 semitono a todos los acordes de la letra y a la tonalidad"
+                      >
+                        +1 Semitono
+                      </button>
+                    </div>
+
+                    {/* Botón: Insertar acordes detectados automáticamente */}
                     <button
                       type="button"
                       onClick={() => handleInsertDetectedChords()}
@@ -785,6 +886,13 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {transposeFeedback && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-xs text-[var(--accent-primary)] font-medium animate-fadeIn">
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                    <span>{transposeFeedback}</span>
+                  </div>
+                )}
 
                 {detectedChords.length > 0 && (
                   <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs">

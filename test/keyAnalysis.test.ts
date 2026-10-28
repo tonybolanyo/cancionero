@@ -257,3 +257,62 @@ test('insertChordsIntoLyrics correctly formats lyrics and preserves structure', 
   assert.ok(!replaced.includes('[Em]'));
   assert.ok(!replaced.includes('[D]'));
 });
+
+test('TemplateChordRecognizer correctly identifies diminished, m7b5, and augmented chords', async () => {
+  const { TemplateChordRecognizer } = await import('../src/lib/audio/chords');
+  const recognizer = new TemplateChordRecognizer();
+
+  // 1. Diminished Triad (Cdim = C, Eb, F#/Gb -> indices 0, 3, 6)
+  const cdimChroma = new Float32Array(12);
+  cdimChroma[0] = 1.0;
+  cdimChroma[3] = 0.85;
+  cdimChroma[6] = 0.80;
+  const cdimResult = recognizer.recognize(cdimChroma);
+  assert.strictEqual(cdimResult.chord, 'Cdim');
+  assert.ok(cdimResult.confidence > 0.85);
+
+  // 2. Half-Diminished 7th (Bm7b5 = B, D, F, A -> indices 11, 2, 5, 9)
+  const bm7b5Chroma = new Float32Array(12);
+  bm7b5Chroma[11] = 1.0;
+  bm7b5Chroma[2] = 0.85;
+  bm7b5Chroma[5] = 0.75;
+  bm7b5Chroma[9] = 0.80;
+  const bm7b5Result = recognizer.recognize(bm7b5Chroma);
+  assert.strictEqual(bm7b5Result.chord, 'Bm7b5');
+  assert.ok(bm7b5Result.confidence > 0.85);
+
+  // 3. Augmented Triad (Caug = C, E, G#/Ab -> indices 0, 4, 8)
+  const caugChroma = new Float32Array(12);
+  caugChroma[0] = 1.0;
+  caugChroma[4] = 0.85;
+  caugChroma[8] = 0.80;
+  const caugResult = recognizer.recognize(caugChroma);
+  assert.strictEqual(caugResult.chord, 'Caug');
+  assert.ok(caugResult.confidence > 0.85);
+});
+
+test('transposeLyrics and transposeChord correctly handle dim, m7b5, aug with -1 and +1 semitones', async () => {
+  const { transposeChord, transposeLyrics } = await import('../src/utils/markdownParser');
+
+  // Single chord transpositions
+  assert.strictEqual(transposeChord('Cdim', 1), 'C#dim');
+  assert.strictEqual(transposeChord('Cdim', -1), 'Bdim');
+
+  assert.strictEqual(transposeChord('Bm7b5', 1), 'Cm7b5');
+  assert.strictEqual(transposeChord('Bm7b5', -1), 'A#m7b5');
+
+  assert.strictEqual(transposeChord('Gaug', 2), 'Aaug');
+  assert.strictEqual(transposeChord('Gaug', -1), 'F#aug');
+
+  // Full lyrics transposition
+  const lyricsSample = '[Cdim] Primer verso con acordes\n[Bm7b5] Segundo verso\n[Caug] Tercer verso';
+  const transposedUp = transposeLyrics(lyricsSample, 1);
+  assert.ok(transposedUp.includes('[C#dim] Primer verso'));
+  assert.ok(transposedUp.includes('[Cm7b5] Segundo verso'));
+  assert.ok(transposedUp.includes('[C#aug] Tercer verso'));
+
+  const transposedDown = transposeLyrics(lyricsSample, -1);
+  assert.ok(transposedDown.includes('[Bdim] Primer verso'));
+  assert.ok(transposedDown.includes('[A#m7b5] Segundo verso'));
+  assert.ok(transposedDown.includes('[Baug] Tercer verso'));
+});

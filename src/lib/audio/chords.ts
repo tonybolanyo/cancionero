@@ -16,7 +16,10 @@ export type ChordType =
   | 'maj7'
   | 'min7'
   | 'sus2'
-  | 'sus4';
+  | 'sus4'
+  | 'dim'
+  | 'm7b5'
+  | 'aug';
 
 export interface ChordTemplate {
   chord: string;
@@ -43,6 +46,9 @@ export interface ChordRecognizer {
  * 6. Minor 7th (m7): Root (1.0), Minor 3rd (0.85), Perfect 5th (0.70), Minor 7th (0.80)
  * 7. Suspended 2nd (sus2): Root (1.0), Major 2nd (0.85), Perfect 5th (0.75)
  * 8. Suspended 4th (sus4): Root (1.0), Perfect 4th (0.85), Perfect 5th (0.75)
+ * 9. Diminished Triad (dim): Root (1.0), Minor 3rd (0.85), Diminished 5th (0.80)
+ * 10. Half-Diminished 7th (m7b5): Root (1.0), Minor 3rd (0.85), Diminished 5th (0.75), Minor 7th (0.80)
+ * 11. Augmented Triad (aug): Root (1.0), Major 3rd (0.85), Augmented 5th (0.80)
  */
 export function buildAllChordTemplates(): ChordTemplate[] {
   const templates: ChordTemplate[] = [];
@@ -146,6 +152,43 @@ export function buildAllChordTemplates(): ChordTemplate[] {
       rootIndex: r,
       type: 'sus4',
       vector: sus4
+    });
+
+    // 9. Diminished Triad (e.g. Cdim = C, Eb, Gb/F#)
+    const dim = new Float32Array(12);
+    dim[r] = 1.0;
+    dim[(r + 3) % 12] = 0.85;
+    dim[(r + 6) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}dim`,
+      rootIndex: r,
+      type: 'dim',
+      vector: dim
+    });
+
+    // 10. Half-Diminished 7th / m7b5 (e.g. Cm7b5 = C, Eb, Gb, Bb)
+    const m7b5 = new Float32Array(12);
+    m7b5[r] = 1.0;
+    m7b5[(r + 3) % 12] = 0.85;
+    m7b5[(r + 6) % 12] = 0.75;
+    m7b5[(r + 10) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}m7b5`,
+      rootIndex: r,
+      type: 'm7b5',
+      vector: m7b5
+    });
+
+    // 11. Augmented Triad (e.g. Caug = C, E, G#/Ab)
+    const aug = new Float32Array(12);
+    aug[r] = 1.0;
+    aug[(r + 4) % 12] = 0.85;
+    aug[(r + 8) % 12] = 0.80;
+    templates.push({
+      chord: `${rootName}aug`,
+      rootIndex: r,
+      type: 'aug',
+      vector: aug
     });
   }
 
