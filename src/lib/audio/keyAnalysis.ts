@@ -11,7 +11,7 @@ export type { KeyAnalysis, ChordSegment };
  * @param audioBuffer The decoded AudioBuffer from the user's audio file
  * @returns Promise<KeyAnalysis> containing key, scale ('major' | 'minor'), confidence, chroma, and algorithm
  */
-export function analyzeKeyWithEssentia(audioBuffer: AudioBuffer): Promise<KeyAnalysis> {
+export function analyzeKeyWithEssentia(audioBuffer: AudioBuffer, beats?: number[]): Promise<KeyAnalysis> {
   return new Promise((resolve, reject) => {
     try {
       // Re-use the existing mono mixing utility
@@ -44,7 +44,8 @@ export function analyzeKeyWithEssentia(audioBuffer: AudioBuffer): Promise<KeyAna
       const request: KeyWorkerRequest = {
         id: requestId,
         channelData,
-        sampleRate: audioBuffer.sampleRate
+        sampleRate: audioBuffer.sampleRate,
+        beats
       };
 
       // Transfer Float32Array buffer for zero-copy memory performance

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Activity, Music, Layers } from 'lucide-react';
+import { Play, Pause, RotateCcw, Activity, Music, Layers, Download } from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 
@@ -14,6 +14,8 @@ export interface BeatTimelineProps {
   onTogglePlay?: () => void;
   isLoading?: boolean;
   onRecalculate?: () => void;
+  onExportJSON?: () => void;
+  onExportCSV?: () => void;
   className?: string;
 }
 
@@ -28,6 +30,8 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onTogglePlay,
   isLoading = false,
   onRecalculate,
+  onExportJSON,
+  onExportCSV,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -362,7 +366,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1 animate-pulse">
                 <Music className="w-3 h-3 text-purple-400" />
                 <span>Acorde: {currentChord.chord}</span>
-                <span className="text-[9px] text-purple-400/80">({Math.round(currentChord.strength * 100)}%)</span>
+                <span className="text-[9px] text-purple-400/80">({Math.round((currentChord.confidence ?? currentChord.strength ?? 0.8) * 100)}%)</span>
               </span>
             )}
           </div>
@@ -383,6 +387,30 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             >
               <span className="w-2 h-2 rounded-full bg-purple-500" />
               <span>Acordes ({chords.length})</span>
+            </button>
+          )}
+
+          {chords && chords.length > 0 && onExportJSON && (
+            <button
+              type="button"
+              onClick={onExportJSON}
+              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+              title="Exportar secuencia de acordes a JSON"
+            >
+              <Download className="w-2.5 h-2.5 text-purple-400" />
+              <span>JSON</span>
+            </button>
+          )}
+
+          {chords && chords.length > 0 && onExportCSV && (
+            <button
+              type="button"
+              onClick={onExportCSV}
+              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+              title="Exportar secuencia de acordes a CSV"
+            >
+              <Download className="w-2.5 h-2.5 text-purple-400" />
+              <span>CSV</span>
             </button>
           )}
 

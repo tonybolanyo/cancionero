@@ -16,10 +16,11 @@ import EssentiaWASM from 'essentia.js/dist/essentia-wasm.web.js';
 import Essentia from 'essentia.js/dist/essentia.js-core.es.js';
 
 export interface ChordSegment {
-  chord: string;
   startTime: number;
   endTime: number;
-  strength: number;
+  chord: string;
+  confidence: number;
+  strength?: number;
 }
 
 export interface KeyAnalysis {
@@ -35,6 +36,7 @@ export interface KeyWorkerRequest {
   id: string;
   channelData: Float32Array;
   sampleRate: number;
+  beats?: number[];
 }
 
 export interface KeyWorkerResponse {
@@ -186,7 +188,8 @@ function computeAverageHpcp(essentia: any, signal: Float32Array): number[] {
 function extractChordProgression(
   essentia: any,
   signal: Float32Array,
-  sampleRate: number
+  sampleRate: number,
+  beats?: number[]
 ): ChordSegment[] {
   const hopSize = signal.length > sampleRate * 75 ? 4096 : 2048;
   const frameSize = 4096;
@@ -204,7 +207,7 @@ function extractChordProgression(
 
     if (numFrames === 0) return [];
 
-    const rawSegments: { chord: string; startTime: number; endTime: number; strength: number }[] = [];
+    const rawSegments: ChordSegment[] = [];
     let current: { chord: string; startTime: number; endTime: number; strengthSum: number; count: number } | null = null;
 
     for (let i = 0; i < numFrames; i++) {
@@ -214,11 +217,13 @@ function extractChordProgression(
 
       if (!current || current.chord !== chord) {
         if (current) {
+          const conf = Number((current.strengthSum / current.count).toFixed(2));
           rawSegments.push({
-            chord: current.chord,
             startTime: Number(current.startTime.toFixed(3)),
             endTime: Number(frameTime.toFixed(3)),
-            strength: Number((current.strengthSum / current.count).toFixed(2))
+            chord: current.chord,
+            confidence: conf,
+            strength: conf
           });
         }
         current = {
@@ -236,11 +241,13 @@ function extractChordProgression(
     }
 
     if (current) {
+      const conf = Number((current.strengthSum / current.count).toFixed(2));
       rawSegments.push({
-        chord: current.chord,
         startTime: Number(current.startTime.toFixed(3)),
         endTime: Number(current.endTime.toFixed(3)),
-        strength: Number((current.strengthSum / current.count).toFixed(2))
+        chord: current.chord,
+        confidence: conf,
+        strength: conf
       });
     }
 
@@ -256,7 +263,32 @@ function extractChordProgression(
         if (smoothed.length > 0 && smoothed[smoothed.length - 1].chord === seg.chord) {
           smoothed[smoothed.length - 1].endTime = seg.endTime;
         } else {
-          smoothed.push(seg);
+          smoothed.push({ ...seg });
+        }
+      }
+    }
+
+    // Align chord boundaries to the nearest beat if beats timeline is provided
+    if (beats && beats.length > 0 && smoothed.length > 0) {
+      for (let i = 0; i < smoothed.length; i++) {
+        if (i === 0) {
+          smoothed[i].startTime = 0;
+        } else {
+          smoothed[i].startTime = smoothed[i - 1].endTime;
+        }
+
+        if (i < smoothed.length - 1) {
+          const target = smoothed[i].endTime;
+          let closest = target;
+          let minDiff = 0.35; // snap tolerance in seconds
+          for (const b of beats) {
+            const diff = Math.abs(b - target);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closest = b;
+            }
+          }
+          smoothed[i].endTime = Number(closest.toFixed(3));
         }
       }
     }
@@ -278,13 +310,13 @@ function extractChordProgression(
 }
 
 self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
-  const { id, channelData, sampleRate } = e.data;
+  const { id, channelData, sampleRate, beats } = e.data;
 
   try {
     const essentia = await getEssentia();
 
-    // 1. Continuous frame-by-frame chord progression with TonalExtractor (HPCP + ChordsDetection)
-    const chords = extractChordProgression(essentia, channelData, sampleRate);
+    // 1. Continuous frame-by-frame chord progression with TonalExtractor aligned to beats
+    const chords = extractChordProgression(essentia, channelData, sampleRate, beats);
 
     // 2. Sample representative audio (up to 45s) for KeyExtractor
     let processedSignal = channelData;

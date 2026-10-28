@@ -19,7 +19,8 @@ import {
   SlidersHorizontal,
   Timer,
   BarChart3,
-  Cpu
+  Cpu,
+  Download
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
@@ -27,6 +28,7 @@ import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tem
 import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
 import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
+import { exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
 
 const CHROMATIC_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -124,18 +126,20 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       );
 
       // 2. Analyze onsets and beat grid with @audio/beat via Web Worker
+      let detectedBeats: number[] | undefined;
       try {
         const beats = await analyzeBeatsAndOnsets(audioBuffer, {
           minBpm: minT,
           maxBpm: maxT
         });
         setBeatAnalysis(beats);
+        detectedBeats = beats.beats;
       } catch (beatErr: any) {
         console.warn('Onsets / Beat grid analysis warning:', beatErr);
       }
 
-      // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker
-      void analyzeKey(audioBuffer);
+      // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker (con beats para alineación armónica)
+      void analyzeKey(audioBuffer, detectedBeats);
     } catch (err: any) {
       setTempoError(err.message || 'Error al calcular tempo y offset del primer beat.');
     } finally {
@@ -147,6 +151,20 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       setIsCalculatingTempo(false);
       setIsAnalyzingBeats(false);
     }
+  };
+
+  const handleExportChordsJSON = () => {
+    if (!keyAnalysis?.chords || keyAnalysis.chords.length === 0) return;
+    const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'chords';
+    const jsonStr = exportChordsToJSON(keyAnalysis.chords, baseName);
+    downloadChordExport(jsonStr, `${baseName}_acordes.json`, 'application/json');
+  };
+
+  const handleExportChordsCSV = () => {
+    if (!keyAnalysis?.chords || keyAnalysis.chords.length === 0) return;
+    const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'chords';
+    const csvStr = exportChordsToCSV(keyAnalysis.chords);
+    downloadChordExport(csvStr, `${baseName}_acordes.csv`, 'text/csv');
   };
 
   const handleSeek = (targetTime: number) => {
@@ -486,6 +504,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           onTogglePlay={togglePlayback}
           isLoading={isAnalyzingBeats || isAnalyzingKey}
           onRecalculate={() => handleCalculateTempo(file)}
+          onExportJSON={handleExportChordsJSON}
+          onExportCSV={handleExportChordsCSV}
         />
       )}
 
@@ -679,7 +699,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 type="button"
                 onClick={() => {
                   if (decodedAudioBuffer) {
-                    void analyzeKey(decodedAudioBuffer);
+                    void analyzeKey(decodedAudioBuffer, beatAnalysis?.beats);
                   } else if (file) {
                     void handleCalculateTempo(file);
                   }
@@ -818,14 +838,36 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               {/* Progresión Continua de Acordes (Essentia ChordsDetection) */}
               {keyAnalysis.chords && keyAnalysis.chords.length > 0 && (
                 <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
-                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
                     <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                       <Music className="w-3.5 h-3.5 text-purple-500" />
                       <span>Progresión Armónica Continua (ChordsDetection frame a frame)</span>
                     </span>
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                      {keyAnalysis.chords.length} cambios · Clic para saltar a ese instante
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        {keyAnalysis.chords.length} cambios
+                      </span>
+                      <div className="flex items-center gap-1 border-l border-[var(--border-subtle)] pl-2">
+                        <button
+                          type="button"
+                          onClick={handleExportChordsJSON}
+                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Descargar acordes en formato JSON estructurado"
+                        >
+                          <Download className="w-2.5 h-2.5" />
+                          <span>JSON</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportChordsCSV}
+                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Descargar acordes en formato CSV tabular"
+                        >
+                          <Download className="w-2.5 h-2.5" />
+                          <span>CSV</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
@@ -841,7 +883,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                               ? 'bg-purple-600 text-white shadow-xs scale-105 ring-1 ring-purple-400'
                               : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-purple-400/60'
                           }`}
-                          title={`Saltar a ${chordSeg.chord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round(chordSeg.strength * 100)}%)`}
+                          title={`Saltar a ${chordSeg.chord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round((chordSeg.confidence ?? chordSeg.strength ?? 0.8) * 100)}%)`}
                         >
                           <span className="text-[9px] opacity-70">
                             {Math.floor(chordSeg.startTime / 60)}:{(chordSeg.startTime % 60).toFixed(0).padStart(2, '0')}

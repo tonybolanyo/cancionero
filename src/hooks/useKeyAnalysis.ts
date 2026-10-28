@@ -5,7 +5,7 @@ export interface UseKeyAnalysisReturn {
   keyAnalysis: KeyAnalysis | null;
   isAnalyzingKey: boolean;
   keyError: string | null;
-  analyzeKey: (audioBuffer: AudioBuffer) => Promise<KeyAnalysis | null>;
+  analyzeKey: (audioBuffer: AudioBuffer, beats?: number[]) => Promise<KeyAnalysis | null>;
   resetKeyAnalysis: () => void;
 }
 
@@ -32,12 +32,12 @@ export function useKeyAnalysis(): UseKeyAnalysisReturn {
     setKeyError(null);
   }, []);
 
-  const analyzeKey = useCallback(async (audioBuffer: AudioBuffer): Promise<KeyAnalysis | null> => {
+  const analyzeKey = useCallback(async (audioBuffer: AudioBuffer, beats?: number[]): Promise<KeyAnalysis | null> => {
     setIsAnalyzingKey(true);
     setKeyError(null);
 
     try {
-      const result = await analyzeKeyWithEssentia(audioBuffer);
+      const result = await analyzeKeyWithEssentia(audioBuffer, beats);
       if (isMountedRef.current) {
         setKeyAnalysis(result);
         setIsAnalyzingKey(false);
