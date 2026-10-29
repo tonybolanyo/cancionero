@@ -20,7 +20,8 @@ import {
   Timer,
   BarChart3,
   Cpu,
-  Download
+  Download,
+  Activity
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
@@ -31,6 +32,7 @@ import { BeatTimeline } from './BeatTimeline';
 import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
 import { PitchShiftPlayer } from '../lib/audio/pitchShiftPlayer';
 import { AccidentalPreference, respellChord } from '../utils/markdownParser';
+import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } from '../lib/audio/meter';
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -102,6 +104,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
   const playerRef = useRef<PitchShiftPlayer | null>(null);
 
+  // Meter & Downbeats estimation state
+  const [meterAnalysis, setMeterAnalysis] = useState<MeterAnalysis | null>(null);
+
   useEffect(() => {
     return () => {
       playerRef.current?.dispose();
@@ -122,6 +127,38 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       playerRef.current.setBuffer(decodedAudioBuffer);
     }
   }, [decodedAudioBuffer]);
+
+  // Refine meter estimation when chords become available from keyAnalysis
+  useEffect(() => {
+    if (decodedAudioBuffer && beatAnalysis && beatAnalysis.beats.length > 0) {
+      if (meterAnalysis?.confidence === 1.0) return; // Preserve manual adjustment
+      try {
+        const refined = estimateMeter({
+          beats: beatAnalysis.beats,
+          onsets: beatAnalysis.onsets,
+          audioBuffer: decodedAudioBuffer,
+          bpm: beatAnalysis.tempo,
+          chords: keyAnalysis?.chords
+        });
+        setMeterAnalysis(refined);
+      } catch (err) {
+        console.warn('Refined meter error:', err);
+      }
+    }
+  }, [keyAnalysis?.chords]);
+
+  const handleManualMeterChange = (newMeter: TimeSignature) => {
+    if (!beatAnalysis || beatAnalysis.beats.length === 0) return;
+    const newDownbeats = recalculateDownbeats(beatAnalysis.beats, newMeter, meterAnalysis?.phase ?? 0);
+    setMeterAnalysis({
+      meter: newMeter,
+      confidence: 1.0,
+      downbeats: newDownbeats,
+      barCount: newDownbeats.length,
+      phase: meterAnalysis?.phase ?? 0,
+      candidates: meterAnalysis?.candidates
+    });
+  };
 
   const handlePitchShiftChange = (semitones: number) => {
     const clamped = Math.max(-12, Math.min(12, semitones));
@@ -185,6 +222,19 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         });
         setBeatAnalysis(beats);
         detectedBeats = beats.beats;
+
+        // 2b. Estimate musical meter (2/4, 3/4, 4/4, 6/8) using pre-calculated beats & onsets
+        try {
+          const estimatedMeter = estimateMeter({
+            beats: beats.beats,
+            onsets: beats.onsets,
+            audioBuffer,
+            bpm: beats.tempo
+          });
+          setMeterAnalysis(estimatedMeter);
+        } catch (meterErr: any) {
+          console.warn('Meter estimation warning:', meterErr);
+        }
       } catch (beatErr: any) {
         console.warn('Onsets / Beat grid analysis warning:', beatErr);
       }
@@ -235,6 +285,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setTempoError(null);
     setDecodedAudioBuffer(null);
     setBeatAnalysis(null);
+    setMeterAnalysis(null);
     resetKeyAnalysis();
     setCurrentTime(0);
     if (playerRef.current) {
@@ -313,12 +364,29 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     onApplyDetection({
       tempo: tempoAnalysis.bpm,
       key: getEffectiveKey(),
-      timeSignature: analysisResult?.timeSignature || '4/4',
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
       chordProgression: analysisResult?.chordProgression,
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis.offset
+    });
+    setApplied(true);
+    setTimeout(() => setApplied(false), 2500);
+  };
+
+  const handleApplyOnlyMeter = () => {
+    if (!meterAnalysis) return;
+    onApplyDetection({
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
+      key: getEffectiveKey(),
+      timeSignature: meterAnalysis.meter,
+      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      audioUrl: audioUrl || undefined,
+      chordProgression: getChordProgressionSummary(),
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
+      chords: keyAnalysis?.chords || undefined
     });
     setApplied(true);
     setTimeout(() => setApplied(false), 2500);
@@ -345,7 +413,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     onApplyDetection({
       tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
       key,
-      timeSignature: analysisResult?.timeSignature || '4/4',
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
       chordProgression,
@@ -358,12 +426,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const handleApplyAll = () => {
-    if (!analysisResult && !tempoAnalysis && !keyAnalysis) return;
+    if (!analysisResult && !tempoAnalysis && !keyAnalysis && !meterAnalysis) return;
 
     onApplyDetection({
       tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
       key: getEffectiveKey(),
-      timeSignature: analysisResult?.timeSignature || '4/4',
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
       chordProgression: getChordProgressionSummary(),
@@ -582,6 +650,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           onTogglePreserveTempo={handleTogglePreserveTempo}
           accidentalPreference={accidentalPreference}
           onToggleAccidentalPreference={handleToggleAccidentalPreference}
+          meter={meterAnalysis?.meter}
+          downbeats={meterAnalysis?.downbeats}
+          onMeterChange={handleManualMeterChange}
         />
       )}
 
@@ -745,6 +816,121 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 <p className="text-[10px] text-[var(--text-muted)]">
                   Desfase temporal exacto hasta el primer golpe rítmico
                 </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sección / Tarjeta "Compás & Métrica" con estimación de Downbeats y Heurística */}
+      {file && (
+        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
+                  Sección Compás & Métrica
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
+                  <Activity className="w-2.5 h-2.5" />
+                  <span>Heurística de Downbeats & Beat Grid</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {/* Selector de corrección manual de compás */}
+              <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono shadow-2xs">
+                <span className="px-2 text-[10px] text-[var(--text-muted)] font-semibold hidden sm:inline">Ajuste:</span>
+                {(['2/4', '3/4', '4/4', '6/8'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleManualMeterChange(m)}
+                    className={`px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
+                      meterAnalysis?.meter === m
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                    }`}
+                    title={`Corregir manualmente a compás ${m}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Estado de carga */}
+          {isAnalyzingBeats && (
+            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
+              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Estimando compás musical y alineando downbeats sobre la rejilla de pulsos...</span>
+            </div>
+          )}
+
+          {/* Valores: Compás, Confianza y Downbeats */}
+          {meterAnalysis && !isAnalyzingBeats && (
+            <div className="space-y-3 pt-0.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
+                      <span>Compás Estimado</span>
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
+                        {meterAnalysis.meter}
+                      </span>
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">
+                        {meterAnalysis.meter === '4/4'
+                          ? 'Cuaternario (Común)'
+                          : meterAnalysis.meter === '3/4'
+                          ? 'Ternario (Vals/Zamba)'
+                          : meterAnalysis.meter === '6/8'
+                          ? 'Compuesto (6/8)'
+                          : 'Binario (2/4)'}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
+                        {meterAnalysis.confidence === 1.0 ? 'Ajuste manual' : `${Math.round(meterAnalysis.confidence * 100)}% conf.`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleApplyOnlyMeter}
+                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                    title="Usar este compás en el formulario de la canción"
+                  >
+                    Usar Compás
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-emerald-500" />
+                    <span>Downbeats & Rejilla de Compases</span>
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      {meterAnalysis.barCount || meterAnalysis.downbeats.length}
+                    </span>
+                    <span className="text-xs font-medium text-[var(--text-muted)]">compases calculados</span>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Cada compás comienza en un downbeat acentuado resaltado en verde en la línea de tiempo
+                  </p>
+                </div>
+              </div>
+
+              {/* Nota sobre limitaciones esperadas */}
+              <div className="p-2.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-muted)] leading-relaxed">
+                💡 <strong>Nota técnica de estimación:</strong> El compás se infiere evaluando autocorrelación periódica (2, 3, 4 y 6 beats), picos de energía acústica en el ataque y sincronía con cambios de acordes. <em>En interpretaciones con rubato, canciones con métricas cambiantes, síncopas pronunciadas o directos sin metrónomo, utiliza los botones de ajuste superior para fijar el compás deseado.</em>
               </div>
             </div>
           )}

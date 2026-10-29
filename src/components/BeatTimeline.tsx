@@ -3,6 +3,7 @@ import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders } fr
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
+import { TimeSignature } from '../lib/audio/meter';
 
 export interface BeatTimelineProps {
   audioBuffer?: AudioBuffer | null;
@@ -25,6 +26,10 @@ export interface BeatTimelineProps {
   // Enharmonic accidental preference props
   accidentalPreference?: AccidentalPreference;
   onToggleAccidentalPreference?: () => void;
+  // Meter & downbeat grid props
+  meter?: TimeSignature;
+  downbeats?: number[];
+  onMeterChange?: (meter: TimeSignature) => void;
   className?: string;
 }
 
@@ -47,6 +52,9 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onTogglePreserveTempo,
   accidentalPreference = 'sharps',
   onToggleAccidentalPreference,
+  meter = '4/4',
+  downbeats,
+  onMeterChange,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -196,30 +204,52 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       }
     }
 
-    // 4. Beat Grid Lines (Regular rhythm grid from @audio/beat)
+    // 4. Beat Grid Lines (Regular rhythm grid from @audio/beat and estimated downbeats)
     if (showBeats && beatAnalysis && beatAnalysis.beats.length > 0) {
-      ctx.lineWidth = 1;
       const topY = hasChords ? 39 : 14;
 
       beatAnalysis.beats.forEach((beatTime, idx) => {
         if (beatTime < 0 || beatTime > totalDuration) return;
         const x = (beatTime / totalDuration) * width;
 
-        // Emphasize downbeats (every 4 beats)
-        const isBarStart = idx % 4 === 0;
+        // Check if this beat is an estimated/confirmed downbeat
+        let barNumber: number | null = null;
+        if (downbeats && downbeats.length > 0) {
+          const matchIdx = downbeats.findIndex(db => Math.abs(db - beatTime) < 0.04);
+          if (matchIdx !== -1) {
+            barNumber = matchIdx + 1;
+          }
+        } else {
+          // Fallback to grouping by meter
+          const K = meter === '3/4' ? 3 : meter === '6/8' ? 6 : meter === '2/4' ? 2 : 4;
+          if (idx % K === 0) {
+            barNumber = Math.floor(idx / K) + 1;
+          }
+        }
+        const isBarStart = barNumber !== null;
 
-        ctx.strokeStyle = isBarStart ? 'rgba(16, 185, 129, 0.85)' : 'rgba(16, 185, 129, 0.35)';
+        ctx.strokeStyle = isBarStart ? 'rgba(16, 185, 129, 0.90)' : 'rgba(16, 185, 129, 0.30)';
+        ctx.lineWidth = isBarStart ? 1.5 : 1;
         ctx.beginPath();
         ctx.moveTo(x, topY);
         ctx.lineTo(x, height - 12);
         ctx.stroke();
 
-        // Downbeat marker
+        // Downbeat marker and bar number
         if (isBarStart) {
           ctx.fillStyle = '#10b981';
           ctx.beginPath();
-          ctx.arc(x, topY + 2, 2, 0, Math.PI * 2);
+          ctx.arc(x, topY + 2, 2.5, 0, Math.PI * 2);
           ctx.fill();
+
+          // Bar number label if enough horizontal space
+          if (width > 420) {
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 8px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`${barNumber}`, x + 3, topY + 1);
+          }
         }
       });
     }
@@ -591,6 +621,28 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
             </button>
           )}
+
+          {/* Selector interactivo de compás (2/4, 3/4, 4/4, 6/8) */}
+          {onMeterChange && (
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
+              <span className="px-1.5 text-[var(--text-muted)] font-semibold hidden sm:inline">Compás:</span>
+              {(['2/4', '3/4', '4/4', '6/8'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => onMeterChange(m)}
+                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors ${
+                    meter === m
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                  }`}
+                  title={`Ajustar compás a ${m}`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3.5 text-[11px] text-[var(--text-muted)] font-mono flex-wrap">
@@ -609,6 +661,15 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
                 <strong className="text-cyan-400">{beatAnalysis.onsets.length} onsets</strong>
               </div>
             </>
+          )}
+          {meter && (
+            <div>
+              <span>Compás: </span>
+              <strong className="text-emerald-500 font-bold">{meter}</strong>
+              {downbeats && downbeats.length > 0 && (
+                <span className="text-[10px] opacity-75 ml-1 font-semibold">({downbeats.length} compases)</span>
+              )}
+            </div>
           )}
           {chords && chords.length > 0 && (
             <div>

@@ -688,16 +688,40 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[var(--text-primary)] block">
-                    Compás métrico
-                  </label>
-                  <input
-                    type="text"
-                    value={timeSignature}
-                    onChange={(e) => setTimeSignature(e.target.value)}
-                    placeholder="Ej. 4/4, 3/4, 6/8"
-                    className="w-full px-3.5 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] font-mono shadow-sm"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-[var(--text-primary)] block">
+                      Compás métrico
+                    </label>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      {timeSignature === '3/4' ? 'Ternario (Vals)' : timeSignature === '6/8' ? 'Compuesto (Balada/Folk)' : timeSignature === '2/4' ? 'Binario (Marcha)' : 'Cuaternario (Pop/Rock)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={timeSignature}
+                      onChange={(e) => setTimeSignature(e.target.value)}
+                      placeholder="Ej. 4/4, 3/4, 6/8"
+                      className="flex-1 px-3.5 py-2 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] font-mono shadow-sm"
+                    />
+                    <div className="flex items-center bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-lg p-0.5 shadow-2xs">
+                      {(['2/4', '3/4', '4/4', '6/8'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setTimeSignature(m)}
+                          className={`px-2 py-1 text-xs font-mono font-medium rounded transition-colors cursor-pointer ${
+                            timeSignature === m
+                              ? 'bg-[var(--accent-primary)] text-white shadow-xs font-bold'
+                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                          }`}
+                          title={`Seleccionar compás ${m}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
