@@ -17,6 +17,7 @@ import { GitHubAuthModal } from './components/GitHubAuthModal';
 import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
 import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
+import { SeoHelper } from './components/SeoHelper';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
@@ -471,6 +472,14 @@ function CancioneroApp() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-200">
+      {/* SEO Meta Tags and Structured Data */}
+      <SeoHelper
+        title="Cancionero de versos perdidos"
+        description="Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía."
+        keywords={['canciones', 'poesía', 'acústico', 'cantautor', 'letras', 'compositor', 'música original', 'singer-songwriter']}
+        song={selectedSong}
+      />
+      
       {/* 3-Zone Top Bar Navigation */}
       <Header
         onOpenNewSong={handleOpenNewSong}

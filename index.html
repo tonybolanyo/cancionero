@@ -3,17 +3,79 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cancionero de versos perdidos</title>
+    
+    <!-- Basic Meta Tags -->
+    <title>Cancionero de versos perdidos - Canciones de autor, poesía acústica</title>
     <meta name="description" content="Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía." />
-    <meta property="og:title" content="Cancionero de versos perdidos" />
+    <meta name="keywords" content="canciones, poesía, acústico, cantautor, letras, compositor, música original, singer-songwriter" />
+    <meta name="author" content="Tony García Bernal" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="language" content="Spanish" />
+    <meta name="revisit-after" content="7 days" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://tonygb.com/cancionero/" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Cancionero de versos perdidos - Canciones de autor" />
     <meta property="og:description" content="Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía." />
     <meta property="og:url" content="https://tonygb.com/cancionero/" />
-    <link rel="canonical" href="https://tonygb.com/cancionero/" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cancionero de versos perdidos" />
+    <meta property="og:locale" content="es_ES" />
+    
+    <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cancionero de versos perdidos" />
+    <meta name="twitter:description" content="Canciones de autor, poesía acústica y letras íntimas hechas de guitarra, memoria y verdad." />
+    <meta name="twitter:creator" content="@tonygb" />
+    
+    <!-- Additional SEO Meta Tags -->
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="alternate" hreflang="es" href="https://tonygb.com/cancionero/" />
+    
+    <!-- Preconnect for performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- JSON-LD Structured Data (Website) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Cancionero de versos perdidos",
+      "description": "Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía.",
+      "url": "https://tonygb.com/cancionero/",
+      "inLanguage": "es",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://tonygb.com/cancionero/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    
+    <!-- JSON-LD Structured Data (MusicGroup/Artist) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "MusicGroup",
+      "name": "Cancionero de versos perdidos",
+      "description": "Colección de canciones de autor y poesía acústica",
+      "url": "https://tonygb.com/cancionero/",
+      "genre": ["Acoustic", "Singer-Songwriter", "Folk", "Cantautor"],
+      "knowsLanguage": "es",
+      "sameAs": [
+        "https://github.com/tonybolanyo",
+        "https://twitter.com/tonygb"
+      ]
+    }
+    </script>
   </head>
   <body class="bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased selection:bg-amber-500/30 selection:text-amber-200 transition-colors duration-200">
     <div id="root"></div>
