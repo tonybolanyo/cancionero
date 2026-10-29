@@ -1,11 +1,12 @@
 import { jsPDF } from 'jspdf';
 import { Song } from '../types/song';
-import { transposeChord, transposeLyrics, parseLyricLine } from './markdownParser';
+import { transposeChord, transposeLyrics, parseLyricLine, AccidentalPreference } from './markdownParser';
 
 interface PdfExportOptions {
   showChords?: boolean;
   semitones?: number;
   chordPosition?: 'above' | 'inline';
+  accidentalPreference?: AccidentalPreference;
 }
 
 /**
@@ -13,7 +14,7 @@ interface PdfExportOptions {
  * Designed with pure white canvas, serif typography, structured metadata, and clean chord notation.
  */
 export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): void {
-  const { showChords = true, semitones = 0, chordPosition = 'above' } = options;
+  const { showChords = true, semitones = 0, chordPosition = 'above', accidentalPreference = 'sharps' } = options;
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -28,8 +29,8 @@ export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): voi
   let cursorY = margin;
 
   // Active key
-  const activeKey = transposeChord(song.key, semitones);
-  const rawLyrics = transposeLyrics(song.lyrics, semitones);
+  const activeKey = transposeChord(song.key, semitones, accidentalPreference);
+  const rawLyrics = transposeLyrics(song.lyrics, semitones, accidentalPreference);
 
   // Helper to check for page break
   const ensureSpace = (neededHeight: number) => {

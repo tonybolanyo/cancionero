@@ -16,7 +16,15 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
-import { songToMarkdown, markdownToSong, transposeChord, transposeLyrics } from '../utils/markdownParser';
+import {
+  songToMarkdown,
+  markdownToSong,
+  transposeChord,
+  transposeLyrics,
+  respellChord,
+  respellLyrics,
+  AccidentalPreference
+} from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +69,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
   const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
+  const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
 
   // Git Commit and Push on Save options - Defaults to Auto-Commit enabled
   const [createCommitOnSave, setCreateCommitOnSave] = useState<boolean>(() =>
@@ -255,18 +264,43 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     setTimeout(() => setInsertedChordsFeedback(false), 2500);
   };
 
+  const handleToggleAccidentalPreference = (newPref?: AccidentalPreference) => {
+    const nextPref = newPref || (accidentalPreference === 'sharps' ? 'flats' : 'sharps');
+    setAccidentalPreference(nextPref);
+
+    if (lyrics) {
+      setLyrics(prev => respellLyrics(prev, nextPref));
+    }
+
+    if (key.trim()) {
+      setKey(prev => respellChord(prev, nextPref));
+    }
+
+    if (detectedChords.length > 0) {
+      setDetectedChords(prev =>
+        prev.map(c => ({
+          ...c,
+          chord: respellChord(c.chord, nextPref)
+        }))
+      );
+    }
+
+    setTransposeFeedback(`Notación ajustada a ${nextPref === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}`);
+    setTimeout(() => setTransposeFeedback(null), 2500);
+  };
+
   const handleTranspose = (semitones: number) => {
     if (semitones === 0) return;
 
     // 1. Transpose chords embedded in lyrics [Chord]
     if (lyrics) {
-      setLyrics(prev => transposeLyrics(prev, semitones));
+      setLyrics(prev => transposeLyrics(prev, semitones, accidentalPreference));
     }
 
     // 2. Transpose primary key field if filled
     let newKey = key;
     if (key.trim()) {
-      newKey = transposeChord(key.trim(), semitones);
+      newKey = transposeChord(key.trim(), semitones, accidentalPreference);
       setKey(newKey);
     }
 
@@ -275,7 +309,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setDetectedChords(prev =>
         prev.map(c => ({
           ...c,
-          chord: transposeChord(c.chord, semitones)
+          chord: transposeChord(c.chord, semitones, accidentalPreference)
         }))
       );
     }
@@ -612,6 +646,14 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                       >
                         +1
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAccidentalPreference()}
+                        className="px-1.5 py-1 text-[11px] font-mono font-bold rounded hover:bg-[var(--accent-subtle)] text-[var(--accent-primary)] transition-colors cursor-pointer border-l border-[var(--border-subtle)]"
+                        title={`Alternar ortografía enarmónica: ${accidentalPreference === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}`}
+                      >
+                        {accidentalPreference === 'flats' ? '♭' : '♯'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -849,6 +891,16 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                         +1 Semitono
                       </button>
                     </div>
+
+                    {/* Selector de Preferencia Enarmónica (♯ Sostenidos vs ♭ Bemoles) */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAccidentalPreference()}
+                      className="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer shadow-2xs"
+                      title={`Preferencia enarmónica activa: ${accidentalPreference === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}. Pulsa para ajustar la ortografía de los acordes.`}
+                    >
+                      {accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}
+                    </button>
 
                     {/* Botón: Insertar acordes detectados automáticamente */}
                     <button

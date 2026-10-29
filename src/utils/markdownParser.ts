@@ -21,14 +21,20 @@ const NOTE_TO_SEMITONE: Record<string, number> = {
   'B': 11, 'Cb': 11
 };
 
-/**
- * Transpose a single chord symbol by N semitones
- * e.g. "Am7" + 2 semitones -> "Bm7"
- */
-export function transposeChord(chord: string, semitones: number): string {
-  if (semitones === 0) return chord;
+export type AccidentalPreference = 'sharps' | 'flats';
 
-  // Match root note (e.g. C, C#, Bb) and chord suffix (m, 7, maj7, sus4, /G)
+/**
+ * Transpose a single chord symbol by N semitones with optional accidental preference ('sharps' | 'flats')
+ * e.g. "F#" with preference "flats" -> "Gb"
+ */
+export function transposeChord(
+  chord: string,
+  semitones: number,
+  preference?: AccidentalPreference | 'auto'
+): string {
+  if (semitones === 0 && !preference) return chord;
+
+  // Match root note (e.g. C, C#, Bb) and chord suffix (m, 7, maj7, sus4, dim, m7b5, aug, /G)
   const match = chord.match(/^([A-G][#b]?)(.*)$/);
   if (!match) return chord;
 
@@ -38,25 +44,43 @@ export function transposeChord(chord: string, semitones: number): string {
   // If there's a bass note like C/E, transpose the bass note as well
   if (suffix.includes('/')) {
     const [mainSuffix, bass] = suffix.split('/');
-    const transposedRoot = shiftNote(root, semitones);
-    const transposedBass = shiftNote(bass, semitones);
+    const transposedRoot = shiftNote(root, semitones, preference);
+    const transposedBass = shiftNote(bass, semitones, preference);
     return `${transposedRoot}${mainSuffix}/${transposedBass}`;
   }
 
-  const transposedRoot = shiftNote(root, semitones);
+  const transposedRoot = shiftNote(root, semitones, preference);
   return `${transposedRoot}${suffix}`;
 }
 
-function shiftNote(note: string, semitones: number): string {
+export function shiftNote(
+  note: string,
+  semitones: number,
+  preference?: AccidentalPreference | 'auto'
+): string {
   const currentSemitone = NOTE_TO_SEMITONE[note];
   if (currentSemitone === undefined) return note;
 
   let newSemitone = (currentSemitone + semitones) % 12;
   if (newSemitone < 0) newSemitone += 12;
 
+  if (preference === 'flats') {
+    return CHROMATIC_SCALE_FLATS[newSemitone];
+  }
+  if (preference === 'sharps') {
+    return CHROMATIC_SCALE_SHARPS[newSemitone];
+  }
+
   // Choose sharps by default unless original had flat
   const useFlats = note.includes('b');
   return useFlats ? CHROMATIC_SCALE_FLATS[newSemitone] : CHROMATIC_SCALE_SHARPS[newSemitone];
+}
+
+/**
+ * Respell a chord to the desired enharmonic accidental preference ('sharps' vs 'flats') without changing pitch
+ */
+export function respellChord(chord: string, preference: AccidentalPreference): string {
+  return transposeChord(chord, 0, preference);
 }
 
 /**
@@ -70,11 +94,22 @@ export interface LyricSegment {
 /**
  * Transpose all chords enclosed in brackets [Am] inside lyrics text
  */
-export function transposeLyrics(lyrics: string, semitones: number): string {
-  if (semitones === 0) return lyrics;
+export function transposeLyrics(
+  lyrics: string,
+  semitones: number,
+  preference?: AccidentalPreference | 'auto'
+): string {
+  if (semitones === 0 && !preference) return lyrics;
   return lyrics.replace(/\[([A-G][#b]?[^\]]*)\]/g, (_, chord) => {
-    return `[${transposeChord(chord, semitones)}]`;
+    return `[${transposeChord(chord, semitones, preference)}]`;
   });
+}
+
+/**
+ * Respell all chords in lyrics to either sharps (#) or flats (b) without transposing pitch
+ */
+export function respellLyrics(lyrics: string, preference: AccidentalPreference): string {
+  return transposeLyrics(lyrics, 0, preference);
 }
 
 /**

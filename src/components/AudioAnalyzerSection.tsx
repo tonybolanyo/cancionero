@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   Music,
@@ -29,8 +29,11 @@ import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
 import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
 import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
+import { PitchShiftPlayer } from '../lib/audio/pitchShiftPlayer';
+import { AccidentalPreference, respellChord } from '../utils/markdownParser';
 
-const CHROMATIC_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
 interface AudioAnalyzerSectionProps {
   onApplyDetection: (data: {
@@ -92,6 +95,51 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Pitch-Shifting & Enharmonic Preference states
+  const [pitchShiftSemitones, setPitchShiftSemitones] = useState<number>(0);
+  const [preserveTempo, setPreserveTempo] = useState<boolean>(true);
+  const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
+  const playerRef = useRef<PitchShiftPlayer | null>(null);
+
+  useEffect(() => {
+    return () => {
+      playerRef.current?.dispose();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (decodedAudioBuffer) {
+      if (!playerRef.current) {
+        playerRef.current = new PitchShiftPlayer({
+          semitones: pitchShiftSemitones,
+          preserveTempo: preserveTempo,
+          onTimeUpdate: (t) => setCurrentTime(t),
+          onEnded: () => setIsPlaying(false),
+          onStateChange: (playing) => setIsPlaying(playing)
+        });
+      }
+      playerRef.current.setBuffer(decodedAudioBuffer);
+    }
+  }, [decodedAudioBuffer]);
+
+  const handlePitchShiftChange = (semitones: number) => {
+    const clamped = Math.max(-12, Math.min(12, semitones));
+    setPitchShiftSemitones(clamped);
+    playerRef.current?.setPitch(clamped);
+  };
+
+  const handleTogglePreserveTempo = () => {
+    setPreserveTempo(prev => {
+      const next = !prev;
+      playerRef.current?.setPreserveTempo(next);
+      return next;
+    });
+  };
+
+  const handleToggleAccidentalPreference = () => {
+    setAccidentalPreference(prev => prev === 'sharps' ? 'flats' : 'sharps');
+  };
 
   const handleCalculateTempo = async (overrideFile?: File, customMin?: number, customMax?: number) => {
     const targetFile = overrideFile || file;
@@ -171,10 +219,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const handleSeek = (targetTime: number) => {
-    if (audioRef.current) {
+    if (playerRef.current && decodedAudioBuffer) {
+      playerRef.current.seek(targetTime);
+    } else if (audioRef.current) {
       audioRef.current.currentTime = targetTime;
-      setCurrentTime(targetTime);
     }
+    setCurrentTime(targetTime);
   };
 
   const handleFileSelected = (selectedFile: File) => {
@@ -187,6 +237,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setBeatAnalysis(null);
     resetKeyAnalysis();
     setCurrentTime(0);
+    if (playerRef.current) {
+      playerRef.current.pause();
+      playerRef.current.seek(0);
+    }
 
     const validExtensions = ['.mp3', '.wav'];
     const hasValidExt = validExtensions.some(ext =>
@@ -245,12 +299,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const getEffectiveKey = () => {
+    let raw = currentKey || analysisResult?.key || 'Am';
     if (keyAnalysis) {
-      return keyAnalysis.scale === 'minor'
+      raw = keyAnalysis.scale === 'minor'
         ? (keyAnalysis.key.endsWith('m') ? keyAnalysis.key : `${keyAnalysis.key}m`)
         : keyAnalysis.key.replace(/m$/, '');
     }
-    return currentKey || analysisResult?.key || 'Am';
+    return respellChord(raw, accidentalPreference);
   };
 
   const handleApplyOnlyTempo = () => {
@@ -273,8 +328,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
       const seq: string[] = [];
       for (const s of keyAnalysis.chords) {
-        if (seq.length === 0 || seq[seq.length - 1] !== s.chord) {
-          seq.push(s.chord);
+        const chordName = respellChord(s.chord, accidentalPreference);
+        if (seq.length === 0 || seq[seq.length - 1] !== chordName) {
+          seq.push(chordName);
         }
       }
       return seq.slice(0, 8).join(' - ');
@@ -321,6 +377,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const togglePlayback = () => {
+    if (playerRef.current && decodedAudioBuffer) {
+      if (isPlaying) {
+        playerRef.current.pause();
+      } else {
+        playerRef.current.play();
+      }
+      return;
+    }
+
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
@@ -511,6 +576,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           onRecalculate={() => handleCalculateTempo(file)}
           onExportJSON={handleExportChordsJSON}
           onExportCSV={handleExportChordsCSV}
+          pitchShiftSemitones={pitchShiftSemitones}
+          onPitchShiftChange={handlePitchShiftChange}
+          preserveTempo={preserveTempo}
+          onTogglePreserveTempo={handleTogglePreserveTempo}
+          accidentalPreference={accidentalPreference}
+          onToggleAccidentalPreference={handleToggleAccidentalPreference}
         />
       )}
 
@@ -702,6 +773,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
             <div className="flex items-center gap-2 self-end sm:self-auto">
               <button
                 type="button"
+                onClick={handleToggleAccidentalPreference}
+                className="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                title={`Preferencia enarmónica activa: ${accidentalPreference === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}. Pulsa para alternar.`}
+              >
+                <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => {
                   if (decodedAudioBuffer) {
                     void analyzeKey(decodedAudioBuffer, beatAnalysis?.beats);
@@ -809,10 +889,11 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   </div>
 
                   <div className="grid grid-cols-12 gap-1 pt-1 items-end h-20 bg-[var(--bg-modal)] p-2 rounded-lg border border-[var(--border-subtle)]">
-                    {CHROMATIC_NOTES.map((note, idx) => {
+                    {(accidentalPreference === 'flats' ? CHROMATIC_NOTES_FLATS : CHROMATIC_NOTES_SHARPS).map((note, idx) => {
                       const value = keyAnalysis.chroma[idx] ?? 0;
                       const heightPercent = Math.max(6, Math.round(value * 100));
-                      const isRoot = note === keyAnalysis.key.replace(/m$/, '');
+                      const rootPitch = respellChord(keyAnalysis.key.replace(/m$/, ''), accidentalPreference);
+                      const isRoot = note === rootPitch;
 
                       return (
                         <div key={note} className="flex flex-col items-center justify-end h-full group" title={`${note}: ${(value * 100).toFixed(1)}%`}>
@@ -889,6 +970,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
                     {keyAnalysis.chords.map((chordSeg, idx) => {
                       const isActive = currentTime >= chordSeg.startTime && currentTime < chordSeg.endTime;
+                      const displayedChord = respellChord(chordSeg.chord, accidentalPreference);
                       return (
                         <button
                           key={idx}
@@ -899,12 +981,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                               ? 'bg-purple-600 text-white shadow-xs scale-105 ring-1 ring-purple-400'
                               : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-purple-400/60'
                           }`}
-                          title={`Saltar a ${chordSeg.chord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round((chordSeg.confidence ?? chordSeg.strength ?? 0.8) * 100)}%)`}
+                          title={`Saltar a ${displayedChord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round((chordSeg.confidence ?? chordSeg.strength ?? 0.8) * 100)}%)`}
                         >
                           <span className="text-[9px] opacity-70">
                             {Math.floor(chordSeg.startTime / 60)}:{(chordSeg.startTime % 60).toFixed(0).padStart(2, '0')}
                           </span>
-                          <strong className="text-xs">{chordSeg.chord}</strong>
+                          <strong className="text-xs">{displayedChord}</strong>
                         </button>
                       );
                     })}

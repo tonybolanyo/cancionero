@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Activity, Music, Layers, Download } from 'lucide-react';
+import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders } from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
+import { respellChord, AccidentalPreference } from '../utils/markdownParser';
 
 export interface BeatTimelineProps {
   audioBuffer?: AudioBuffer | null;
@@ -16,6 +17,14 @@ export interface BeatTimelineProps {
   onRecalculate?: () => void;
   onExportJSON?: () => void;
   onExportCSV?: () => void;
+  // Pitch-Shifting props
+  pitchShiftSemitones?: number;
+  onPitchShiftChange?: (semitones: number) => void;
+  preserveTempo?: boolean;
+  onTogglePreserveTempo?: () => void;
+  // Enharmonic accidental preference props
+  accidentalPreference?: AccidentalPreference;
+  onToggleAccidentalPreference?: () => void;
   className?: string;
 }
 
@@ -32,6 +41,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onRecalculate,
   onExportJSON,
   onExportCSV,
+  pitchShiftSemitones = 0,
+  onPitchShiftChange,
+  preserveTempo = true,
+  onTogglePreserveTempo,
+  accidentalPreference = 'sharps',
+  onToggleAccidentalPreference,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -152,7 +167,8 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
           ctx.textBaseline = 'middle';
           const textX = xStart + segWidth / 2;
           const textY = blockY + blockH / 2;
-          ctx.fillText(c.chord, textX, textY);
+          const displayedChord = accidentalPreference ? respellChord(c.chord, accidentalPreference) : c.chord;
+          ctx.fillText(displayedChord, textX, textY);
         }
       });
     }
@@ -247,9 +263,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       const hMins = Math.floor(hoverTime / 60);
       const hSecs = (hoverTime % 60).toFixed(2);
       const hoverChord = chords?.find(c => hoverTime >= c.startTime && hoverTime < c.endTime);
+      const hoverChordName = hoverChord
+        ? (accidentalPreference ? respellChord(hoverChord.chord, accidentalPreference) : hoverChord.chord)
+        : null;
 
-      const hoverLabel = hoverChord
-        ? `${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs} · ${hoverChord.chord}`
+      const hoverLabel = hoverChordName
+        ? `${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs} · ${hoverChordName}`
         : `${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs}`;
 
       ctx.fillStyle = '#ffffff';
@@ -281,7 +300,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.fill();
 
     ctx.restore();
-  }, [audioBuffer, beatAnalysis, chords, currentTime, duration, hasChords, hoverTime, showBeats, showChords, showOnsets]);
+  }, [audioBuffer, beatAnalysis, chords, currentTime, duration, hasChords, hoverTime, showBeats, showChords, showOnsets, accidentalPreference]);
 
   useEffect(() => {
     let animId: number;
@@ -365,7 +384,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             {currentChord && (
               <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1 animate-pulse">
                 <Music className="w-3 h-3 text-purple-400" />
-                <span>Acorde: {currentChord.chord}</span>
+                <span>Acorde: {accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord}</span>
                 <span className="text-[9px] text-purple-400/80">({Math.round((currentChord.confidence ?? currentChord.strength ?? 0.8) * 100)}%)</span>
               </span>
             )}
@@ -503,8 +522,74 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
           {currentChord && (
             <div className="font-mono text-xs text-purple-600 dark:text-purple-300 font-semibold hidden sm:inline">
-              Acorde activo: <span className="text-sm font-bold underline decoration-purple-500">{currentChord.chord}</span>
+              Acorde activo: <span className="text-sm font-bold underline decoration-purple-500">{accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord}</span>
             </div>
+          )}
+        </div>
+
+        {/* Pitch-Shifting & Enharmonic Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onPitchShiftChange && (
+            <div className="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 shadow-2xs">
+              <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase px-1.5 font-semibold flex items-center gap-1">
+                <Sliders className="w-2.5 h-2.5 text-purple-500" />
+                <span>Pitch:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onPitchShiftChange(pitchShiftSemitones - 1)}
+                className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                title="Bajar 1 semitono al audio en tiempo real"
+              >
+                -1 st
+              </button>
+              <button
+                type="button"
+                onClick={() => onPitchShiftChange(0)}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
+                  pitchShiftSemitones !== 0
+                    ? 'bg-purple-600 text-white shadow-2xs'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+                title="Restablecer tono original (0 semitonos)"
+              >
+                {pitchShiftSemitones > 0 ? `+${pitchShiftSemitones}` : pitchShiftSemitones} st
+              </button>
+              <button
+                type="button"
+                onClick={() => onPitchShiftChange(pitchShiftSemitones + 1)}
+                className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                title="Subir 1 semitono al audio en tiempo real"
+              >
+                +1 st
+              </button>
+
+              {onTogglePreserveTempo && (
+                <button
+                  type="button"
+                  onClick={onTogglePreserveTempo}
+                  className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+                    preserveTempo
+                      ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 font-semibold'
+                      : 'bg-[var(--bg-modal)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title={preserveTempo ? 'Modo: Mantener velocidad y tempo original (fase vocoder)' : 'Modo: Varipitch (cambia tono y velocidad)'}
+                >
+                  {preserveTempo ? 'Tempo fijo' : 'Varipitch'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {onToggleAccidentalPreference && (
+            <button
+              type="button"
+              onClick={onToggleAccidentalPreference}
+              className="px-2 py-1 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs font-semibold"
+              title={`Preferencia enarmónica activa: ${accidentalPreference === 'flats' ? 'Bemoles (b)' : 'Sostenidos (#)'}. Clic para alternar.`}
+            >
+              <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
+            </button>
           )}
         </div>
 

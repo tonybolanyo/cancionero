@@ -316,3 +316,50 @@ test('transposeLyrics and transposeChord correctly handle dim, m7b5, aug with -1
   assert.ok(transposedDown.includes('[A#m7b5] Segundo verso'));
   assert.ok(transposedDown.includes('[Baug] Tercer verso'));
 });
+
+test('respellChord and respellLyrics correctly convert between sharps (#) and flats (b)', async () => {
+  const { respellChord, respellLyrics, transposeChord } = await import('../src/utils/markdownParser');
+
+  // 1. Respell individual chord roots with flats preference
+  assert.strictEqual(respellChord('F#', 'flats'), 'Gb');
+  assert.strictEqual(respellChord('C#m', 'flats'), 'Dbm');
+  assert.strictEqual(respellChord('D#7', 'flats'), 'Eb7');
+  assert.strictEqual(respellChord('G#maj7', 'flats'), 'Abmaj7');
+  assert.strictEqual(respellChord('A#m7b5', 'flats'), 'Bbm7b5');
+  assert.strictEqual(respellChord('F#dim', 'flats'), 'Gbdim');
+  assert.strictEqual(respellChord('A#sus4', 'flats'), 'Bbsus4');
+
+  // 2. Respell individual chord roots with sharps preference
+  assert.strictEqual(respellChord('Gb', 'sharps'), 'F#');
+  assert.strictEqual(respellChord('Dbm', 'sharps'), 'C#m');
+  assert.strictEqual(respellChord('Eb7', 'sharps'), 'D#7');
+  assert.strictEqual(respellChord('Abmaj7', 'sharps'), 'G#maj7');
+  assert.strictEqual(respellChord('Bbm7b5', 'sharps'), 'A#m7b5');
+  assert.strictEqual(respellChord('Gbdim', 'sharps'), 'F#dim');
+  assert.strictEqual(respellChord('Bbsus4', 'sharps'), 'A#sus4');
+
+  // 3. Natural roots unaffected
+  assert.strictEqual(respellChord('C', 'flats'), 'C');
+  assert.strictEqual(respellChord('Am', 'flats'), 'Am');
+  assert.strictEqual(respellChord('G7', 'sharps'), 'G7');
+
+  // 4. Transpose with flat preference (e.g. F + 1 st = Gb in flat mode, F# in sharp mode)
+  assert.strictEqual(transposeChord('F', 1, 'flats'), 'Gb');
+  assert.strictEqual(transposeChord('F', 1, 'sharps'), 'F#');
+
+  // 5. Full song lyrics respelling
+  const sharpLyrics = '## Estribillo\n[F#] Y en las noches de [C#m] soledad\n[D#7] sigo buscando tu [A#m7b5] voz';
+  const flatLyrics = respellLyrics(sharpLyrics, 'flats');
+  assert.ok(flatLyrics.includes('[Gb] Y en las noches'));
+  assert.ok(flatLyrics.includes('[Dbm] soledad'));
+  assert.ok(flatLyrics.includes('[Eb7] sigo buscando'));
+  assert.ok(flatLyrics.includes('[Bbm7b5] voz'));
+
+  // Roundtrip back to sharps
+  const roundtrip = respellLyrics(flatLyrics, 'sharps');
+  assert.ok(roundtrip.includes('[F#] Y en las noches'));
+  assert.ok(roundtrip.includes('[C#m] soledad'));
+  assert.ok(roundtrip.includes('[D#7] sigo buscando'));
+  assert.ok(roundtrip.includes('[A#m7b5] voz'));
+});
+
