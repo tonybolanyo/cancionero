@@ -12,7 +12,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
@@ -25,68 +25,92 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Build site
         run: npm run build
-
-      - name: Generate SEO files (robots.txt & sitemap.xml)
-        run: |
-          node scripts/generate-seo-files.js
         env:
-          DOMAIN: ${{ secrets.PAGES_DOMAIN || 'cancionero.example.com' }}
-          GOOGLE_ANALYTICS_ID: ${{ secrets.GOOGLE_ANALYTICS_ID }}
+          VITE_BASE_URL: ${{ vars.VITE_BASE_URL || '/cancionero/' }}
+          VITE_GITHUB_ALLOWED_USER: ${{ vars.VITE_GITHUB_ALLOWED_USER || 'tonygb' }}
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        id: pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dist'
+          path: ./dist
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
       - name: Purge Cloudflare Cache
-        if: ${{ secrets.CLOUDFLARE_ZONE_ID && secrets.CLOUDFLARE_API_TOKEN }}
+        if: ${{ always() && steps.deployment.outcome == 'success' && secrets.CLOUDFLARE_ZONE_ID != '' && secrets.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+          PAGES_DOMAIN: ${{ secrets.PAGES_DOMAIN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "🔄 Purgando caché de Cloudflare..."
-          
-          RESPONSE=$(curl -s -X POST \
-            "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "files": [
-                "https://${{ secrets.PAGES_DOMAIN || "cancionero.example.com" }}/index.html",
-                "https://${{ secrets.PAGES_DOMAIN || "cancionero.example.com" }}/sitemap.xml",
-                "https://${{ secrets.PAGES_DOMAIN || "cancionero.example.com" }}/robots.txt",
-                "https://${{ secrets.PAGES_DOMAIN || "cancionero.example.com" }}/",
-                "https://${{ secrets.PAGES_DOMAIN || "cancionero.example.com" }}/*"
-              ]
-            }')
-          
-          echo "$RESPONSE" | jq .
-          
-          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
-          if [ "$SUCCESS" = "true" ]; then
-            echo "✅ Caché purgado exitosamente"
+          set -euo pipefail
+
+          if [ -n "${PAGES_URL:-}" ]; then
+            BASE_URL="${PAGES_URL%/}"
+          elif [ -n "${PAGES_DOMAIN:-}" ]; then
+            BASE_URL="https://${PAGES_DOMAIN}"
           else
-            echo "❌ Error purgando caché"
-            echo "$RESPONSE" | jq .
+            echo "No se pudo determinar la URL de GitHub Pages ni el dominio de Cloudflare. Se omite la purga."
+            exit 0
+          fi
+
+          if [ -n "${PAGES_DOMAIN:-}" ]; then
+            DOMAIN="${PAGES_DOMAIN}"
+          else
+            DOMAIN="$(python -c 'import os; from urllib.parse import urlparse; u=os.environ.get("PAGES_URL", "").strip(); print(urlparse(u).netloc if u else "")')"
+          fi
+
+          if [ -z "${DOMAIN:-}" ]; then
+            echo "No se pudo extraer el host del dominio. Se omite la purga."
+            exit 0
+          fi
+
+          echo "🔄 Purging Cloudflare cache for ${BASE_URL}"
+
+          JSON=$(jq -n             --arg base "${BASE_URL}"             '{files: [
+              ($base + "/index.html"),
+              ($base + "/sitemap.xml"),
+              ($base + "/robots.txt"),
+              ($base + "/"),
+              ($base + "/*")
+            ]}')
+
+          echo "$JSON" | jq .
+
+          RESPONSE=$(curl -sS -X POST             "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache"             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             -H "Content-Type: application/json"             --data "$JSON")
+
+          echo "$RESPONSE" | jq .
+
+          if ! echo "$RESPONSE" | jq -e '.success == true' >/dev/null; then
+            echo "❌ Error purgando caché de Cloudflare"
             exit 1
           fi
 
+          echo "✅ Cloudflare cache purged successfully"
       - name: Notify Deployment
         if: always()
         run: |
           echo "🎉 Deployment completado:"
-          echo "   📍 Dominio: ${{ secrets.PAGES_DOMAIN || 'cancionero.example.com' }}"
-          echo "   🔗 URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "   🔗 URL: ${{ steps.deployment.outputs.page_url || 'N/A' }}"
+          echo "   📍 Dominio: ${{ secrets.PAGES_DOMAIN || 'github-pages' }}"
           echo "   ⏱️ Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
