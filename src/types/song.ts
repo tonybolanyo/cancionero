@@ -21,6 +21,7 @@ export interface Song {
   notes?: string; // Songwriting notes, history, instrumentation
   tags?: string[]; // Thematic tags e.g. 'acústico', 'en vivo', 'colaboración', 'maqueta'
   lyrics: string; // Markdown formatted lyrics with [Chords] and section headers
+  lrc?: string; // Optional synchronized lyrics in LRC format
   createdAt: string; // ISO date
   updatedAt: string; // ISO date
   gitHash?: string;

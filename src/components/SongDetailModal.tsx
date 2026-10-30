@@ -15,7 +15,8 @@ import {
   ArrowDown,
   RotateCcw,
   History,
-  FileDown
+  FileDown,
+  Clock
 } from 'lucide-react';
 import { Song } from '../types/song';
 import {
@@ -28,6 +29,10 @@ import {
   AccidentalPreference
 } from '../utils/markdownParser';
 import { exportSongToPdf } from '../utils/pdfGenerator';
+import { SyncedLyrics } from './SyncedLyrics';
+import { SyncedLyricLine, LrcMetadata } from '../types/lyrics';
+import { parseLrc, isLrcContent } from '../lib/lyrics/parseLrc';
+import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 
 interface SongDetailModalProps {
   song: Song;
@@ -70,7 +75,10 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     return 'base';
   });
   const [copied, setCopied] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'lyrics' | 'markdown' | 'notes'>('lyrics');
+  const [activeTab, setActiveTab] = useState<'lyrics' | 'synced_lyrics' | 'markdown' | 'notes'>('lyrics');
+  const [syncedLines, setSyncedLines] = useState<SyncedLyricLine[]>([]);
+  const [lrcMetadata, setLrcMetadata] = useState<LrcMetadata>({});
+  const [, setCustomLrcText] = useState<string>('');
 
   const handleChordPositionChange = (pos: 'above' | 'inline') => {
     setChordPosition(pos);
@@ -92,7 +100,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   
   // Auto-scroll state for singing/playing
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
-  const [scrollSpeed, setScrollSpeed] = useState<number>(1);
+  const [scrollSpeed] = useState<number>(1);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollIntervalRef = useRef<number | null>(null);
@@ -108,7 +116,31 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     setIsAutoScrolling(false);
     setIsPlayingAudio(false);
     setIsExportingPdf(false);
-  }, [song.id]);
+    setCurrentTime(0);
+
+    // Initial parsing of synced lyrics
+    const sourceText = song.lrc || (isLrcContent(song.lyrics) ? song.lyrics : (song.id === 'si-me-pierdo' ? SAMPLE_LRC_TEXT : ''));
+    if (sourceText) {
+      const parsed = parseLrc(sourceText);
+      setSyncedLines(parsed.lines);
+      setLrcMetadata(parsed.metadata);
+      setCustomLrcText(sourceText);
+    } else {
+      setSyncedLines([]);
+      setLrcMetadata({});
+      setCustomLrcText('');
+    }
+  }, [song.id, song.lrc, song.lyrics]);
+
+  // Synthetic timer for rehearsals when audioUrl is not attached
+  useEffect(() => {
+    if (!song.audioUrl && isPlayingAudio) {
+      const interval = window.setInterval(() => {
+        setCurrentTime(t => t + 0.1);
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [song.audioUrl, isPlayingAudio]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -162,14 +194,30 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   const spotifyEmbed = getSpotifyEmbedUrl(song.spotifyUrl);
 
   const toggleAudio = () => {
-    if (!audioRef.current) return;
-    if (isPlayingAudio) {
-      audioRef.current.pause();
-      setIsPlayingAudio(false);
+    if (song.audioUrl && audioRef.current) {
+      if (isPlayingAudio) {
+        audioRef.current.pause();
+        setIsPlayingAudio(false);
+      } else {
+        audioRef.current.play().catch(e => console.warn(e));
+        setIsPlayingAudio(true);
+      }
     } else {
-      audioRef.current.play().catch(e => console.warn(e));
-      setIsPlayingAudio(true);
+      setIsPlayingAudio(prev => !prev);
     }
+  };
+
+  const handleSeek = (timeInSeconds: number) => {
+    setCurrentTime(timeInSeconds);
+    if (song.audioUrl && audioRef.current) {
+      audioRef.current.currentTime = timeInSeconds;
+    }
+  };
+
+  const handleUpdateSyncedLyrics = (newLines: SyncedLyricLine[], rawLrc: string, metadata?: LrcMetadata) => {
+    setSyncedLines(newLines);
+    setCustomLrcText(rawLrc);
+    if (metadata) setLrcMetadata(metadata);
   };
 
   const renderLyricsFormatted = (text: string) => {
@@ -634,6 +682,22 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
               Letra & Cifrado
             </button>
             <button
+              onClick={() => setActiveTab('synced_lyrics')}
+              className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'synced_lyrics'
+                  ? 'border-[var(--accent-primary)] text-[var(--accent-primary)] font-semibold'
+                  : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Letra Sincronizada (LRC)</span>
+              {syncedLines.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
+                  {syncedLines.length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setActiveTab('notes')}
               className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'notes'
@@ -825,6 +889,26 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
             }`}>
               {renderLyricsFormatted(displayedLyrics)}
             </div>
+          </div>
+        )}
+
+        {/* Tab: Synced Lyrics (LRC / WebVTT) */}
+        {activeTab === 'synced_lyrics' && (
+          <div className="p-4 sm:p-6 max-w-3xl mx-auto w-full">
+            <SyncedLyrics
+              lines={syncedLines}
+              currentTime={currentTime}
+              duration={duration}
+              isPlaying={isPlayingAudio}
+              onSeek={handleSeek}
+              onTogglePlay={toggleAudio}
+              metadata={lrcMetadata}
+              songTitle={song.title}
+              songArtist="Tony"
+              showChords={showChords}
+              fontSize={fontSize}
+              onUpdateLyrics={handleUpdateSyncedLyrics}
+            />
           </div>
         )}
 

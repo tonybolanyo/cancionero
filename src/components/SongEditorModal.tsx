@@ -13,7 +13,8 @@ import {
   Wand2,
   Music,
   Check,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import {
@@ -30,6 +31,8 @@ import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
+import { parseLrc } from '../lib/lyrics/parseLrc';
+import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -63,6 +66,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [audioUrl, setAudioUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [lyrics, setLyrics] = useState('');
+  const [lrc, setLrc] = useState('');
+  const [showLrcEditor, setShowLrcEditor] = useState<boolean>(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
@@ -128,6 +133,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setNotes(song.notes || '');
       setTags(song.tags || []);
       setLyrics(song.lyrics);
+      setLrc(song.lrc || '');
+      setShowLrcEditor(Boolean(song.lrc));
       setRawMarkdown(songToMarkdown(song));
       setTransposeOffset(0);
       setTransposeFeedback(null);
@@ -149,6 +156,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setSoundcloudUrl('');
       setAudioUrl('');
       setNotes('');
+      setLrc('');
+      setShowLrcEditor(false);
       setTags(['acústico']);
       setLyrics(`## Estrofa 1\n[Am] Escribe el primer verso aquí\n[G] Segundo verso con acordes\n\n## Estribillo\n[F] Y aquí va el estribillo...`);
       
@@ -191,6 +200,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       notes: notes || undefined,
       tags: tags.length > 0 ? tags : undefined,
       lyrics,
+      lrc: lrc || undefined,
       createdAt: song?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -217,6 +227,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setNotes(parsed.notes || '');
       setTags(parsed.tags || []);
       setLyrics(parsed.lyrics);
+      setLrc(parsed.lrc || '');
+      setShowLrcEditor(Boolean(parsed.lrc));
       setParseError(null);
       setMode('form');
     } catch (e: any) {
@@ -377,6 +389,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         notes: notes.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
         lyrics: lyrics.trim(),
+        lrc: lrc.trim() || undefined,
         createdAt: song?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -993,6 +1006,69 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                   placeholder="## Estrofa 1&#10;[Am] Caminando por la calle...&#10;&#10;## Estribillo&#10;[C] Y en estas noches..."
                   className="w-full p-4 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] leading-relaxed resize-y shadow-sm"
                 />
+
+                {/* Sub-section: Letra sincronizada LRC */}
+                <div className="pt-2">
+                  <div className="flex items-center justify-between pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLrcEditor(!showLrcEditor)}
+                      className="flex items-center gap-2 text-xs font-semibold text-[var(--accent-primary)] hover:underline cursor-pointer"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>
+                        {showLrcEditor
+                          ? 'Ocultar editor de letra sincronizada (LRC)'
+                          : lrc
+                          ? 'Editar letra sincronizada (LRC) [Activa]'
+                          : '+ Añadir letra sincronizada (LRC con marcas de tiempo)'}
+                      </span>
+                    </button>
+                    {lrc && (
+                      <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                        {parseLrc(lrc).lines.length} líneas sincronizadas
+                      </span>
+                    )}
+                  </div>
+
+                  {showLrcEditor && (
+                    <div className="p-3.5 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2.5 animate-fadeIn">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-[11px] text-[var(--text-muted)]">
+                          Marcas de tiempo en formato <code>[mm:ss.xx] Letra</code> para teleprompter y karaoke:
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {!lrc && (
+                            <button
+                              type="button"
+                              onClick={() => setLrc(SAMPLE_LRC_TEXT)}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                            >
+                              Cargar ejemplo LRC
+                            </button>
+                          )}
+                          {lrc && (
+                            <button
+                              type="button"
+                              onClick={() => setLrc('')}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            >
+                              Limpiar LRC
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <textarea
+                        value={lrc}
+                        onChange={(e) => setLrc(e.target.value)}
+                        rows={7}
+                        placeholder={`[ti:${title || 'Mi Canción'}]\n[ar:Tony]\n[00:04.20] [Am] Primer verso sincronizado\n[00:09.50] [Dm] Segundo verso`}
+                        className="w-full p-3 bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] leading-relaxed resize-y shadow-sm"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Git Commit & Push on Save Options */}
