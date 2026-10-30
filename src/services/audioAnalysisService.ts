@@ -1,22 +1,8 @@
 import { AudioAnalysisResult, analyzeAudioWithWebAudio } from '../utils/webAudioAnalyzer';
+import { fileToBase64Payload } from '../lib/audio/fileEncoding';
 
 export interface AnalysisProgressCallback {
   (stage: 'reading' | 'ai_analysis' | 'dsp_analysis' | 'complete', message: string): void;
-}
-
-/**
- * Converts a browser File to base64 string
- */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result);
-    };
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
-  });
 }
 
 export class AudioAnalysisService {
@@ -48,8 +34,7 @@ export class AudioAnalysisService {
       try {
         onProgress?.('ai_analysis', 'Consultando modelo de Inteligencia Artificial (tempo, escala, acordes)...');
 
-        const base64Data = await fileToBase64(file);
-        const cleanBase64 = base64Data.split(',')[1] || base64Data;
+        const cleanBase64 = await fileToBase64Payload(file);
 
         const response = await fetch('/api/analyze-audio', {
           method: 'POST',
