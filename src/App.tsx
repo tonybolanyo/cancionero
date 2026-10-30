@@ -14,6 +14,7 @@ import { SongEditorModal } from './components/SongEditorModal';
 import { GitSyncModal } from './components/GitSyncModal';
 import { AboutModal } from './components/AboutModal';
 import { GitHubAuthModal } from './components/GitHubAuthModal';
+import { Footer } from './components/Footer';
 import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
 import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
@@ -22,8 +23,7 @@ import { GitNotificationToast, ToastData } from './components/GitNotificationToa
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
-import { siteMetadata } from './utils/siteConfig';
+import { Music2, BarChart3 } from 'lucide-react';
 
 function CancioneroApp() {
   const { isAuthor, token, user } = useAuth();
@@ -669,59 +669,13 @@ function CancioneroApp() {
       </main>
 
       {/* Editorial Footer */}
-      <footer className="mt-auto border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] py-10 transition-colors duration-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-[var(--text-muted)]">
-          <div>
-            <p className="font-serif text-[var(--text-primary)] font-semibold mb-1">
-              {siteMetadata.name}
-            </p>
-            <p className="text-[var(--text-muted)] max-w-xl">
-              {siteMetadata.description}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => handleNavSelect('dashboard')}
-              className="flex items-center gap-1.5 hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
-            >
-              <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-              <span>Dashboard & Estadísticas</span>
-            </button>
-
-            {isAuthor ? (
-              <button
-                onClick={() => setIsGitModalOpen(true)}
-                className="flex items-center gap-1.5 hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
-              >
-                <FolderGit2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                <span>Sincronizar con Git</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="flex items-center gap-1.5 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Acceso Autor (GitHub)</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setIsAboutOpen(true)}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Manifiesto
-            </button>
-            <a
-              href="mailto:tony@tonygb.com"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              Contacto de Autor
-            </a>
-          </div>
-        </div>
-      </footer>
+      <Footer
+        isAuthor={isAuthor}
+        onDashboardClick={() => handleNavSelect('dashboard')}
+        onGitSyncClick={() => setIsGitModalOpen(true)}
+        onAuthClick={() => setIsAuthModalOpen(true)}
+        onAboutClick={() => setIsAboutOpen(true)}
+      />
 
       {/* Modals */}
       {selectedSong && (
