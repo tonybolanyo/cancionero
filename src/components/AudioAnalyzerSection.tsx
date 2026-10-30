@@ -69,6 +69,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [analysisResult, setAnalysisResult] = useState<AudioAnalysisResult | null>(null);
   const [applied, setApplied] = useState<boolean>(false);
+  const [appliedTempo, setAppliedTempo] = useState<boolean>(false);
+  const [appliedKey, setAppliedKey] = useState<boolean>(false);
+  const [appliedMeter, setAppliedMeter] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Dedicated Tempo (web-audio-beat-detector) states
@@ -280,6 +283,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const handleFileSelected = (selectedFile: File) => {
     setError(null);
     setApplied(false);
+    setAppliedTempo(false);
+    setAppliedKey(false);
+    setAppliedMeter(false);
     setAnalysisResult(null);
     setTempoAnalysis(null);
     setTempoError(null);
@@ -371,8 +377,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis.offset
     });
-    setApplied(true);
-    setTimeout(() => setApplied(false), 2500);
+    setAppliedTempo(true);
+    setTimeout(() => setAppliedTempo(false), 2500);
   };
 
   const handleApplyOnlyMeter = () => {
@@ -388,8 +394,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
       chords: keyAnalysis?.chords || undefined
     });
-    setApplied(true);
-    setTimeout(() => setApplied(false), 2500);
+    setAppliedMeter(true);
+    setTimeout(() => setAppliedMeter(false), 2500);
   };
 
   const getChordProgressionSummary = (): string | undefined => {
@@ -421,8 +427,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
       chords: keyAnalysis?.chords || undefined
     });
-    setApplied(true);
-    setTimeout(() => setApplied(false), 2500);
+    setAppliedKey(true);
+    setTimeout(() => setAppliedKey(false), 2500);
   };
 
   const handleApplyAll = () => {
@@ -792,10 +798,21 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 <button
                   type="button"
                   onClick={handleApplyOnlyTempo}
-                  className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                    appliedTempo
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
+                  }`}
                   title="Usar este BPM en el formulario"
                 >
-                  Usar BPM
+                  {appliedTempo ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>¡Aplicado!</span>
+                    </>
+                  ) : (
+                    <span>Usar BPM</span>
+                  )}
                 </button>
               </div>
 
@@ -904,10 +921,21 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyOnlyMeter}
-                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                      appliedMeter
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
+                    }`}
                     title="Usar este compás en el formulario de la canción"
                   >
-                    Usar Compás
+                    {appliedMeter ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>¡Aplicado!</span>
+                      </>
+                    ) : (
+                      <span>Usar Compás</span>
+                    )}
                   </button>
                 </div>
 
@@ -1040,10 +1068,21 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyOnlyKey}
-                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)] transition-colors cursor-pointer"
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                      appliedKey
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
+                    }`}
                     title="Usar esta tonalidad en el formulario"
                   >
-                    Usar Tono
+                    {appliedKey ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>¡Aplicado!</span>
+                      </>
+                    ) : (
+                      <span>Usar Tono</span>
+                    )}
                   </button>
                 </div>
 
