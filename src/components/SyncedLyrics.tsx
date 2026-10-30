@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Play,
   Pause,
@@ -10,14 +10,23 @@ import {
   Music,
   Check,
   AlertCircle,
-  Copy
+  Copy,
+  Mic,
+  Cpu,
+  Cloud,
+  PencilLine,
+  Save,
+  LoaderCircle,
+  Info
 } from 'lucide-react';
 import { LrcMetadata, SyncedLyricLine, formatLrcTimestamp, downloadFile } from '../types/lyrics';
-import { parseLrc, createLrcBlob } from '../lib/lyrics/parseLrc';
+import { parseLrc, createLrcBlob, serializeToLrc } from '../lib/lyrics/parseLrc';
 import { createVttBlob } from '../lib/lyrics/toVtt';
 import { useSyncedLyrics } from '../hooks/useSyncedLyrics';
 import { parseLyricLine } from '../utils/markdownParser';
 import { LrcSyncAssistant } from './LrcSyncAssistant';
+import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
+import { LocalTranscriptionSupport, LyricsTranscriptionResult } from '../types/transcription';
 
 export interface SyncedLyricsProps {
   lines: SyncedLyricLine[];
@@ -62,6 +71,16 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
   const [importError, setImportError] = useState<string | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<'lrc' | 'vtt' | null>(null);
   const [copiedRaw, setCopiedRaw] = useState<boolean>(false);
+  const [transcriptionMode, setTranscriptionMode] = useState<'manual' | 'local' | 'backend'>('manual');
+  const [transcriptionFile, setTranscriptionFile] = useState<File | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
+  const [backendConsent, setBackendConsent] = useState<boolean>(false);
+  const [allowWasmFallback, setAllowWasmFallback] = useState<boolean>(false);
+  const [localSupport, setLocalSupport] = useState<LocalTranscriptionSupport | null>(null);
+  const [editableLines, setEditableLines] = useState<SyncedLyricLine[]>(lines);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
 
   const { activeIndex, lineProgress } = useSyncedLyrics({
     lines,
@@ -70,6 +89,34 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
     scrollContainerRef: containerRef,
     scrollOffsetFraction: 0.38
   });
+
+  useEffect(() => {
+    setEditableLines(lines);
+  }, [lines]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSupport = async () => {
+      try {
+        const support = await LyricsTranscriptionService.getLocalSupport();
+        if (!cancelled) {
+          setLocalSupport(support);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLocalSupport({
+            hasWebGpu: false,
+            canRunLocal: false,
+            reason: err instanceof Error ? err.message : 'No fue posible inicializar capacidades locales.'
+          });
+        }
+      }
+    };
+    void loadSupport();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLineClick = (lineTime: number) => {
     if (onSeek) {
@@ -147,10 +194,132 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
 
   const handleCopyRawLrc = () => {
     if (lines.length === 0) return;
-    const lrcText = lines.map(l => `[${formatLrcTimestamp(l.time)}] ${l.text}`).join('\n');
+    const lrcText = serializeToLrc(lines, metadata);
     navigator.clipboard.writeText(lrcText);
     setCopiedRaw(true);
     setTimeout(() => setCopiedRaw(false), 2000);
+  };
+
+  const handleTranscriptionFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.files?.[0] || null;
+    setTranscriptionFile(next);
+    setTranscriptionError(null);
+    setTranscriptionNotice(null);
+    event.target.value = '';
+  };
+
+  const applyTranscriptionResult = (result: LyricsTranscriptionResult) => {
+    if (!onUpdateLyrics) return;
+    const lrcMetadata: LrcMetadata = {
+      ...metadata,
+      title: metadata?.title || songTitle,
+      artist: metadata?.artist || songArtist,
+      by:
+        result.engine === 'local_whisper'
+          ? `Cancionero ASR local (${result.model || 'Whisper'})`
+          : 'Cancionero ASR backend'
+    };
+    const lrcText = serializeToLrc(result.lines, lrcMetadata);
+    onUpdateLyrics(result.lines, lrcText, lrcMetadata);
+  };
+
+  const handleLocalTranscription = async () => {
+    if (!onUpdateLyrics) return;
+    if (!transcriptionFile) {
+      setTranscriptionError('Primero selecciona un archivo de audio local (.mp3 o .wav).');
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError(null);
+    setTranscriptionNotice(null);
+    try {
+      const result = await LyricsTranscriptionService.transcribeLocalFromFile(transcriptionFile, {
+        allowWasmFallback,
+        language: 'spanish'
+      });
+      if (result.lines.length === 0) {
+        throw new Error('No se detectó letra cantada utilizable para generar líneas sincronizadas.');
+      }
+      applyTranscriptionResult(result);
+      setTranscriptionNotice(
+        result.device === 'webgpu'
+          ? 'Transcripción local completada con WebGPU.'
+          : 'Transcripción local completada en WASM (modo lento).'
+      );
+      setIsEditing(true);
+      setTranscriptionMode('manual');
+    } catch (err) {
+      setTranscriptionError(err instanceof Error ? err.message : 'Falló la transcripción local.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleBackendTranscription = async () => {
+    if (!onUpdateLyrics) return;
+    if (!transcriptionFile) {
+      setTranscriptionError('Primero selecciona un archivo de audio local (.mp3 o .wav).');
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError(null);
+    setTranscriptionNotice(null);
+    try {
+      const result = await LyricsTranscriptionService.transcribeWithBackendFromFile(transcriptionFile, backendConsent);
+      if (result.lines.length === 0) {
+        throw new Error('El backend no devolvió segmentos temporales utilizables.');
+      }
+      applyTranscriptionResult(result);
+      setTranscriptionNotice('Transcripción backend aplicada. Revisa y corrige antes de guardar.');
+      setIsEditing(true);
+      setTranscriptionMode('manual');
+    } catch (err) {
+      setTranscriptionError(err instanceof Error ? err.message : 'Falló la transcripción por backend.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleEditableLineChange = (
+    lineId: string,
+    field: 'text' | 'time',
+    value: string
+  ) => {
+    setEditableLines((previous) =>
+      previous.map((line) => {
+        if (line.id !== lineId) return line;
+        if (field === 'text') {
+          return { ...line, text: value };
+        }
+        const parsedTime = Number(value);
+        return {
+          ...line,
+          time: Number.isFinite(parsedTime) ? Math.max(0, parsedTime) : line.time
+        };
+      })
+    );
+  };
+
+  const handleApplyLineEdits = () => {
+    if (!onUpdateLyrics) return;
+    const sorted = [...editableLines]
+      .map((line) => ({
+        ...line,
+        text: line.text.trim(),
+        time: Number(Math.max(0, line.time).toFixed(2))
+      }))
+      .filter((line) => line.text.length > 0)
+      .sort((a, b) => a.time - b.time);
+
+    const lrcText = serializeToLrc(sorted, metadata);
+    onUpdateLyrics(sorted, lrcText, metadata);
+    if (onSaveToSong) {
+      onSaveToSong(sorted, lrcText);
+    }
+    setTranscriptionNotice('Edición aplicada a la letra sincronizada.');
+    setIsEditing(false);
   };
 
   const renderLineTextWithChords = (text: string, isCurrent: boolean) => {
@@ -312,6 +481,175 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
           />
         </div>
       </div>
+
+      {/* Section: Lyrics Transcription */}
+      {onUpdateLyrics && (
+        <div className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:px-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+              <Mic className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <span>Transcripción de letra</span>
+            </h4>
+            <button
+              onClick={() => setIsEditing((prev) => !prev)}
+              className="px-2 py-1 rounded-md border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)] cursor-pointer flex items-center gap-1"
+              title="Editar texto y tiempos de cada línea"
+            >
+              <PencilLine className="w-3 h-3" />
+              <span>{isEditing ? 'Cerrar editor' : 'Editar líneas'}</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setTranscriptionMode('manual')}
+              className={`px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer ${
+                transcriptionMode === 'manual'
+                  ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                  : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+              }`}
+            >
+              <Upload className="w-3.5 h-3.5 inline mr-1" />
+              Cargar LRC manual
+            </button>
+            <button
+              onClick={() => setTranscriptionMode('local')}
+              className={`px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer ${
+                transcriptionMode === 'local'
+                  ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                  : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5 inline mr-1" />
+              Transcribir local
+            </button>
+            <button
+              onClick={() => setTranscriptionMode('backend')}
+              className={`px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer ${
+                transcriptionMode === 'backend'
+                  ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                  : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+              }`}
+            >
+              <Cloud className="w-3.5 h-3.5 inline mr-1" />
+              Backend opcional
+            </button>
+          </div>
+
+          {transcriptionMode !== 'manual' && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <label className="px-2 py-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] cursor-pointer text-[var(--text-secondary)]">
+                  <input
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.m4a"
+                    onChange={handleTranscriptionFileChange}
+                    className="hidden"
+                  />
+                  Seleccionar audio para transcribir
+                </label>
+                <span className="text-[var(--text-muted)]">
+                  {transcriptionFile ? transcriptionFile.name : 'Sin archivo seleccionado'}
+                </span>
+              </div>
+
+              {transcriptionMode === 'local' && (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-1.5 text-[11px] text-[var(--text-muted)]">
+                    <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      Modelo local Whisper ({localSupport?.hasWebGpu ? 'WebGPU disponible' : 'sin WebGPU'}). Sin WebGPU, se recomienda cargar LRC manual o usar backend con consentimiento.
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={allowWasmFallback}
+                      onChange={(event) => setAllowWasmFallback(event.target.checked)}
+                    />
+                    <span>Permitir fallback WASM (más lento, útil para clips cortos).</span>
+                  </label>
+                  <button
+                    onClick={handleLocalTranscription}
+                    disabled={isTranscribing || !transcriptionFile}
+                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isTranscribing ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
+                    <span>{isTranscribing ? 'Transcribiendo...' : 'Iniciar transcripción local'}</span>
+                  </button>
+                </div>
+              )}
+
+              {transcriptionMode === 'backend' && (
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-[11px] text-[var(--text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={backendConsent}
+                      onChange={(event) => setBackendConsent(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Acepto enviar este audio al backend para transcripción externa. Sin este consentimiento explícito no se enviará nada.
+                    </span>
+                  </label>
+                  <button
+                    onClick={handleBackendTranscription}
+                    disabled={isTranscribing || !backendConsent || !transcriptionFile}
+                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isTranscribing ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+                    <span>{isTranscribing ? 'Transcribiendo...' : 'Transcribir vía backend'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {transcriptionError && (
+            <div className="text-[11px] text-red-500 bg-red-500/10 border border-red-500/20 rounded-md px-2.5 py-1.5">
+              {transcriptionError}
+            </div>
+          )}
+          {transcriptionNotice && (
+            <div className="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2.5 py-1.5">
+              {transcriptionNotice}
+            </div>
+          )}
+
+          {isEditing && editableLines.length > 0 && (
+            <div className="border border-[var(--border-subtle)] rounded-lg p-2.5 bg-[var(--bg-surface-subtle)] space-y-2">
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                {editableLines.map((line) => (
+                  <div key={line.id} className="grid grid-cols-[96px_1fr] gap-2 items-center">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={line.time}
+                      onChange={(event) => handleEditableLineChange(line.id, 'time', event.target.value)}
+                      className="px-2 py-1 rounded border border-[var(--border-subtle)] bg-[var(--bg-input)] text-xs font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={line.text}
+                      onChange={(event) => handleEditableLineChange(line.id, 'text', event.target.value)}
+                      className="px-2 py-1 rounded border border-[var(--border-subtle)] bg-[var(--bg-input)] text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleApplyLineEdits}
+                className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Aplicar edición de texto y tiempos</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Lines Container */}
       <div

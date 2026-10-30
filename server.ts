@@ -34,6 +34,114 @@ async function startServer() {
           error: 'GEMINI_API_KEY no configurada en variables de entorno del servidor.',
           needsApiKey: true
         });
+
+        // API Endpoint: Lyrics transcription (optional backend mode with explicit user consent in UI)
+        app.post('/api/transcribe-lyrics', async (req, res) => {
+          try {
+            const { audioBase64, mimeType, filename } = req.body;
+            if (!audioBase64) {
+              return res.status(400).json({ success: false, error: 'No se recibieron datos de audio.' });
+            }
+
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) {
+              return res.status(503).json({
+                success: false,
+                error: 'GEMINI_API_KEY no configurada en variables de entorno del servidor.',
+                needsApiKey: true
+              });
+            }
+
+            const ai = new GoogleGenAI({
+              apiKey,
+              httpOptions: {
+                headers: {
+                  'User-Agent': 'aistudio-build'
+                }
+              }
+            });
+
+            const cleanData = audioBase64.replace(/^data:[^;]+;base64,/, '');
+            const validMime = mimeType?.includes('wav') ? 'audio/wav' : 'audio/mpeg';
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-3.8-flash',
+              contents: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: validMime,
+                      data: cleanData
+                    }
+                  },
+                  {
+                    text: `Transcribe la letra cantada del audio (${filename || 'canción'}) en idioma original.
+Devuelve SOLO JSON con esta estructura:
+{
+        "text": "transcripción completa",
+        "segments": [
+          { "start": 0.0, "end": 3.2, "text": "línea o frase" }
+        ]
+}
+Reglas:
+- start y end en segundos (número decimal).
+- Mantén orden temporal.
+- Omite texto dudoso en lugar de inventarlo.
+- Si no hay voz cantada comprensible, devuelve text vacío y segments vacío.`
+                  }
+                ]
+              },
+              config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    text: { type: Type.STRING },
+                    segments: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          start: { type: Type.NUMBER },
+                          end: { type: Type.NUMBER },
+                          text: { type: Type.STRING }
+                        },
+                        required: ['start', 'end', 'text']
+                      }
+                    }
+                  },
+                  required: ['text', 'segments']
+                }
+              }
+            });
+
+            const parsed = JSON.parse(response.text || '{}');
+            const segments = Array.isArray(parsed.segments)
+              ? parsed.segments
+                  .map((segment: { start?: number; end?: number; text?: string }) => ({
+                    start: Number.isFinite(segment.start) ? Math.max(0, Number(segment.start)) : 0,
+                    end: Number.isFinite(segment.end) ? Math.max(0, Number(segment.end)) : 0,
+                    text: String(segment.text || '').trim()
+                  }))
+                  .filter((segment: { text: string }) => segment.text.length > 0)
+              : [];
+
+            return res.json({
+              success: true,
+              source: 'gemini_ai',
+              transcription: {
+                text: String(parsed.text || '').trim(),
+                segments
+              }
+            });
+          } catch (err: any) {
+            console.warn('Lyrics transcription API warning:', err.message || err);
+            return res.status(200).json({
+              success: false,
+              error: err.message || 'Error procesando la transcripción con el modelo IA.'
+            });
+          }
+        });
       }
 
       const ai = new GoogleGenAI({

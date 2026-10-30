@@ -300,3 +300,19 @@ Eso convierte el audio en una fuente de datos útil no solo para escuchar, sino 
 La extracción de información de audio desde un archivo MP3 no es solo “leer un mp3”. En realidad, es un proceso de conversión de audio comprimido a señales analizables, y después de ese paso se pueden inferir atributos musicales relevantes para la creatividad y el análisis.
 
 En este proyecto, la combinación entre IA y DSP permite obtener una primera capa de comprensión musical de forma bastante práctica, mientras que el abanico de posibilidades futuras es mucho más amplio si se desea profundizar en análisis más complejos.
+
+---
+
+## 9. Transcripción de letra (modo incremental)
+
+El flujo de letra sincronizada incorpora tres caminos compatibles con la arquitectura actual:
+
+1. **Carga manual de LRC** (modo principal recomendado en PWA estática): máxima estabilidad y control editorial.
+2. **Transcripción local en navegador** con Whisper vía Web Worker (`?worker`) y aceleración WebGPU cuando esté disponible.
+3. **Transcripción por backend opcional**, solo bajo consentimiento explícito del usuario antes de enviar audio fuera del dispositivo.
+
+Límites reales en voz cantada:
+
+- la precisión cae con reverberación, coros, doblajes vocales o mezcla instrumental densa;
+- las marcas temporales son aproximadas y deben revisarse manualmente;
+- sin WebGPU la experiencia local puede degradarse de forma importante (latencia y consumo de memoria).
