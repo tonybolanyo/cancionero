@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Save,
@@ -33,6 +33,7 @@ import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
 import { parseLrc } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
+import { LrcSyncAssistant } from './LrcSyncAssistant';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -68,6 +69,10 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [lyrics, setLyrics] = useState('');
   const [lrc, setLrc] = useState('');
   const [showLrcEditor, setShowLrcEditor] = useState<boolean>(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
+  const [assistantCurrentTime, setAssistantCurrentTime] = useState<number>(0);
+  const [assistantIsPlaying, setAssistantIsPlaying] = useState<boolean>(false);
+  const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
@@ -179,6 +184,36 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setRawMarkdown(songToMarkdown(draftSong));
     }
   }, [song, isOpen]);
+
+  useEffect(() => {
+    if (!audioUrl && assistantIsPlaying) {
+      const interval = window.setInterval(() => {
+        setAssistantCurrentTime(t => t + 0.1);
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [audioUrl, assistantIsPlaying]);
+
+  const toggleAssistantAudio = () => {
+    if (audioUrl && assistantAudioRef.current) {
+      if (assistantIsPlaying) {
+        assistantAudioRef.current.pause();
+        setAssistantIsPlaying(false);
+      } else {
+        assistantAudioRef.current.play().catch(e => console.warn(e));
+        setAssistantIsPlaying(true);
+      }
+    } else {
+      setAssistantIsPlaying(prev => !prev);
+    }
+  };
+
+  const handleAssistantSeek = (timeInSeconds: number) => {
+    setAssistantCurrentTime(timeInSeconds);
+    if (audioUrl && assistantAudioRef.current) {
+      assistantAudioRef.current.currentTime = timeInSeconds;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -1038,6 +1073,15 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                           Marcas de tiempo en formato <code>[mm:ss.xx] Letra</code> para teleprompter y karaoke:
                         </span>
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsAssistantOpen(true)}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Grabar marcas de tiempo en vivo pulsando la barra espaciadora"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>Grabar en vivo [Espacio]</span>
+                          </button>
                           {!lrc && (
                             <button
                               type="button"
@@ -1163,6 +1207,34 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
           </div>
         </div>
       </div>
+
+      {audioUrl && (
+        <audio
+          ref={assistantAudioRef}
+          src={audioUrl}
+          onTimeUpdate={() => assistantAudioRef.current && setAssistantCurrentTime(assistantAudioRef.current.currentTime)}
+          onEnded={() => setAssistantIsPlaying(false)}
+          className="hidden"
+        />
+      )}
+
+      {/* Interactive Tap-to-Sync Assistant Modal inside Editor */}
+      <LrcSyncAssistant
+        isOpen={isAssistantOpen}
+        onClose={() => setIsAssistantOpen(false)}
+        rawLyrics={lyrics}
+        existingLines={lrc ? parseLrc(lrc).lines : undefined}
+        currentTime={assistantCurrentTime}
+        isPlaying={assistantIsPlaying}
+        onSeek={handleAssistantSeek}
+        onTogglePlay={toggleAssistantAudio}
+        songTitle={title || 'Nueva Canción'}
+        songArtist="Tony"
+        onSaveSyncedLyrics={(_newLines, rawLrc) => {
+          setLrc(rawLrc);
+          setShowLrcEditor(true);
+        }}
+      />
     </div>
   );
 };

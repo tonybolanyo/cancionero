@@ -732,6 +732,7 @@ function CancioneroApp() {
             setSelectedSong(null);
             handleEditSong(song);
           }}
+          onSaveSong={handleSaveSong}
           onDownloadMd={handleDownloadMd}
           isAuthor={isAuthor}
           onViewHistory={handleViewHistory}

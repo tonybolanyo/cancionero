@@ -17,6 +17,7 @@ import { parseLrc, createLrcBlob } from '../lib/lyrics/parseLrc';
 import { createVttBlob } from '../lib/lyrics/toVtt';
 import { useSyncedLyrics } from '../hooks/useSyncedLyrics';
 import { parseLyricLine } from '../utils/markdownParser';
+import { LrcSyncAssistant } from './LrcSyncAssistant';
 
 export interface SyncedLyricsProps {
   lines: SyncedLyricLine[];
@@ -30,7 +31,9 @@ export interface SyncedLyricsProps {
   songArtist?: string;
   showChords?: boolean;
   fontSize?: 'sm' | 'base' | 'lg';
+  rawLyrics?: string;
   onUpdateLyrics?: (newLines: SyncedLyricLine[], rawLrc: string, metadata?: LrcMetadata) => void;
+  onSaveToSong?: (newLines: SyncedLyricLine[], rawLrc: string) => void;
 }
 
 export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
@@ -45,13 +48,16 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
   songArtist,
   showChords = true,
   fontSize = 'base',
-  onUpdateLyrics
+  rawLyrics,
+  onUpdateLyrics,
+  onSaveToSong
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
   const [pasteText, setPasteText] = useState<string>('');
   const [importError, setImportError] = useState<string | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<'lrc' | 'vtt' | null>(null);
@@ -221,6 +227,16 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Tap-to-sync Live Assistant */}
+          <button
+            onClick={() => setIsAssistantOpen(true)}
+            className="px-2.5 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+            title="Abrir Asistente para estampar marcas de tiempo en vivo pulsando la barra espaciadora"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Grabar Marcas [Espacio]</span>
+          </button>
+
           {/* Auto-scroll toggle */}
           <button
             onClick={() => setAutoScroll(!autoScroll)}
@@ -315,17 +331,24 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
               Puedes cargar un archivo .LRC o pegar marcas de tiempo en formato [mm:ss.xx] para seguir la letra en tiempo real sobre el reproductor.
             </p>
             {onUpdateLyrics && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => setIsAssistantOpen(true)}
+                  className="px-4 py-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Grabar Marcas en Vivo (Tap-to-Sync)</span>
+                </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-medium rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] text-[var(--text-secondary)] text-xs font-medium rounded-lg shadow-2xs cursor-pointer transition-colors flex items-center gap-1.5"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Subir archivo .LRC</span>
+                  <span>Subir .LRC</span>
                 </button>
                 <button
                   onClick={() => setIsImportModalOpen(true)}
-                  className="px-4 py-2 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] text-[var(--text-secondary)] text-xs font-medium rounded-lg cursor-pointer transition-colors"
+                  className="px-3.5 py-2 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] text-[var(--text-secondary)] text-xs font-medium rounded-lg cursor-pointer transition-colors"
                 >
                   Pegar texto
                 </button>
@@ -458,6 +481,30 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Interactive Tap-to-Sync Assistant Modal */}
+      <LrcSyncAssistant
+        isOpen={isAssistantOpen}
+        onClose={() => setIsAssistantOpen(false)}
+        rawLyrics={rawLyrics || lines.map(l => l.text).join('\n')}
+        existingLines={lines.length > 0 ? lines : undefined}
+        currentTime={currentTime}
+        duration={duration}
+        isPlaying={isPlaying}
+        onSeek={onSeek || (() => {})}
+        onTogglePlay={onTogglePlay || (() => {})}
+        songTitle={songTitle || 'Canción'}
+        songArtist={songArtist}
+        metadata={metadata}
+        onSaveSyncedLyrics={(newLines, rawLrc) => {
+          if (onUpdateLyrics) {
+            onUpdateLyrics(newLines, rawLrc, metadata);
+          }
+          if (onSaveToSong) {
+            onSaveToSong(newLines, rawLrc);
+          }
+        }}
+      />
     </div>
   );
 };

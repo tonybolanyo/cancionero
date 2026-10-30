@@ -33,6 +33,7 @@ import { SyncedLyrics } from './SyncedLyrics';
 import { SyncedLyricLine, LrcMetadata } from '../types/lyrics';
 import { parseLrc, isLrcContent } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
+import { StorageService } from '../services/storageService';
 
 interface SongDetailModalProps {
   song: Song;
@@ -40,6 +41,7 @@ interface SongDetailModalProps {
   onEdit: (song: Song) => void;
   onDownloadMd: (song: Song) => void;
   isAuthor: boolean;
+  onSaveSong?: (song: Song) => void;
   onViewHistory?: (song: Song) => void;
   onRenameFile?: (song: Song) => void;
 }
@@ -50,6 +52,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   onEdit,
   onDownloadMd,
   isAuthor,
+  onSaveSong,
   onViewHistory,
   onRenameFile
 }) => {
@@ -218,6 +221,26 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     setSyncedLines(newLines);
     setCustomLrcText(rawLrc);
     if (metadata) setLrcMetadata(metadata);
+  };
+
+  const handleSaveSyncedLyricsToSong = (newLines: SyncedLyricLine[], rawLrc: string) => {
+    setSyncedLines(newLines);
+    setCustomLrcText(rawLrc);
+
+    const updatedSong: Song = {
+      ...song,
+      lrc: rawLrc,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      StorageService.upsertSong(updatedSong);
+      if (onSaveSong) {
+        onSaveSong(updatedSong);
+      }
+    } catch (err) {
+      console.warn('Error guardando letra sincronizada en storage local:', err);
+    }
   };
 
   const renderLyricsFormatted = (text: string) => {
@@ -907,7 +930,9 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
               songArtist="Tony"
               showChords={showChords}
               fontSize={fontSize}
+              rawLyrics={song.lyrics}
               onUpdateLyrics={handleUpdateSyncedLyrics}
+              onSaveToSong={handleSaveSyncedLyricsToSong}
             />
           </div>
         )}

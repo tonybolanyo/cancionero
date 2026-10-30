@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 /**
  * Hook para inyectar Google Analytics en React
@@ -27,7 +27,7 @@ export function useGoogleAnalytics() {
 
     // Configurar Google Analytics
     window.dataLayer = window.dataLayer || [];
-    function gtag(...args) {
+    function gtag(..._args: any[]) {
       window.dataLayer.push(arguments);
     }
     gtag('js', new Date());
@@ -50,7 +50,7 @@ export function useGoogleAnalytics() {
  *   trackEvent('song_played', { song_id: '123', artist: 'John Doe' });
  */
 export function useGAEvent() {
-  return (eventName, eventData = {}) => {
+  return (eventName: string, eventData: Record<string, any> = {}) => {
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', eventName, eventData);
       console.debug(`[GA Event] ${eventName}`, eventData);
@@ -83,27 +83,16 @@ export function usePageView(path = '') {
 
 /**
  * Componente wrapper para inyectar Google Analytics globalmente
- * 
- * Uso en App.tsx:
- *   import { GoogleAnalyticsProvider } from './hooks/useGoogleAnalytics';
- *   
- *   export default function App() {
- *     return (
- *       <GoogleAnalyticsProvider>
- *         <YourApp />
- *       </GoogleAnalyticsProvider>
- *     );
- *   }
  */
-export function GoogleAnalyticsProvider({ children }) {
+export function GoogleAnalyticsProvider({ children }: { children: React.ReactNode }) {
   useGoogleAnalytics();
-  return children;
+  return children as any;
 }
 
 // Declaración de tipos para TypeScript
 declare global {
   interface Window {
-    gtag: (...args) => void;
+    gtag: (...args: any[]) => void;
     dataLayer: any[];
   }
 }
