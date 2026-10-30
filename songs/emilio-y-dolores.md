@@ -2,7 +2,7 @@
 id: "emilio-y-dolores"
 title: "Emilio y Dolores"
 status: "published"
-year: 2026
+year: 2025
 genre: "Canción de Autor"
 key: "Gm"
 tempo: 102
@@ -13,7 +13,7 @@ audioUrl: "blob:https://tonygb.com/a1dddb5f-7513-4076-a010-dc36dd1c491c"
 notes: "Progresión armónica detectada: Fm - A#m - Fm - C# - A#m - Fm - C - Fm (offset 1er beat: 0.554s)"
 tags: ["acústico"]
 createdAt: "2026-10-29T20:02:24.766Z"
-updatedAt: "2026-10-29T20:02:24.766Z"
+updatedAt: "2026-10-30T16:47:49.437Z"
 ---
 ## Intro
 
