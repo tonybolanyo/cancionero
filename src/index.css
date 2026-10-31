@@ -3,16 +3,52 @@
 :root {
   /* =========================================================================
      CANCIONERO DESIGN SYSTEM - CSS VARIABLES
-     Todas las fuentes, colores y superficies están centralizadas aquí.
+     Todas las fuentes, colores, espaciamientos, sombras y componentes están
+     centralizados aquí para facilitar cambios entre tema claro y oscuro.
      Modifica estos valores para cambiar la estética global de la web.
      ========================================================================= */
 
-  /* Tipografías principales */
+  /* ====== TIPOGRAFÍAS ====== */
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-serif: "Fraunces", Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Modo Claro (Editorial / Papel cálido y nítido) */
+  /* Tamaños de fuente */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+
+  /* Pesos de fuente */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Alturas de línea */
+  --line-height-tight: 1.25;
+  --line-height-snug: 1.375;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+  --line-height-loose: 2;
+
+  /* Letter spacing */
+  --letter-spacing-tighter: -0.05em;
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0em;
+  --letter-spacing-wide: 0.025em;
+  --letter-spacing-wider: 0.05em;
+  --letter-spacing-widest: 0.1em;
+
+  /* ====== COLORES BÁSICOS - MODO CLARO ====== */
+
+  /* Fondos */
   --bg-canvas: #f8f6f0;
   --bg-surface: #ffffff;
   --bg-surface-elevated: #ffffff;
@@ -22,29 +58,162 @@
   --bg-header: rgba(248, 246, 240, 0.92);
   --bg-modal: #ffffff;
   --bg-code: #f2ede1;
+  --bg-hover: #f5f1e8;
+  --bg-active: #ede5d8;
+  --bg-disabled: #d7d1c6;
 
+  /* Bordes */
   --border-subtle: rgba(40, 30, 20, 0.1);
   --border-medium: rgba(40, 30, 20, 0.18);
+  --border-strong: rgba(40, 30, 20, 0.28);
   --border-focus: #d97706;
 
+  /* Texto */
   --text-primary: #1c1917;
   --text-secondary: #57534e;
-  --text-muted: #78716c;
+  --text-tertiary: #78716c;
+  --text-muted: #9a9490;
+  --text-inverse: #ffffff;
+  --text-disabled: #b8ada3;
 
+  /* Acento primario (naranja cálido) */
   --accent-primary: #d97706;
   --accent-hover: #b45309;
+  --accent-active: #92400e;
   --accent-text: #ffffff;
   --accent-subtle: rgba(217, 119, 6, 0.12);
   --accent-border: rgba(217, 119, 6, 0.28);
+  --accent-muted: rgba(217, 119, 6, 0.08);
 
+  /* Estados de componentes */
+  --state-success-bg: #d1fae5;
+  --state-success-text: #065f46;
+  --state-success-border: #6ee7b7;
+
+  --state-warning-bg: #fef3c7;
+  --state-warning-text: #92400e;
+  --state-warning-border: #fcd34d;
+
+  --state-error-bg: #fee2e2;
+  --state-error-text: #991b1b;
+  --state-error-border: #fca5a5;
+
+  --state-info-bg: #dbeafe;
+  --state-info-text: #0c2340;
+  --state-info-border: #93c5fd;
+
+  /* Scrollbar */
   --scrollbar-thumb: rgba(0, 0, 0, 0.16);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
+
+  /* Sombras */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   --shadow-card: 0 4px 20px -2px rgba(28, 25, 23, 0.05);
+  --shadow-card-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.08);
+
+  /* ====== ESPACIAMIENTOS ====== */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ====== BORDER RADIUS ====== */
+  --radius-none: 0;
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-base: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* ====== COMPONENTES ESPECÍFICOS - MODO CLARO ====== */
+
+  /* Botones */
+  --button-primary-bg: #d97706;
+  --button-primary-text: #ffffff;
+  --button-primary-border: transparent;
+  --button-primary-hover-bg: #b45309;
+  --button-primary-active-bg: #92400e;
+  --button-primary-disabled-bg: #d7d1c6;
+  --button-primary-disabled-text: #9a9490;
+
+  --button-secondary-bg: #f1ede4;
+  --button-secondary-text: #1c1917;
+  --button-secondary-border: rgba(40, 30, 20, 0.18);
+  --button-secondary-hover-bg: #e7e3d8;
+  --button-secondary-active-bg: #d9d1c4;
+  --button-secondary-disabled-bg: #d7d1c6;
+  --button-secondary-disabled-text: #9a9490;
+
+  --button-tertiary-bg: transparent;
+  --button-tertiary-text: #d97706;
+  --button-tertiary-border: rgba(217, 119, 6, 0.28);
+  --button-tertiary-hover-bg: rgba(217, 119, 6, 0.08);
+  --button-tertiary-active-bg: rgba(217, 119, 6, 0.12);
+  --button-tertiary-disabled-text: #b8ada3;
+
+  /* Inputs & Forms */
+  --input-bg: #ffffff;
+  --input-text: #1c1917;
+  --input-border: rgba(40, 30, 20, 0.18);
+  --input-border-hover: rgba(40, 30, 20, 0.25);
+  --input-border-focus: #d97706;
+  --input-placeholder: #9a9490;
+  --input-disabled-bg: #d7d1c6;
+  --input-disabled-text: #b8ada3;
+
+  /* Cards */
+  --card-bg: #ffffff;
+  --card-border: rgba(40, 30, 20, 0.1);
+  --card-hover-border: rgba(40, 30, 20, 0.18);
+  --card-shadow: 0 4px 20px -2px rgba(28, 25, 23, 0.05);
+
+  /* Badges */
+  --badge-primary-bg: rgba(217, 119, 6, 0.12);
+  --badge-primary-text: #92400e;
+  --badge-primary-border: rgba(217, 119, 6, 0.28);
+
+  --badge-secondary-bg: #f1ede4;
+  --badge-secondary-text: #1c1917;
+  --badge-secondary-border: rgba(40, 30, 20, 0.18);
+
+  /* Modales */
+  --modal-bg: #ffffff;
+  --modal-backdrop: rgba(0, 0, 0, 0.4);
+  --modal-border: rgba(40, 30, 20, 0.1);
+  --modal-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  /* Tooltips & Popovers */
+  --tooltip-bg: #1c1917;
+  --tooltip-text: #ffffff;
+  --tooltip-border: #000000;
+
+  /* Código & Bloques */
+  --code-bg: #f2ede1;
+  --code-text: #1c1917;
+  --code-border: rgba(40, 30, 20, 0.18);
+  --code-highlight: rgba(217, 119, 6, 0.1);
 }
 
-/* Modo Oscuro (Estudio de noche / Tono carbón y ámbar cálido) */
+/* ====== MODO OSCURO (Estudio de noche / Tono carbón y ámbar cálido) ====== */
 [data-theme="dark"],
 .dark {
+  /* Fondos */
   --bg-canvas: #0c0d10;
   --bg-surface: #14151b;
   --bg-surface-elevated: #191a22;
@@ -54,24 +223,131 @@
   --bg-header: rgba(12, 13, 16, 0.94);
   --bg-modal: #111216;
   --bg-code: #07070a;
+  --bg-hover: #1a1b24;
+  --bg-active: #1e1f2b;
+  --bg-disabled: #2a2b35;
 
+  /* Bordes */
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-medium: rgba(255, 255, 255, 0.16);
+  --border-strong: rgba(255, 255, 255, 0.25);
   --border-focus: #fbbf24;
 
+  /* Texto */
   --text-primary: #f3f4f6;
   --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-tertiary: #71717a;
+  --text-muted: #52525b;
+  --text-inverse: #1c1917;
+  --text-disabled: #3f3f46;
 
+  /* Acento primario (ámbar dorado) */
   --accent-primary: #fbbf24;
   --accent-hover: #f59e0b;
+  --accent-active: #d97706;
   --accent-text: #0c0d10;
   --accent-subtle: rgba(251, 191, 36, 0.12);
   --accent-border: rgba(251, 191, 36, 0.25);
+  --accent-muted: rgba(251, 191, 36, 0.08);
 
+  /* Estados de componentes */
+  --state-success-bg: #064e3b;
+  --state-success-text: #86efac;
+  --state-success-border: #22c55e;
+
+  --state-warning-bg: #78350f;
+  --state-warning-text: #fef3c7;
+  --state-warning-border: #fbbf24;
+
+  --state-error-bg: #7f1d1d;
+  --state-error-text: #fca5a5;
+  --state-error-border: #ef4444;
+
+  --state-info-bg: #0c2340;
+  --state-info-text: #bfdbfe;
+  --state-info-border: #3b82f6;
+
+  /* Scrollbar */
   --scrollbar-thumb: rgba(255, 255, 255, 0.14);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+
+  /* Sombras */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
   --shadow-card: 0 4px 24px -2px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+
+  /* Componentes específicos - Modo Oscuro */
+
+  /* Botones */
+  --button-primary-bg: #fbbf24;
+  --button-primary-text: #0c0d10;
+  --button-primary-border: transparent;
+  --button-primary-hover-bg: #f59e0b;
+  --button-primary-active-bg: #d97706;
+  --button-primary-disabled-bg: #2a2b35;
+  --button-primary-disabled-text: #52525b;
+
+  --button-secondary-bg: #1a1b24;
+  --button-secondary-text: #f3f4f6;
+  --button-secondary-border: rgba(255, 255, 255, 0.16);
+  --button-secondary-hover-bg: #20222c;
+  --button-secondary-active-bg: #27293a;
+  --button-secondary-disabled-bg: #2a2b35;
+  --button-secondary-disabled-text: #52525b;
+
+  --button-tertiary-bg: transparent;
+  --button-tertiary-text: #fbbf24;
+  --button-tertiary-border: rgba(251, 191, 36, 0.25);
+  --button-tertiary-hover-bg: rgba(251, 191, 36, 0.08);
+  --button-tertiary-active-bg: rgba(251, 191, 36, 0.12);
+  --button-tertiary-disabled-text: #3f3f46;
+
+  /* Inputs & Forms */
+  --input-bg: #121319;
+  --input-text: #f3f4f6;
+  --input-border: rgba(255, 255, 255, 0.16);
+  --input-border-hover: rgba(255, 255, 255, 0.25);
+  --input-border-focus: #fbbf24;
+  --input-placeholder: #52525b;
+  --input-disabled-bg: #2a2b35;
+  --input-disabled-text: #3f3f46;
+
+  /* Cards */
+  --card-bg: #14151b;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-hover-border: rgba(255, 255, 255, 0.16);
+  --card-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.5);
+
+  /* Badges */
+  --badge-primary-bg: rgba(251, 191, 36, 0.12);
+  --badge-primary-text: #fef3c7;
+  --badge-primary-border: rgba(251, 191, 36, 0.25);
+
+  --badge-secondary-bg: #1a1b24;
+  --badge-secondary-text: #f3f4f6;
+  --badge-secondary-border: rgba(255, 255, 255, 0.16);
+
+  /* Modales */
+  --modal-bg: #111216;
+  --modal-backdrop: rgba(0, 0, 0, 0.7);
+  --modal-border: rgba(255, 255, 255, 0.08);
+  --modal-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+
+  /* Tooltips & Popovers */
+  --tooltip-bg: #f3f4f6;
+  --tooltip-text: #1c1917;
+  --tooltip-border: #ffffff;
+
+  /* Código & Bloques */
+  --code-bg: #07070a;
+  --code-text: #f3f4f6;
+  --code-border: rgba(255, 255, 255, 0.16);
+  --code-highlight: rgba(251, 191, 36, 0.1);
 }
 
 @theme {
