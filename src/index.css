@@ -80,6 +80,81 @@
   --font-mono: var(--font-mono);
 }
 
+/* =========================================================================
+   ACCESIBILIDAD Y UTILIDADES DE USUARIO
+   ========================================================================= */
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: auto;
+  margin: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Focus visible styles for better accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  :root {
+    --border-subtle: rgba(40, 30, 20, 0.3);
+    --border-medium: rgba(40, 30, 20, 0.5);
+  }
+
+  [data-theme="dark"],
+  .dark {
+    --border-subtle: rgba(255, 255, 255, 0.2);
+    --border-medium: rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Keyboard navigation indicator */
+body.keyboard-navigation *:focus-visible {
+  outline: 3px dashed var(--accent-primary);
+  outline-offset: 3px;
+}
+
 /* Custom scrollbars bound to CSS variables */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Song, SongStatus, SongViewMode } from './types/song';
 import { StorageService } from './services/storageService';
 import { songToMarkdown } from './utils/markdownParser';
@@ -21,9 +21,13 @@ import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
 import { DeleteSongModal } from './components/DeleteSongModal';
 import { SeoHelper } from './components/SeoHelper';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
+import { SkipLink } from './components/SkipLink';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useTheme } from './context/ThemeContext';
+import { useKeyboardShortcuts, GLOBAL_SHORTCUTS } from './hooks/useKeyboardShortcuts';
 import { Music2, BarChart3 } from 'lucide-react';
 
 function CancioneroApp() {
@@ -73,14 +77,70 @@ function CancioneroApp() {
   const [isAudioModalOpen, setIsAudioModalOpen] = useState<boolean>(false);
   const [deletingSong, setDeletingSong] = useState<Song | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
   const [gitToast, setGitToast] = useState<ToastData | null>(null);
 
+  const { toggleTheme } = useTheme();
+  const { register, unregister } = useKeyboardShortcuts();
+
   useEffect(() => {
     checkGitStatus();
   }, []);
+
+  // Setup keyboard shortcuts
+  useEffect(() => {
+    register('new-song', {
+      ...GLOBAL_SHORTCUTS.newSong,
+      callback: () => {
+        if (isAuthor) {
+          handleOpenNewSong();
+        }
+      },
+      description: GLOBAL_SHORTCUTS.newSong.description,
+    });
+
+    register('toggle-theme', {
+      ...GLOBAL_SHORTCUTS.toggleTheme,
+      callback: toggleTheme,
+      description: GLOBAL_SHORTCUTS.toggleTheme.description,
+    });
+
+    register('git-sync', {
+      ...GLOBAL_SHORTCUTS.toggleGitSync,
+      callback: () => setIsGitModalOpen(true),
+      description: GLOBAL_SHORTCUTS.toggleGitSync.description,
+    });
+
+    register('show-shortcuts', {
+      ...GLOBAL_SHORTCUTS.showKeyboardShortcuts,
+      callback: () => setIsKeyboardShortcutsOpen(true),
+      description: GLOBAL_SHORTCUTS.showKeyboardShortcuts.description,
+    });
+
+    register('close-modal', {
+      ...GLOBAL_SHORTCUTS.closeModal,
+      callback: () => {
+        if (selectedSong) setSelectedSong(null);
+        if (isEditorOpen) setIsEditorOpen(false);
+        if (isGitModalOpen) setIsGitModalOpen(false);
+        if (isAboutOpen) setIsAboutOpen(false);
+        if (isAuthModalOpen) setIsAuthModalOpen(false);
+        if (isKeyboardShortcutsOpen) setIsKeyboardShortcutsOpen(false);
+      },
+      description: GLOBAL_SHORTCUTS.closeModal.description,
+    });
+
+    return () => {
+      unregister('new-song');
+      unregister('toggle-theme');
+      unregister('git-sync');
+      unregister('show-shortcuts');
+      unregister('close-modal');
+    };
+  }, [isAuthor, selectedSong, isEditorOpen, isGitModalOpen, isAboutOpen, isAuthModalOpen, isKeyboardShortcutsOpen, register, unregister, toggleTheme]);
 
   useEffect(() => {
     let isMounted = true;
@@ -516,6 +576,9 @@ function CancioneroApp() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-200">
+      {/* Accessibility Skip Link */}
+      <SkipLink />
+
       {/* SEO Meta Tags and Structured Data */}
       <SeoHelper
         title="Cancionero de versos perdidos"
@@ -829,6 +892,12 @@ function CancioneroApp() {
           onCreateSongFromAudio={handleCreateSongFromAudio}
         />
       )}
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isKeyboardShortcutsOpen}
+        onClose={() => setIsKeyboardShortcutsOpen(false)}
+      />
 
       {/* Real-time Global Git Push & Commit Notification Toast */}
       <GitNotificationToast
