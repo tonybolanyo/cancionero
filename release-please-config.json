@@ -1,0 +1,55 @@
+{
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "node",
+      "version-file": "package.json",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "prerelease-type": "alpha",
+      "extra-files": []
+    }
+  },
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "🚀 Nuevas características",
+      "hidden": false
+    },
+    {
+      "type": "fix",
+      "section": "🐛 Correcciones",
+      "hidden": false
+    },
+    {
+      "type": "perf",
+      "section": "⚡ Mejoras de rendimiento",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "📚 Documentación",
+      "hidden": false
+    },
+    {
+      "type": "refactor",
+      "section": "♻️ Refactorización",
+      "hidden": false
+    },
+    {
+      "type": "test",
+      "section": "🧪 Tests",
+      "hidden": false
+    },
+    {
+      "type": "ci",
+      "section": "👷 CI/CD",
+      "hidden": false
+    },
+    {
+      "type": "chore",
+      "section": "🔧 Chores",
+      "hidden": false
+    }
+  ]
+}
