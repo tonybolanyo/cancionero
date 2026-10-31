@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release Please
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: node
+          package-name: cancionero
+          default-branch: main
+          changelog-types: |
+            [
+              {"type": "feat", "section": "🚀 Nuevas características", "hidden": false},
+              {"type": "fix", "section": "🐛 Correcciones", "hidden": false},
+              {"type": "perf", "section": "⚡ Mejoras de rendimiento", "hidden": false},
+              {"type": "docs", "section": "📚 Documentación", "hidden": false},
+              {"type": "refactor", "section": "♻️ Refactorización", "hidden": false},
+              {"type": "test", "section": "🧪 Tests", "hidden": false},
+              {"type": "ci", "section": "👷 CI/CD", "hidden": false},
+              {"type": "chore", "section": "🔧 Chores", "hidden": false}
+            ]
+
+      - name: Checkout
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Node.js
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Update package.json version
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          npm version ${{ steps.release.outputs.version }} --no-git-tag-version
+
+      - name: Commit version update
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json package-lock.json
+          git commit -m "chore: update version to ${{ steps.release.outputs.version }}" || true
+          git push origin main || true
+
+      - name: Create release
+        if: ${{ steps.release.outputs.release_created }}
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ steps.release.outputs.version }}
+          name: Release v${{ steps.release.outputs.version }}
+          body: ${{ steps.release.outputs.body }}
+          draft: false
+          prerelease: false

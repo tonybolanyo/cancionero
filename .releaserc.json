@@ -1,0 +1,17 @@
+# Configuración adicional para conventional commits en español
+# Este archivo es opcional, release-please usa release-please-config.json
+
+# Si en el futuro quieres usar semantic-release, usa este formato:
+# {
+#   "branches": ["main", "master"],
+#   "plugins": [
+#     ["@semantic-release/commit-analyzer", {
+#       "preset": "conventionalcommits",
+#       "releaseRules": [
+#         {"type": "feat", "release": "minor"},
+#         {"type": "fix", "release": "patch"},
+#         {"breaking": true, "release": "major"}
+#       ]
+#     }]
+#   ]
+# }
