@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode, Trash2 } from 'lucide-react';
 import { Song } from '../types/song';
 
 interface SongExpandedRowProps {
@@ -11,6 +11,7 @@ interface SongExpandedRowProps {
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
   onRenameFile?: (song: Song) => void;
+  onDelete?: (song: Song) => void;
 }
 
 export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
@@ -22,6 +23,7 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
   onViewHistory,
   onSelectTag,
   onRenameFile,
+  onDelete
 }) => {
   // Extract up to 3 lines of lyrics for expanded preview
   const lyricLines = song.lyrics
@@ -246,6 +248,15 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
               >
                 <Edit3 className="w-4 h-4" />
               </button>
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(song)}
+                  className="p-2 hover:text-red-500 rounded-lg hover:bg-red-500/10 border border-red-500/20 text-red-500 transition-colors cursor-pointer"
+                  title="Eliminar canción del catálogo (Solo autor)"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </>
           )}
         </div>

@@ -3,11 +3,13 @@ import { markdownToSong } from '../utils/markdownParser';
 
 // Dynamically load every song markdown file from /songs/
 // This ensures each song lives in its own dedicated .md file in the repo
-const songFiles = import.meta.glob('../../songs/*.md', {
-  query: '?raw',
-  import: 'default',
-  eager: true
-}) as Record<string, string>;
+const songFiles = (typeof import.meta !== 'undefined' && typeof (import.meta as any).glob === 'function')
+  ? (import.meta as any).glob('../../songs/*.md', {
+      query: '?raw',
+      import: 'default',
+      eager: true
+    }) as Record<string, string>
+  : {};
 
 export function loadSongsFromMarkdownFiles(): Song[] {
   const loadedSongs: Song[] = [];

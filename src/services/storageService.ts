@@ -96,7 +96,7 @@ updatedAt: "2026-02-10T10:00:00Z"
       timestamp: '2025-01-15T18:30:00Z',
       filesChanged: ['songs/noches-de-cristal.md'],
       snapshot: {
-        'noches-de-cristal': songToMarkdown(nochesOriginal)
+        'noches-de-cristal': nochesOriginal ? songToMarkdown(nochesOriginal) : nochesV1Markdown
       }
     },
     {
@@ -106,7 +106,7 @@ updatedAt: "2026-02-10T10:00:00Z"
       timestamp: '2025-08-20T11:15:00Z',
       filesChanged: ['songs/faro-de-sal.md'],
       snapshot: {
-        'faro-de-sal': songToMarkdown(faroOriginal)
+        'faro-de-sal': faroOriginal ? songToMarkdown(faroOriginal) : 'faro-de-sal'
       }
     },
     {
@@ -116,7 +116,7 @@ updatedAt: "2026-02-10T10:00:00Z"
       timestamp: '2025-11-04T16:45:00Z',
       filesChanged: ['songs/la-raiz-del-viento.md'],
       snapshot: {
-        'la-raiz-del-viento': songToMarkdown(raizOriginal)
+        'la-raiz-del-viento': raizOriginal ? songToMarkdown(raizOriginal) : 'la-raiz-del-viento'
       }
     },
     {
@@ -136,7 +136,7 @@ updatedAt: "2026-02-10T10:00:00Z"
       timestamp: '2026-10-15T09:20:00Z',
       filesChanged: ['songs/laberintos-de-otono.md'],
       snapshot: {
-        'laberintos-de-otono': songToMarkdown(laberintoOriginal)
+        'laberintos-de-otono': laberintoOriginal ? songToMarkdown(laberintoOriginal) : laberintoV1Markdown
       }
     }
   ];
@@ -317,6 +317,13 @@ export class StorageService {
   }
 
   /**
+   * Find a song by its unique identifier
+   */
+  static getSongById(id: string): Song | undefined {
+    return this.getSongs().find(s => s.id === id);
+  }
+
+  /**
    * Save songs collection to local storage
    */
   static saveSongs(songs: Song[]): void {
@@ -351,13 +358,38 @@ export class StorageService {
   }
 
   /**
-   * Delete a song by ID
+   * Delete a song by ID, cleaning up snapshot and recording local commit
    */
-  static deleteSong(id: string): Song[] {
+  static deleteSong(id: string, autoCommit: boolean = true): { success: boolean; songs: Song[]; deletedSong?: Song } {
     const songs = this.getSongs();
+    const targetSong = songs.find(s => s.id === id);
     const filtered = songs.filter(s => s.id !== id);
     this.saveSongs(filtered);
-    return filtered;
+
+    // Clean up snapshot entry for this song
+    const snapshot = this.getSnapshot();
+    if (snapshot[id]) {
+      delete snapshot[id];
+      try {
+        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(snapshot));
+      } catch (err) {
+        console.warn('Failed to update snapshot on delete', err);
+      }
+    }
+
+    if (autoCommit && targetSong) {
+      const commit: GitCommit = {
+        hash: Math.random().toString(16).substring(2, 9),
+        message: `delete: eliminar canción "${targetSong.title}" (songs/${id}.md)`,
+        author: 'Tony (Autor)',
+        timestamp: new Date().toISOString(),
+        filesChanged: [`songs/${id}.md`],
+        snapshot: { ...this.getSnapshot() }
+      };
+      this.saveCommits([commit, ...this.getCommits()]);
+    }
+
+    return { success: true, songs: filtered, deletedSong: targetSong };
   }
 
   /**

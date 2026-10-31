@@ -16,7 +16,8 @@ import {
   RotateCcw,
   History,
   FileDown,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { Song } from '../types/song';
 import {
@@ -42,6 +43,7 @@ interface SongDetailModalProps {
   onDownloadMd: (song: Song) => void;
   isAuthor: boolean;
   onSaveSong?: (song: Song) => void;
+  onDeleteSong?: (song: Song) => void;
   onViewHistory?: (song: Song) => void;
   onRenameFile?: (song: Song) => void;
 }
@@ -53,6 +55,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   onDownloadMd,
   isAuthor,
   onSaveSong,
+  onDeleteSong,
   onViewHistory,
   onRenameFile
 }) => {
@@ -113,6 +116,8 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [showConfirmDeleteAudio, setShowConfirmDeleteAudio] = useState(false);
+  const [audioDeleteFeedback, setAudioDeleteFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     setSemitones(0);
@@ -241,6 +246,34 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     } catch (err) {
       console.warn('Error guardando letra sincronizada en storage local:', err);
     }
+  };
+
+  const handleDeleteAudio = () => {
+    if (isPlayingAudio && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
+    }
+    if (song.audioUrl && song.audioUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(song.audioUrl);
+      } catch {}
+    }
+    const updated: Song = {
+      ...song,
+      audioUrl: undefined,
+      updatedAt: new Date().toISOString()
+    };
+    try {
+      StorageService.upsertSong(updated);
+      if (onSaveSong) {
+        onSaveSong(updated);
+      }
+      setAudioDeleteFeedback('Pista de audio eliminada');
+      setTimeout(() => setAudioDeleteFeedback(null), 2500);
+    } catch (err) {
+      console.warn('Error al eliminar audio de storage', err);
+    }
+    setShowConfirmDeleteAudio(false);
   };
 
   const renderLyricsFormatted = (text: string) => {
@@ -503,6 +536,15 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                     <FileCode className="w-4 h-4" />
                   </button>
                 )}
+                {onDeleteSong && (
+                  <button
+                    onClick={() => onDeleteSong(song)}
+                    className="p-2 text-red-500 hover:text-red-600 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                    title="Eliminar canción completa (Solo autor)"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </>
             )}
             <button
@@ -575,10 +617,30 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 className="hidden"
               />
 
-              <div className="text-xs font-mono text-[var(--text-secondary)] shrink-0">
-                {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} /{' '}
-                {duration ? `${Math.floor(duration / 60)}:${Math.floor(duration % 60).toString().padStart(2, '0')}` : '0:00'}
+              <div className="flex items-center gap-3">
+                <div className="text-xs font-mono text-[var(--text-secondary)] shrink-0">
+                  {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} /{' '}
+                  {duration ? `${Math.floor(duration / 60)}:${Math.floor(duration % 60).toString().padStart(2, '0')}` : '0:00'}
+                </div>
+
+                {isAuthor && (
+                  <button
+                    onClick={() => setShowConfirmDeleteAudio(true)}
+                    className="px-2.5 py-1 text-xs text-red-500 hover:text-red-600 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                    title="Eliminar la pista de audio local de esta canción"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Eliminar audio</span>
+                  </button>
+                )}
               </div>
+            </div>
+          )}
+
+          {audioDeleteFeedback && (
+            <div className="mb-4 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-500 flex items-center gap-2 animate-fadeIn">
+              <Check className="w-4 h-4 text-emerald-500" />
+              <span>{audioDeleteFeedback}</span>
             </div>
           )}
 
@@ -1015,6 +1077,46 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal to Delete Local Audio */}
+      {showConfirmDeleteAudio && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/25 text-red-500 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm text-[var(--text-primary)]">
+                  ¿Eliminar audio local de esta canción?
+                </h4>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Esta acción desvinculará la maqueta/pista de audio de "{song.title}".
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed bg-[var(--bg-surface-subtle)] p-3 rounded-xl border border-[var(--border-subtle)]">
+              La letra, acordes, notas de composición y enlaces externos a Spotify o YouTube se conservarán intactos.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDeleteAudio(false)}
+                className="px-3.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAudio}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
+              >
+                Eliminar audio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

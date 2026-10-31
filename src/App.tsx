@@ -18,6 +18,7 @@ import { Footer } from './components/Footer';
 import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
 import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
+import { DeleteSongModal } from './components/DeleteSongModal';
 import { SeoHelper } from './components/SeoHelper';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
@@ -70,6 +71,8 @@ function CancioneroApp() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState<boolean>(false);
   const [isAudioModalOpen, setIsAudioModalOpen] = useState<boolean>(false);
+  const [deletingSong, setDeletingSong] = useState<Song | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
@@ -310,6 +313,47 @@ function CancioneroApp() {
           onAction: () => setIsAuthModalOpen(true)
         });
       }
+    }
+  };
+
+  const handleOpenDelete = (song: Song) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setDeletingSong(song);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteSuccess = (deletedSong: Song, updatedSongs: Song[], pushResult?: PushResult) => {
+    setSongs(updatedSongs);
+    checkGitStatus();
+    if (selectedSong && selectedSong.id === deletedSong.id) {
+      setSelectedSong(null);
+    }
+    if (editingSong && editingSong.id === deletedSong.id) {
+      setIsEditorOpen(false);
+      setEditingSong(null);
+    }
+    setDeletingSong(null);
+
+    if (pushResult && pushResult.success) {
+      setGitToast({
+        id: `toast-${Date.now()}`,
+        type: 'success',
+        title: 'Canción Eliminada y Catálogo Actualizado en GitHub 🚀',
+        message: `Se eliminó "${deletedSong.title}" localmente y en el repositorio GitHub.`,
+        commitHash: pushResult.commitSha,
+        commitUrl: pushResult.commitUrl,
+        targetRepo: pushResult.targetRepo
+      });
+    } else {
+      setGitToast({
+        id: `toast-${Date.now()}`,
+        type: 'info',
+        title: 'Canción Eliminada',
+        message: `"${deletedSong.title}" ha sido eliminada del catálogo local y registrada en el historial Git.`
+      });
     }
   };
 
@@ -585,6 +629,7 @@ function CancioneroApp() {
                       onViewHistory={handleViewHistory}
                       onSelectTag={setTagFilter}
                       onRenameFile={handleOpenRename}
+                      onDelete={handleOpenDelete}
                     />
                   ))}
                 </div>
@@ -604,6 +649,7 @@ function CancioneroApp() {
                       onViewHistory={handleViewHistory}
                       onSelectTag={setTagFilter}
                       onRenameFile={handleOpenRename}
+                      onDelete={handleOpenDelete}
                     />
                   ))}
                 </div>
@@ -619,6 +665,7 @@ function CancioneroApp() {
                   isAuthor={isAuthor}
                   onViewHistory={handleViewHistory}
                   onRenameFile={handleOpenRename}
+                  onDelete={handleOpenDelete}
                 />
               )}
             </>
@@ -691,6 +738,7 @@ function CancioneroApp() {
           isAuthor={isAuthor}
           onViewHistory={handleViewHistory}
           onRenameFile={handleOpenRename}
+          onDeleteSong={handleOpenDelete}
         />
       )}
 
@@ -703,6 +751,7 @@ function CancioneroApp() {
             setEditingSong(null);
           }}
           onSave={handleSaveSong}
+          onDelete={handleOpenDelete}
         />
       )}
 
@@ -756,6 +805,19 @@ function CancioneroApp() {
             setRenamingSong(null);
           }}
           onRenameSuccess={handleRenameSuccess}
+        />
+      )}
+
+      {/* Delete Song Confirmation Modal (Author Only) */}
+      {isDeleteModalOpen && deletingSong && (
+        <DeleteSongModal
+          song={deletingSong}
+          isOpen={isDeleteModalOpen}
+          onClose={() => {
+            setIsDeleteModalOpen(false);
+            setDeletingSong(null);
+          }}
+          onDeleteSuccess={handleDeleteSuccess}
         />
       )}
 

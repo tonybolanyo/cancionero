@@ -1,6 +1,6 @@
 import type {
   AutomaticSpeechRecognitionOutput,
-  AutomaticSpeechRecognitionPipelineType
+  AutomaticSpeechRecognitionPipeline
 } from '@huggingface/transformers';
 import type { LocalTranscriptionDevice, TranscriptionSegment } from '../types/transcription';
 
@@ -58,7 +58,7 @@ type PipelineEnv = typeof import('@huggingface/transformers').env;
 
 let pipelineFactory: PipelineFactory | null = null;
 let pipelineEnv: PipelineEnv | null = null;
-const pipelineCache = new Map<string, AutomaticSpeechRecognitionPipelineType>();
+const pipelineCache = new Map<string, AutomaticSpeechRecognitionPipeline>();
 
 function hasWebGpuInWorker(): boolean {
   const navigatorLike = (self as unknown as { navigator?: { gpu?: unknown } }).navigator;
@@ -137,7 +137,7 @@ function normalizeAsrOutput(
 async function getAsrPipeline(
   model: string,
   allowWasmFallback: boolean
-): Promise<{ transcriber: AutomaticSpeechRecognitionPipelineType; device: LocalTranscriptionDevice }> {
+): Promise<{ transcriber: AutomaticSpeechRecognitionPipeline; device: LocalTranscriptionDevice }> {
   const { pipeline } = await loadTransformersRuntime();
   const canUseWebGpu = hasWebGpuInWorker();
   const preferredDevice: LocalTranscriptionDevice | null = canUseWebGpu ? 'webgpu' : null;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Song } from '../types/song';
-import { Play, FileText, Edit3, Download, History, ArrowUpDown, Disc, Music, ArrowUp, ArrowDown, FileCode } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, ArrowUpDown, Disc, Music, ArrowUp, ArrowDown, FileCode, Trash2 } from 'lucide-react';
 
 interface SongCompactViewProps {
   songs: Song[];
@@ -10,6 +10,7 @@ interface SongCompactViewProps {
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
   onRenameFile?: (song: Song) => void;
+  onDelete?: (song: Song) => void;
 }
 
 type SortField = 'title' | 'year' | 'key' | 'tempo' | 'genre' | 'status';
@@ -23,6 +24,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
   isAuthor,
   onViewHistory,
   onRenameFile,
+  onDelete
 }) => {
   const [sortField, setSortField] = useState<SortField>('title');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -310,6 +312,15 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
+                          {onDelete && (
+                            <button
+                              onClick={() => onDelete(song)}
+                              className="p-1 hover:text-red-500 rounded hover:bg-red-500/10 text-red-500 transition-colors cursor-pointer"
+                              title="Eliminar canción del catálogo (Solo autor)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

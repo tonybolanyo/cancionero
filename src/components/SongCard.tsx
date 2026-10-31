@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, FileCode } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, FileCode, Trash2 } from 'lucide-react';
 import { Song } from '../types/song';
 
 interface SongCardProps {
@@ -11,6 +11,7 @@ interface SongCardProps {
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
   onRenameFile?: (song: Song) => void;
+  onDelete?: (song: Song) => void;
 }
 
 export const SongCard: React.FC<SongCardProps> = ({
@@ -21,7 +22,8 @@ export const SongCard: React.FC<SongCardProps> = ({
   isAuthor,
   onViewHistory,
   onSelectTag,
-  onRenameFile
+  onRenameFile,
+  onDelete
 }) => {
   // Extract first 2-3 lines of lyrics for preview
   const lyricPreview = song.lyrics
@@ -195,6 +197,15 @@ export const SongCard: React.FC<SongCardProps> = ({
               >
                 <Edit3 className="w-3.5 h-3.5" />
               </button>
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(song)}
+                  className="p-1.5 hover:text-red-500 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"
+                  title="Eliminar canción del catálogo (Solo autor)"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </>
           )}
         </div>

@@ -14,7 +14,10 @@ import {
   Music,
   Check,
   Sparkles,
-  Clock
+  Clock,
+  Trash2,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import {
@@ -40,13 +43,15 @@ interface SongEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (song: Song, pushResult?: PushResult) => void;
+  onDelete?: (song: Song) => void;
 }
 
 export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   song,
   isOpen,
   onClose,
-  onSave
+  onSave,
+  onDelete
 }) => {
   const { token, user } = useAuth();
   const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
@@ -334,6 +339,19 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
 
     setTransposeFeedback(`Notación ajustada a ${nextPref === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}`);
     setTimeout(() => setTransposeFeedback(null), 2500);
+  };
+
+  const handleRemoveLocalAudio = () => {
+    if (audioUrl && audioUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(audioUrl);
+      } catch {}
+    }
+    if (assistantAudioRef.current) {
+      assistantAudioRef.current.pause();
+    }
+    setAudioUrl('');
+    setAssistantIsPlaying(false);
   };
 
   const handleTranspose = (semitones: number) => {
@@ -902,6 +920,39 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* Local audio track presence & delete option */}
+                {audioUrl && (
+                  <div className="pt-2 border-t border-[var(--border-subtle)]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
+                          <Volume2 className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">Audio local / Maqueta adjunta</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              {audioUrl.startsWith('blob:') ? 'Archivo local (Blob)' : 'Audio URL'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] truncate max-w-sm font-mono">
+                            {audioUrl.startsWith('blob:') ? 'Audio cargado en la sesión' : audioUrl}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveLocalAudio}
+                        className="px-2.5 py-1 text-xs font-medium text-red-500 hover:text-red-400 hover:bg-red-500/10 border border-red-500/20 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 self-start sm:self-auto"
+                        title="Eliminar la pista de audio local de esta canción"
+                      >
+                        <VolumeX className="w-3.5 h-3.5" />
+                        <span>Eliminar audio local</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Row 5: Notes */}
@@ -1165,16 +1216,34 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-t border-[var(--border-subtle)] bg-[var(--bg-modal)]">
-          <div className="flex flex-col text-xs font-mono">
-            <span className="text-[var(--text-muted)]">
-              Archivo destino: <strong className="text-[var(--text-primary)]">songs/{id || 'cancion'}.md</strong>
-            </span>
-            {isSaving && saveStatusMessage && (
-              <span className="text-[var(--accent-primary)] text-[11px] animate-pulse">
-                {saveStatusMessage}
-              </span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-4 sm:p-6 border-t border-[var(--border-subtle)] bg-[var(--bg-modal)] gap-4">
+          <div className="flex items-center gap-4">
+            {song && onDelete && (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  onClose();
+                  onDelete(song);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors cursor-pointer"
+                title="Eliminar esta canción completa del catálogo"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Eliminar canción</span>
+              </button>
             )}
+
+            <div className="flex flex-col text-xs font-mono">
+              <span className="text-[var(--text-muted)]">
+                Archivo destino: <strong className="text-[var(--text-primary)]">songs/{id || 'cancion'}.md</strong>
+              </span>
+              {isSaving && saveStatusMessage && (
+                <span className="text-[var(--accent-primary)] text-[11px] animate-pulse">
+                  {saveStatusMessage}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
