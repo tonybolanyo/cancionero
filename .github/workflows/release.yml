@@ -16,23 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Release Please
+        id: release
         uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node
-          package-name: cancionero
-          default-branch: main
-          changelog-types: |
-            [
-              {"type": "feat", "section": "🚀 Nuevas características", "hidden": false},
-              {"type": "fix", "section": "🐛 Correcciones", "hidden": false},
-              {"type": "perf", "section": "⚡ Mejoras de rendimiento", "hidden": false},
-              {"type": "docs", "section": "📚 Documentación", "hidden": false},
-              {"type": "refactor", "section": "♻️ Refactorización", "hidden": false},
-              {"type": "test", "section": "🧪 Tests", "hidden": false},
-              {"type": "ci", "section": "👷 CI/CD", "hidden": false},
-              {"type": "chore", "section": "🔧 Chores", "hidden": false}
-            ]
+          target-branch: main
+          config-file: release-please-config.json
 
       - name: Checkout
         if: ${{ steps.release.outputs.release_created }}
