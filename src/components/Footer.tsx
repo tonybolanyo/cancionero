@@ -20,7 +20,7 @@ export function Footer({
 }: FooterProps) {
   return (
     <footer className="mt-auto border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] py-10 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
         {/* Main footer content */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-[var(--text-muted)]">
           <div>

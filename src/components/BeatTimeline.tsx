@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders } from 'lucide-react';
+import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders, Maximize2, Minimize2 } from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
@@ -64,8 +64,9 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   const [showOnsets, setShowOnsets] = useState<boolean>(true);
   const [showBeats, setShowBeats] = useState<boolean>(true);
   const [showChords, setShowChords] = useState<boolean>(true);
+  const [isTallWaveform, setIsTallWaveform] = useState<boolean>(false);
 
-  // Precomputed waveform peaks cache
+  // Precomputed waveform peaks cache (high fidelity 1600 buckets for 4K / Retina)
   const peaksRef = useRef<number[]>([]);
 
   // Compute downsampled waveform peaks when audioBuffer changes
@@ -76,8 +77,8 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     }
 
     const channelData = audioBuffer.getChannelData(0);
-    const numBuckets = 400; // sufficient for high visual fidelity
-    const bucketSize = Math.floor(channelData.length / numBuckets);
+    const numBuckets = 1600; // high visual fidelity across wide and 4K displays
+    const bucketSize = Math.max(1, Math.floor(channelData.length / numBuckets));
     const peaks: number[] = [];
 
     for (let i = 0; i < numBuckets; i++) {
@@ -98,6 +99,20 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     c => currentTime >= c.startTime && currentTime < c.endTime
   );
 
+  // Dynamic height calculation adapted to screen resolution and studio expand mode
+  const getTimelineHeight = useCallback((w: number, chordsActive: boolean, tall: boolean) => {
+    if (w >= 1600) {
+      // 4K and Ultra-wide monitors
+      return tall ? (chordsActive ? 280 : 240) : (chordsActive ? 180 : 150);
+    }
+    if (w <= 640) {
+      // Mobile screens
+      return tall ? (chordsActive ? 170 : 150) : (chordsActive ? 124 : 104);
+    }
+    // Standard desktop and laptop
+    return tall ? (chordsActive ? 220 : 190) : (chordsActive ? 144 : 124);
+  }, []);
+
   // Main Canvas render function
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -106,7 +121,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     const rect = container.getBoundingClientRect();
     const width = Math.floor(rect.width);
-    const height = hasChords ? 136 : 120;
+    const height = getTimelineHeight(width, hasChords, isTallWaveform);
 
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
@@ -330,7 +345,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.fill();
 
     ctx.restore();
-  }, [audioBuffer, beatAnalysis, chords, currentTime, duration, hasChords, hoverTime, showBeats, showChords, showOnsets, accidentalPreference]);
+  }, [audioBuffer, beatAnalysis, chords, currentTime, duration, hasChords, hoverTime, showBeats, showChords, showOnsets, accidentalPreference, isTallWaveform, getTimelineHeight]);
 
   useEffect(() => {
     let animId: number;
@@ -344,27 +359,38 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [render, isPlaying]);
 
-  // Handle window resize
+  // Handle ResizeObserver for dynamic full-width adaptation from mobile to 4K
   useEffect(() => {
-    const handleResize = () => render();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const container = containerRef.current;
+    if (!container) return;
+
+    render();
+    const ro = new ResizeObserver(() => {
+      render();
+    });
+    ro.observe(container);
+
+    window.addEventListener('resize', render);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', render);
+    };
   }, [render]);
 
-  // Seek logic based on canvas coordinate
-  const seekFromEvent = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Unified Seek logic based on horizontal coordinate (mouse or touch)
+  const seekFromCoord = useCallback((clientX: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
     const targetTime = (x / rect.width) * totalDuration;
     onSeek(targetTime);
-  };
+  }, [audioBuffer, duration, onSeek]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDragging(true);
-    seekFromEvent(e);
+    seekFromCoord(e.clientX);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -377,7 +403,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     setHoverTime(t);
 
     if (isDragging) {
-      seekFromEvent(e);
+      seekFromCoord(e.clientX);
     }
   };
 
@@ -390,6 +416,33 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     setHoverTime(null);
   };
 
+  // Touch handlers for mobile devices
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    setIsDragging(true);
+    if (e.touches[0]) {
+      seekFromCoord(e.touches[0].clientX);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches[0]) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = Math.max(0, Math.min(e.touches[0].clientX - rect.left, rect.width));
+        const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
+        setHoverTime((x / rect.width) * totalDuration);
+      }
+      if (isDragging) {
+        seekFromCoord(e.touches[0].clientX);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    setHoverTime(null);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -397,9 +450,9 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   };
 
   return (
-    <div className={`p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 ${className}`}>
+    <div className={`p-3.5 sm:p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 ${className}`}>
       {/* Top Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[var(--border-subtle)] pb-2.5">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
             <Activity className="w-3.5 h-3.5" />
@@ -422,7 +475,22 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         </div>
 
         {/* Legend & Display Filters */}
-        <div className="flex items-center gap-2 flex-wrap text-xs">
+        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+          {/* Toggle waveform height (compact vs studio tall) */}
+          <button
+            type="button"
+            onClick={() => setIsTallWaveform(!isTallWaveform)}
+            className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1 shadow-2xs ${
+              isTallWaveform
+                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+            title={isTallWaveform ? 'Volver a altura estándar' : 'Expandir altura de onda (Modo Estudio 4K)'}
+          >
+            {isTallWaveform ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            <span className="hidden sm:inline">{isTallWaveform ? 'Onda compacta' : 'Onda estudio'}</span>
+          </button>
+
           {chords && chords.length > 0 && (
             <button
               type="button"
@@ -506,11 +574,13 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         </div>
       </div>
 
-      {/* Interactive Canvas Timeline */}
+      {/* Interactive Canvas Timeline with dynamic responsive height and touch scrubbing */}
       <div
         ref={containerRef}
-        className="relative w-full rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[#0f1117] select-none cursor-pointer shadow-inner transition-all duration-150"
-        style={{ height: hasChords ? 136 : 120 }}
+        className="relative w-full rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[#0f1117] select-none cursor-pointer shadow-inner transition-all duration-150 touch-none"
+        style={{
+          minHeight: hasChords ? (isTallWaveform ? 170 : 124) : (isTallWaveform ? 150 : 104)
+        }}
       >
         <canvas
           ref={canvasRef}
@@ -518,6 +588,10 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
           className="w-full h-full block"
         />
 

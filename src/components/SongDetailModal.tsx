@@ -17,7 +17,9 @@ import {
   History,
   FileDown,
   Clock,
-  Trash2
+  Trash2,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { Song } from '../types/song';
 import {
@@ -81,10 +83,29 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     return 'base';
   });
   const [copied, setCopied] = useState<boolean>(false);
+  const [isMaximized, setIsMaximized] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cancionero_detail_maximized') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [activeTab, setActiveTab] = useState<'lyrics' | 'synced_lyrics' | 'markdown' | 'notes'>('lyrics');
   const [syncedLines, setSyncedLines] = useState<SyncedLyricLine[]>([]);
   const [lrcMetadata, setLrcMetadata] = useState<LrcMetadata>({});
   const [, setCustomLrcText] = useState<string>('');
+
+  const toggleMaximized = () => {
+    setIsMaximized(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cancionero_detail_maximized', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const handleChordPositionChange = (pos: 'above' | 'inline') => {
     setChordPosition(pos);
@@ -461,10 +482,14 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden modal-print-container print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:inset-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm overflow-hidden modal-print-container print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:block print:inset-auto">
       <div 
         ref={scrollContainerRef}
-        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200 print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:max-h-none print:w-full print:shadow-none print:border-none print:rounded-none"
+        className={`relative w-full flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-all duration-200 print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:max-h-none print:w-full print:shadow-none print:border-none print:rounded-none ${
+          isMaximized
+            ? 'w-[99vw] max-w-[99vw] h-[98vh] max-h-[98vh]'
+            : 'max-w-4xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-[2000px] 4xl:max-w-[2600px] max-h-[92vh]'
+        }`}
       >
         {/* Sticky Header with Action Controls */}
         <div className="sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 bg-[var(--bg-header)] backdrop-blur-md border-b border-[var(--border-subtle)] no-print print:hidden">
@@ -571,6 +596,13 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
               title="Imprimir partitura / letra para atril"
             >
               <Printer className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleMaximized}
+              className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer no-print"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar a pantalla completa / modo atril"}
+            >
+              {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
             <button
               onClick={onClose}
@@ -968,7 +1000,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab 1: Lyrics Content */}
         {activeTab === 'lyrics' && (
-          <div className="p-6 sm:p-10 font-serif leading-relaxed text-[var(--text-primary)] max-w-2xl mx-auto w-full">
+          <div className="p-6 sm:p-10 font-serif leading-relaxed text-[var(--text-primary)] max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full">
             <div className={`space-y-1 ${
               fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
             }`}>
@@ -979,7 +1011,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab: Synced Lyrics (LRC / WebVTT) */}
         {activeTab === 'synced_lyrics' && (
-          <div className="p-4 sm:p-6 max-w-3xl mx-auto w-full">
+          <div className="p-4 sm:p-6 max-w-3xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl mx-auto w-full">
             <SyncedLyrics
               lines={syncedLines}
               currentTime={currentTime}
@@ -1001,7 +1033,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab 2: Composition Notes */}
         {activeTab === 'notes' && (
-          <div className="p-6 sm:p-8 max-w-2xl mx-auto w-full space-y-6">
+          <div className="p-6 sm:p-8 max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full space-y-6">
             <div>
               <h4 className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] mb-2">
                 Ficha Técnica Musical

@@ -33,7 +33,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <section className="relative pt-8 pb-12 overflow-hidden border-b border-[var(--border-subtle)] transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
         {/* Split Hero */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-stretch">
           {/* Left Column: Typographic Hierarchy */}

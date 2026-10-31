@@ -308,8 +308,8 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
   const nextLine = currentIndex + 1 < lines.length ? lines[currentIndex + 1] : null;
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)]">
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-2 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
+      <div className="relative w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-[1920px] max-h-[94vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
           <div className="flex items-center gap-2.5">
@@ -415,7 +415,7 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
           </div>
 
           {/* Current Line Cue */}
-          <div className="w-full max-w-2xl py-3 px-4 min-h-[110px] flex flex-col items-center justify-center">
+          <div className="w-full max-w-2xl xl:max-w-4xl 2xl:max-w-5xl py-3 px-4 min-h-[110px] flex flex-col items-center justify-center">
             {isFinished ? (
               <div className="text-center space-y-2 animate-fadeIn">
                 <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
@@ -433,13 +433,13 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold">
                   Verso actual ({currentIndex + 1} de {totalCount})
                 </span>
-                <p className={`font-serif text-xl sm:text-2xl font-bold text-[var(--text-primary)] transition-transform duration-150 ${
+                <p className={`font-serif text-xl sm:text-2xl 2xl:text-3xl font-bold text-[var(--text-primary)] transition-transform duration-150 ${
                   stampFlash ? 'scale-105 text-[var(--accent-primary)]' : ''
                 }`}>
                   {currentLine.text}
                 </p>
                 {nextLine && (
-                  <p className="text-xs sm:text-sm font-serif text-[var(--text-muted)] italic truncate">
+                  <p className="text-xs sm:text-sm 2xl:text-base font-serif text-[var(--text-muted)] italic truncate">
                     Siguiente: {nextLine.text}
                   </p>
                 )}

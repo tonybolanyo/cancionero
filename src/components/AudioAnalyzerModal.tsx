@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Sparkles, Wand2, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Sparkles, Wand2, Plus, Maximize2, Minimize2 } from 'lucide-react';
 import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 
 interface AudioAnalyzerModalProps {
@@ -22,6 +22,8 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
   onClose,
   onCreateSongFromAudio
 }) => {
+  const [isMaximized, setIsMaximized] = useState<boolean>(false);
+
   if (!isOpen) return null;
 
   const handleApplyDetection = (data: {
@@ -41,8 +43,12 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
-      <div className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 md:p-6 bg-black/85 backdrop-blur-sm overflow-hidden animate-fadeIn">
+      <div className={`relative w-full flex flex-col rounded-xl sm:rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-all duration-200 ${
+        isMaximized
+          ? 'w-[99vw] max-w-[99vw] h-[98vh] max-h-[98vh]'
+          : 'max-w-5xl xl:max-w-6xl 2xl:max-w-7xl 3xl:max-w-[2200px] 4xl:max-w-[2800px] h-[94vh] max-h-[94vh]'
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
           <div className="flex items-center gap-3">
@@ -58,6 +64,11 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
                   <Sparkles className="w-2.5 h-2.5" />
                   <span>MP3 / WAV</span>
                 </span>
+                {isMaximized && (
+                  <span className="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
+                    Estudio 4K
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[var(--text-muted)]">
                 Detección automática de Tempo (BPMs), Tonalidad, Escala y Acordes para canciones acústicas
@@ -65,13 +76,23 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer transition-colors"
-            title="Cerrar modal"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMaximized(!isMaximized)}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+              title={isMaximized ? 'Restaurar tamaño normal' : 'Modo Pantalla Completa 4K'}
+            >
+              {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer transition-colors"
+              title="Cerrar modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}

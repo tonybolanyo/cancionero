@@ -251,7 +251,7 @@ export const SongDashboard: React.FC<SongDashboardProps> = ({ songs, isAuthor })
   const tickFill = isDarkMode ? '#a1a1aa' : '#57534e';
 
   return (
-    <section id="dashboard-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 border-t border-[var(--border-subtle)]">
+    <section id="dashboard-section" className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-12 border-t border-[var(--border-subtle)]">
       {/* Header and Controls */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
