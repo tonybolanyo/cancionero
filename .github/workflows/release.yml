@@ -110,7 +110,13 @@ jobs:
           
           # Save to file for later use
           echo "$CHANGELOG" > /tmp/changelog.txt
-          echo "changelog=$(cat /tmp/changelog.txt | head -20)" >> $GITHUB_OUTPUT
+          
+          # Use EOF delimiter for multi-line output with special characters
+          {
+            echo "changelog<<EOF"
+            cat /tmp/changelog.txt | head -20
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Commit and tag
         if: ${{ steps.version.outputs.should_release == 'true' }}
