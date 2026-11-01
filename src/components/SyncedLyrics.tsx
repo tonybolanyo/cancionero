@@ -237,6 +237,8 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
       const result = await LyricsTranscriptionService.transcribeLocalFromFile(transcriptionFile, {
         allowWasmFallback,
         language: 'spanish'
+      }, (message, status) => {
+        setTranscriptionNotice(`[${status}] ${message}`);
       });
       if (result.lines.length === 0) {
         throw new Error('No se detectó letra cantada utilizable para generar líneas sincronizadas.');

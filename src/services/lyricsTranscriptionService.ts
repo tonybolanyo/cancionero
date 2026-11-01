@@ -17,9 +17,13 @@ import { fileToBase64Payload } from '../lib/audio/fileEncoding';
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
 
+export type TranscriptionProgressCallback = (message: string, status: string) => void;
+
 interface PendingRequest {
   resolve: (value: LyricsTranscriptionWorkerResponse) => void;
   reject: (reason: Error) => void;
+  timeoutId?: NodeJS.Timeout;
+  onProgress?: TranscriptionProgressCallback;
 }
 
 interface BackendTranscriptionSegment {
@@ -51,8 +55,22 @@ export class LyricsTranscriptionService {
     if (!this.workerListenerAttached) {
       this.worker.addEventListener('message', (event: MessageEvent<LyricsTranscriptionWorkerResponse>) => {
         const data = event.data;
+        
+        if (data.type === 'progress') {
+          const pending = this.pending.get(data.id);
+          if (pending?.onProgress) {
+            pending.onProgress(data.message, data.status);
+          }
+          return;
+        }
+        
         const pending = this.pending.get(data.id);
         if (!pending) return;
+        
+        if (pending.timeoutId) {
+          clearTimeout(pending.timeoutId);
+        }
+        
         this.pending.delete(data.id);
         pending.resolve(data);
       });
@@ -71,10 +89,15 @@ export class LyricsTranscriptionService {
     return this.worker;
   }
 
-  private static postWorkerRequest(request: LyricsTranscriptionWorkerRequest): Promise<LyricsTranscriptionWorkerResponse> {
+  private static postWorkerRequest(request: LyricsTranscriptionWorkerRequest, onProgress?: TranscriptionProgressCallback, timeoutMs: number = 600000): Promise<LyricsTranscriptionWorkerResponse> {
     const worker = this.ensureWorker();
     return new Promise((resolve, reject) => {
-      this.pending.set(request.id, { resolve, reject });
+      const timeoutId = setTimeout(() => {
+        this.pending.delete(request.id);
+        reject(new Error('La transcripción tardó demasiado (>10 minutos). Verifica tu archivo de audio y conexión.'));
+      }, timeoutMs);
+
+      this.pending.set(request.id, { resolve, reject, timeoutId, onProgress });
 
       try {
         if (request.type === 'transcribe') {
@@ -83,6 +106,7 @@ export class LyricsTranscriptionService {
           worker.postMessage(request);
         }
       } catch (err) {
+        clearTimeout(timeoutId);
         this.pending.delete(request.id);
         reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -96,11 +120,19 @@ export class LyricsTranscriptionService {
       type: 'capabilities'
     });
 
-    if (!response.success || response.type !== 'capabilities') {
+    if (response.type !== 'capabilities') {
       return {
         hasWebGpu: false,
         canRunLocal: false,
-        reason: response.success ? 'No se pudo consultar capacidades locales del navegador.' : response.error
+        reason: 'No se pudo consultar capacidades locales del navegador.'
+      };
+    }
+
+    if (!response.success) {
+      return {
+        hasWebGpu: false,
+        canRunLocal: false,
+        reason: 'Error al consultar capacidades.'
       };
     }
 
@@ -117,7 +149,8 @@ export class LyricsTranscriptionService {
 
   static async transcribeLocalFromFile(
     file: File,
-    options?: LocalTranscriptionOptions
+    options?: LocalTranscriptionOptions,
+    onProgress?: TranscriptionProgressCallback
   ): Promise<LyricsTranscriptionResult> {
     const { audioBuffer, audioContext } = await decodeAudioBuffer(file);
 
@@ -138,10 +171,18 @@ export class LyricsTranscriptionService {
           strideLengthSeconds: options?.strideLengthSeconds ?? 4,
           allowWasmFallback: options?.allowWasmFallback ?? false
         }
-      });
+      }, onProgress);
 
-      if (!response.success || response.type !== 'transcribe' || !response.result) {
-        throw new Error(response.success ? 'La transcripción local no devolvió resultado.' : response.error);
+      if (response.type !== 'transcribe') {
+        throw new Error('Respuesta inesperada del worker de transcripción.');
+      }
+
+      if (!response.success) {
+        throw new Error('La transcripción local no devolvió resultado.');
+      }
+
+      if (!response.result) {
+        throw new Error('La transcripción local no devolvió resultado.');
       }
 
       const segments = sanitizeSegments(response.result.segments);
