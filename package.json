@@ -4,10 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "tsx server.ts",
+    "dev": "npm run generate-catalog && tsx server.ts",
+    "start": "npm run generate-catalog && tsx server.ts",
     "generate-version": "node scripts/generate-version.js",
-    "build": "npm run generate-version && vite build",
+    "generate-catalog": "node scripts/generate-catalog.mjs",
+    "build": "npm run generate-version && npm run generate-catalog && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
