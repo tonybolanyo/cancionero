@@ -1,11 +1,12 @@
 import React from 'react';
-import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2 } from 'lucide-react';
+import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2, Music } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { siteMetadata } from '../utils/siteConfig';
 
 interface HeaderProps {
   onOpenNewSong: () => void;
+  onOpenSpotifyImport: () => void;
   onOpenGitModal: () => void;
   onOpenAudioAnalyzer?: () => void;
   onSelectTab: (tab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard') => void;
@@ -17,6 +18,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenNewSong,
+  onOpenSpotifyImport,
   onOpenGitModal,
   onOpenAudioAnalyzer,
   onSelectTab,
@@ -156,6 +158,15 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Detector de Audio</span>
                 </button>
               )}
+
+              <button
+                onClick={onOpenSpotifyImport}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--accent-primary)] bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle)]/80 border border-[var(--accent-border)] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                title="Importar canciones de un disco de Spotify"
+              >
+                <Music className="w-3.5 h-3.5" />
+                <span>Importar Disco</span>
+              </button>
 
               <button
                 onClick={onOpenNewSong}
