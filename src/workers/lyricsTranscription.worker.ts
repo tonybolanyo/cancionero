@@ -23,6 +23,14 @@ export interface LocalCapabilitiesWorkerRequest {
   type: 'capabilities';
 }
 
+export interface LocalTranscriptionProgressUpdate {
+  id: string;
+  type: 'progress';
+  status: 'loading-model' | 'processing-audio' | 'extracting-timestamps';
+  message: string;
+  progress?: number;
+}
+
 export type LyricsTranscriptionWorkerRequest =
   | LocalTranscriptionWorkerRequest
   | LocalCapabilitiesWorkerRequest;
@@ -51,7 +59,8 @@ export interface LyricsTranscriptionWorkerError {
 
 export type LyricsTranscriptionWorkerResponse =
   | LyricsTranscriptionWorkerSuccess
-  | LyricsTranscriptionWorkerError;
+  | LyricsTranscriptionWorkerError
+  | LocalTranscriptionProgressUpdate;
 
 type PipelineFactory = typeof import('@huggingface/transformers').pipeline;
 type PipelineEnv = typeof import('@huggingface/transformers').env;
@@ -136,7 +145,8 @@ function normalizeAsrOutput(
 
 async function getAsrPipeline(
   model: string,
-  allowWasmFallback: boolean
+  allowWasmFallback: boolean,
+  onProgress?: (message: string) => void
 ): Promise<{ transcriber: AutomaticSpeechRecognitionPipeline; device: LocalTranscriptionDevice }> {
   const { pipeline } = await loadTransformersRuntime();
   const canUseWebGpu = hasWebGpuInWorker();
@@ -156,12 +166,15 @@ async function getAsrPipeline(
     const cacheKey = `${model}::${device}`;
     const cached = pipelineCache.get(cacheKey);
     if (cached) {
+      onProgress?.(`Modelo Whisper cargado (${device}) desde caché.`);
       return { transcriber: cached, device };
     }
 
     try {
+      onProgress?.(`Descargando modelo Whisper (${device})... Esta es la primera vez, puede tardar.`);
       const transcriber = await pipeline('automatic-speech-recognition', model, { device });
       pipelineCache.set(cacheKey, transcriber);
+      onProgress?.(`Modelo Whisper listo (${device}).`);
       return { transcriber, device };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -196,7 +209,22 @@ self.onmessage = async (event: MessageEvent<LyricsTranscriptionWorkerRequest>) =
   const { id, payload } = request;
 
   try {
-    const { transcriber, device } = await getAsrPipeline(payload.model, payload.allowWasmFallback);
+    const sendProgress = (status: LocalTranscriptionProgressUpdate['status'], message: string) => {
+      const progressMessage: LocalTranscriptionProgressUpdate = {
+        id,
+        type: 'progress',
+        status,
+        message
+      };
+      self.postMessage(progressMessage);
+    };
+
+    sendProgress('loading-model', 'Inicializando transcriptor de audio...');
+    const { transcriber, device } = await getAsrPipeline(payload.model, payload.allowWasmFallback, (msg) => {
+      sendProgress('loading-model', msg);
+    });
+    
+    sendProgress('processing-audio', 'Procesando audio con modelo Whisper...');
     const asrOutput = await transcriber(payload.audioData, {
       return_timestamps: true,
       chunk_length_s: payload.chunkLengthSeconds,
@@ -205,6 +233,7 @@ self.onmessage = async (event: MessageEvent<LyricsTranscriptionWorkerRequest>) =
       task: 'transcribe'
     });
 
+    sendProgress('extracting-timestamps', 'Extrayendo marcas de tiempo...');
     const duration = payload.audioData.length / payload.sampleRate;
     const normalized = normalizeAsrOutput(asrOutput, duration);
 
