@@ -9,37 +9,76 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  release-please:
+  release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
-      - name: Release Please
-        id: release
-        uses: googleapis/release-please-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: node
-          target-branch: main
-          config-file: release-please-config.json
-
       - name: Checkout
-        if: ${{ steps.release.outputs.release_created }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
 
       - name: Setup Node.js
-        if: ${{ steps.release.outputs.release_created }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
+      - name: Calculate version
+        id: version
+        run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git rev-list --all --oneline)
+          else
+            COMMITS=$(git rev-list $LAST_TAG..HEAD --oneline)
+          fi
+          
+          # Determine version bump
+          BREAKING=$(echo "$COMMITS" | grep -c "^.*!:" || true)
+          FEATURES=$(echo "$COMMITS" | grep -c "^.*feat:" || true)
+          FIXES=$(echo "$COMMITS" | grep -c "^.*fix:" || true)
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          PATCH=${PATCH:-0}
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          
+          if [ $BREAKING -gt 0 ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            SHOULD_RELEASE=true
+          elif [ $FEATURES -gt 0 ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            SHOULD_RELEASE=true
+          elif [ $FIXES -gt 0 ]; then
+            PATCH=$((PATCH + 1))
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            SHOULD_RELEASE=true
+          else
+            SHOULD_RELEASE=false
+          fi
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+          echo "Version calculated: $NEW_VERSION (should_release: $SHOULD_RELEASE)"
+
       - name: Install dependencies
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -47,27 +86,51 @@ jobs:
             npm install
           fi
 
-      - name: Update package.json version
-        if: ${{ steps.release.outputs.release_created }}
+      - name: Update version files
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
-          npm version ${{ steps.release.outputs.version }} --no-git-tag-version
-
-      - name: Commit version update
-        if: ${{ steps.release.outputs.release_created }}
-        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add package.json package-lock.json
-          git commit -m "chore: update version to ${{ steps.release.outputs.version }}" || true
-          git push origin main || true
 
-      - name: Create release
-        if: ${{ steps.release.outputs.release_created }}
+      - name: Generate changelog
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        id: changelog
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            COMMIT_RANGE="HEAD"
+          else
+            COMMIT_RANGE="$LAST_TAG..HEAD"
+          fi
+          
+          # Generate changelog entries
+          CHANGELOG=$(git log $COMMIT_RANGE --pretty=format:"%h - %s (%an)")
+          
+          # Save to file for later use
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "changelog=$(cat /tmp/changelog.txt | head -20)" >> $GITHUB_OUTPUT
+
+      - name: Commit and tag
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore: release v${{ steps.version.outputs.version }}"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin $(git rev-parse --abbrev-ref HEAD)
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: v${{ steps.release.outputs.version }}
-          name: Release v${{ steps.release.outputs.version }}
-          body: ${{ steps.release.outputs.body }}
+          tag: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## Changes in v${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
