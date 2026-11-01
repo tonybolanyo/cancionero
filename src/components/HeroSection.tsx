@@ -26,7 +26,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const privateCount = songs.filter(s => s.status === 'private').length;
   const audioCount = songs.filter(s => s.spotifyUrl || s.youtubeUrl || s.soundcloudUrl || s.audioUrl).length;
 
-  const featuredSong = songs.find(s => s.id === 'noches-de-cristal' && s.status === 'published') 
+  const featuredSong = songs.find(s => s.id === 'algo-quiere-salir' && s.status === 'published') 
+    || songs.find(s => s.status === 'published' && (s.spotifyUrl || s.youtubeUrl || s.audioUrl))
     || songs.find(s => s.status === 'published') 
     || songs[0] 
     || null;

@@ -24,6 +24,10 @@ export default defineConfig(() => {
             if (fs.existsSync(rootCatalog)) {
               fs.copyFileSync(rootCatalog, publicCatalog);
             }
+            const bundledPath = path.resolve(__dirname, 'src/data/bundledSongs.json');
+            if (fs.existsSync(rootCatalog) && !fs.existsSync(bundledPath)) {
+              fs.copyFileSync(rootCatalog, bundledPath);
+            }
             const wasmSource = path.resolve(__dirname, 'node_modules/essentia.js/dist/essentia-wasm.web.wasm');
             const publicWasm = path.resolve(publicDir, 'essentia-wasm.web.wasm');
             if (fs.existsSync(wasmSource) && !fs.existsSync(publicWasm)) {

@@ -23,121 +23,67 @@ export interface SongVersionRecord {
   isCurrent: boolean;
 }
 
-// Initial commit history with real snapshots
+// Initial commit history with real snapshots from canonical repository songs
 const createInitialCommits = (): GitCommit[] => {
-  const nochesOriginal = INITIAL_SONGS[0];
-  const faroOriginal = INITIAL_SONGS[1];
-  const raizOriginal = INITIAL_SONGS[2];
-  const laberintoOriginal = INITIAL_SONGS[3];
+  const s0 = INITIAL_SONGS[0];
+  const s1 = INITIAL_SONGS[1];
+  const s2 = INITIAL_SONGS[2];
+  const s3 = INITIAL_SONGS[3];
 
-  // An earlier version of Noches de Cristal without the bridge strings
-  const nochesV1Markdown = `---
-id: "noches-de-cristal"
-title: "Noches de Cristal"
-status: "draft"
-year: 2024
-genre: "Indie Folk / Autor"
-key: "Am"
-tempo: 90
-tuning: "Estándar (EADGBE)"
-notes: "Primer borrador compuesto en casa con guitarra española."
-createdAt: "2024-04-10T12:00:00Z"
-updatedAt: "2024-05-12T16:00:00Z"
----
+  const commits: GitCommit[] = [];
 
-## Estrofa 1
-[Am] Caminando por la calle ancha de los [F] faroles rotos,
-[C] voy juntando en el bolsillo pedazos [G] de viejas fotos.
-[Am] El asfalto devuelve un brillo [F] de plata y frío,
-[C] mientras la ciudad olvida que alguna vez [G] tuviste un río.
-
-## Estribillo (Borrador inicial)
-[F] Y en estas noches de [C] cristal,
-[G] donde nadie se atreve [Am] a hablar,
-[F] dejamos la persiana [C] abierta
-[G] para ver el tiempo [Am] pasar.`;
-
-  // Earlier version of Laberintos de Otoño
-  const laberintoV1Markdown = `---
-id: "laberintos-de-otono"
-title: "Laberintos de Otoño"
-status: "draft"
-year: 2026
-genre: "Canción de Autor / Acústica"
-key: "Em"
-tempo: 94
-tuning: "Estándar (EADGBE)"
-notes: "Apunte rápido de acordes para no olvidar la melodía."
-createdAt: "2026-02-10T10:00:00Z"
-updatedAt: "2026-02-10T10:00:00Z"
----
-
-## Estrofa 1
-[Em] Caían las hojas como billetes viejos
-[C] sobre los bancos de hierro del bulevar.
-[G] Nos prometimos mirarnos desde lejos
-[D] sin la tentación de volver a cruzar.`;
-
-  return [
-    {
+  if (s0) {
+    commits.push({
       hash: 'a108f92',
-      message: 'init: estructura inicial y primeros acordes de "Noches de Cristal"',
+      message: `init: estructura inicial y primeros acordes de "${s0.title}"`,
       author: 'Tony <tony@tonygb.com>',
-      timestamp: '2024-05-12T16:00:00Z',
-      filesChanged: ['songs/noches-de-cristal.md'],
-      snapshot: {
-        'noches-de-cristal': nochesV1Markdown
-      }
-    },
-    {
+      timestamp: s0.createdAt || '2024-05-12T16:00:00Z',
+      filesChanged: [`songs/${s0.id}.md`],
+      snapshot: { [s0.id]: songToMarkdown(s0) }
+    });
+  }
+
+  if (s1) {
+    commits.push({
       hash: 'b319e41',
-      message: 'feat: agrega puente lírico, arreglos y publicación de "Noches de Cristal"',
+      message: `feat: arreglos y publicación de "${s1.title}"`,
       author: 'Tony <tony@tonygb.com>',
-      timestamp: '2025-01-15T18:30:00Z',
-      filesChanged: ['songs/noches-de-cristal.md'],
-      snapshot: {
-        'noches-de-cristal': nochesOriginal ? songToMarkdown(nochesOriginal) : nochesV1Markdown
-      }
-    },
-    {
+      timestamp: s1.createdAt || '2025-01-15T18:30:00Z',
+      filesChanged: [`songs/${s1.id}.md`],
+      snapshot: { [s1.id]: songToMarkdown(s1) }
+    });
+  }
+
+  if (s2) {
+    commits.push({
       hash: 'c4e819b',
-      message: 'feat: agrega balada en 3/4 "Faro de Sal" con afinación Drop D',
+      message: `feat: acordes y metadatos de "${s2.title}"`,
       author: 'Tony <tony@tonygb.com>',
-      timestamp: '2025-08-20T11:15:00Z',
-      filesChanged: ['songs/faro-de-sal.md'],
-      snapshot: {
-        'faro-de-sal': faroOriginal ? songToMarkdown(faroOriginal) : 'faro-de-sal'
-      }
-    },
-    {
+      timestamp: s2.createdAt || '2025-08-20T11:15:00Z',
+      filesChanged: [`songs/${s2.id}.md`],
+      snapshot: { [s2.id]: songToMarkdown(s2) }
+    });
+  }
+
+  if (s3) {
+    commits.push({
       hash: 'e1d93aa',
-      message: 'release: publicación oficial de "La Raíz del Viento" en Spotify',
+      message: `feat: registro de composición "${s3.title}"`,
       author: 'Tony <tony@tonygb.com>',
-      timestamp: '2025-11-04T16:45:00Z',
-      filesChanged: ['songs/la-raiz-del-viento.md'],
-      snapshot: {
-        'la-raiz-del-viento': raizOriginal ? songToMarkdown(raizOriginal) : 'la-raiz-del-viento'
-      }
-    },
+      timestamp: s3.createdAt || '2025-11-04T16:45:00Z',
+      filesChanged: [`songs/${s3.id}.md`],
+      snapshot: { [s3.id]: songToMarkdown(s3) }
+    });
+  }
+
+  return commits.length > 0 ? commits : [
     {
-      hash: '93f0b42',
-      message: 'draft: primeros compases y apuntes líricos de "Laberintos de Otoño"',
+      hash: 'init123',
+      message: 'init: catálogo completo de canciones del cancionero',
       author: 'Tony <tony@tonygb.com>',
-      timestamp: '2026-02-10T10:00:00Z',
-      filesChanged: ['songs/laberintos-de-otono.md'],
-      snapshot: {
-        'laberintos-de-otono': laberintoV1Markdown
-      }
-    },
-    {
-      hash: '7d41f0a',
-      message: 'update: revisión de estrofa 2 e ideas para el estribillo de "Laberintos de Otoño"',
-      author: 'Tony <tony@tonygb.com>',
-      timestamp: '2026-10-15T09:20:00Z',
-      filesChanged: ['songs/laberintos-de-otono.md'],
-      snapshot: {
-        'laberintos-de-otono': laberintoOriginal ? songToMarkdown(laberintoOriginal) : laberintoV1Markdown
-      }
+      timestamp: new Date().toISOString(),
+      filesChanged: ['catalog.json'],
+      snapshot: {}
     }
   ];
 };
@@ -175,22 +121,45 @@ export class StorageService {
     const handledIds = new Set<string>();
     const reconciledSongs: Song[] = [];
 
+    // Obsolete mock template song IDs that do not exist in the actual /songs repository
+    const legacyMockIds = new Set([
+      'noches-de-cristal',
+      'faro-de-sal',
+      'la-raiz-del-viento',
+      'laberintos-de-otono'
+    ]);
+
     // 1. Process incoming songs from repository/catalog
     for (const incomingSong of incomingSongs) {
       handledIds.add(incomingSong.id);
       const localSong = localMap.get(incomingSong.id);
 
+      // Ensure lyrics are never erased if incoming catalog only has metadata (e.g., from stripped JSON)
+      const bundledSong = INITIAL_SONGS.find(s => s.id === incomingSong.id);
+      const effectiveLyrics = (incomingSong.lyrics && incomingSong.lyrics.trim().length > 0)
+        ? incomingSong.lyrics
+        : (localSong?.lyrics && localSong.lyrics.trim().length > 0)
+          ? localSong.lyrics
+          : bundledSong?.lyrics || '';
+
+      const resolvedIncoming: Song = {
+        ...bundledSong,
+        ...localSong,
+        ...incomingSong,
+        lyrics: effectiveLyrics
+      };
+
       if (!localSong) {
         // New song from repository! Add it seamlessly.
-        reconciledSongs.push(incomingSong);
-        nextSnapshot[incomingSong.id] = songToMarkdown(incomingSong);
+        reconciledSongs.push(resolvedIncoming);
+        nextSnapshot[resolvedIncoming.id] = songToMarkdown(resolvedIncoming);
         hasChanges = true;
         continue;
       }
 
       const committedMarkdown = snapshot[localSong.id];
       const localMarkdown = songToMarkdown(localSong);
-      const incomingMarkdown = songToMarkdown(incomingSong);
+      const incomingMarkdown = songToMarkdown(resolvedIncoming);
 
       // Check if user has uncommitted changes locally
       const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
@@ -200,20 +169,30 @@ export class StorageService {
         // If incoming song is different in any way (lyrics, chords, key, tempo, tags, status, updatedAt),
         // adopt the incoming repository version.
         const isDifferent = localMarkdown.trim() !== incomingMarkdown.trim() ||
-          localSong.status !== incomingSong.status ||
-          localSong.genre !== incomingSong.genre ||
-          localSong.key !== incomingSong.key ||
-          localSong.tempo !== incomingSong.tempo ||
-          JSON.stringify(localSong.tags || []) !== JSON.stringify(incomingSong.tags || []);
+          localSong.status !== resolvedIncoming.status ||
+          localSong.genre !== resolvedIncoming.genre ||
+          localSong.key !== resolvedIncoming.key ||
+          localSong.tempo !== resolvedIncoming.tempo ||
+          JSON.stringify(localSong.tags || []) !== JSON.stringify(resolvedIncoming.tags || []);
 
         if (isDifferent) {
-          reconciledSongs.push(incomingSong);
-          nextSnapshot[incomingSong.id] = incomingMarkdown;
+          reconciledSongs.push(resolvedIncoming);
+          nextSnapshot[resolvedIncoming.id] = incomingMarkdown;
           hasChanges = true;
         } else {
-          // If tags were missing in local, adopt tags from incoming
-          if ((!localSong.tags || localSong.tags.length === 0) && incomingSong.tags && incomingSong.tags.length > 0) {
-            reconciledSongs.push({ ...localSong, tags: incomingSong.tags });
+          // If tags or lyrics were missing in local, adopt from incoming
+          let updatedItem = localSong;
+          let itemChanged = false;
+          if ((!localSong.tags || localSong.tags.length === 0) && resolvedIncoming.tags && resolvedIncoming.tags.length > 0) {
+            updatedItem = { ...updatedItem, tags: resolvedIncoming.tags };
+            itemChanged = true;
+          }
+          if ((!localSong.lyrics || localSong.lyrics.trim().length === 0) && effectiveLyrics) {
+            updatedItem = { ...updatedItem, lyrics: effectiveLyrics };
+            itemChanged = true;
+          }
+          if (itemChanged) {
+            reconciledSongs.push(updatedItem);
             hasChanges = true;
           } else {
             reconciledSongs.push(localSong);
@@ -222,7 +201,7 @@ export class StorageService {
       } else {
         // Local song has uncommitted edits on this device.
         const localTs = Date.parse(localSong.updatedAt || '0');
-        const incomingTs = Date.parse(incomingSong.updatedAt || '0');
+        const incomingTs = Date.parse(resolvedIncoming.updatedAt || '0');
 
         if (Number.isFinite(incomingTs) && Number.isFinite(localTs) && incomingTs > localTs) {
           // The incoming version from the repo is strictly newer than when the local draft was touched.
@@ -230,13 +209,14 @@ export class StorageService {
           try {
             this.createBackupPoint(
               `Backup automático antes de actualizar "${localSong.title}" desde ${sourceName}`,
-              'pre_sync'
+              'pre_sync',
+              localSongs
             );
           } catch {
             // ignore backup failure
           }
-          reconciledSongs.push(incomingSong);
-          nextSnapshot[incomingSong.id] = incomingMarkdown;
+          reconciledSongs.push(resolvedIncoming);
+          nextSnapshot[resolvedIncoming.id] = incomingMarkdown;
           hasChanges = true;
         } else {
           // Keep the local uncommitted draft intact so author work is preserved
@@ -248,6 +228,13 @@ export class StorageService {
     // 2. Process local songs that were NOT in incomingSongs
     for (const localSong of (localSongs || [])) {
       if (handledIds.has(localSong.id)) continue;
+
+      // Purge obsolete mock songs that do not belong to the repository
+      if (legacyMockIds.has(localSong.id)) {
+        delete nextSnapshot[localSong.id];
+        hasChanges = true;
+        continue;
+      }
 
       const committedMarkdown = snapshot[localSong.id];
       const localMarkdown = songToMarkdown(localSong);
@@ -779,19 +766,29 @@ export class StorageService {
    */
   static createBackupPoint(
     name: string,
-    reason: SongBackupPoint['reason'] = 'manual'
+    reason: SongBackupPoint['reason'] = 'manual',
+    songsToBackup?: Song[]
   ): SongBackupPoint {
-    const currentSongs = this.getSongs();
-    const songsJson = JSON.stringify(currentSongs, null, 2);
+    let currentSongs = songsToBackup;
+    if (!currentSongs) {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_SONGS);
+        currentSongs = stored ? JSON.parse(stored) : [];
+      } catch {
+        currentSongs = [];
+      }
+    }
+    const safeSongs = currentSongs || [];
+    const songsJson = JSON.stringify(safeSongs, null, 2);
 
     const backupPoint: SongBackupPoint = {
       id: `backup-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: new Date().toISOString(),
       name: name.trim() || `Punto de restauración (${new Date().toLocaleTimeString('es-ES')})`,
       reason,
-      songCount: currentSongs.length,
+      songCount: safeSongs.length,
       songsJson,
-      songsSummary: currentSongs.map(s => ({
+      songsSummary: safeSongs.map(s => ({
         id: s.id,
         title: s.title,
         key: s.key,

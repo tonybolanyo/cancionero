@@ -198,32 +198,42 @@ export function parseLyricLine(line: string): LyricSegment[] {
  * Serialize a Song object to Markdown with YAML frontmatter
  */
 export function songToMarkdown(song: Song): string {
+  const safeId = song?.id || '';
+  const safeTitle = (song?.title || 'Sin título').replace(/"/g, '\\"');
+  const safeStatus = song?.status || 'draft';
+  const safeYear = typeof song?.year === 'number' ? song.year : new Date().getFullYear();
+  const safeGenre = (song?.genre || 'Canción de Autor').replace(/"/g, '\\"');
+  const safeKey = song?.key || 'Am';
+  const safeCreatedAt = song?.createdAt || new Date().toISOString();
+  const safeUpdatedAt = song?.updatedAt || new Date().toISOString();
+  const safeLyrics = (song?.lyrics || '').trim();
+
   const frontmatter = [
     '---',
-    `id: "${song.id}"`,
-    `title: "${song.title.replace(/"/g, '\\"')}"`,
-    `status: "${song.status}"`,
-    `year: ${song.year}`,
-    `genre: "${song.genre.replace(/"/g, '\\"')}"`,
-    `key: "${song.key}"`,
-    song.tempo ? `tempo: ${song.tempo}` : null,
-    song.timeSignature ? `timeSignature: "${song.timeSignature}"` : null,
-    song.tuning ? `tuning: "${song.tuning}"` : null,
-    song.duration ? `duration: "${song.duration}"` : null,
-    song.spotifyUrl ? `spotifyUrl: "${song.spotifyUrl}"` : null,
-    song.youtubeUrl ? `youtubeUrl: "${song.youtubeUrl}"` : null,
-    song.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
-    song.audioUrl ? `audioUrl: "${song.audioUrl}"` : null,
-    song.coverImage ? `coverImage: "${song.coverImage}"` : null,
-    song.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
-    song.lrc ? `lrc: "${song.lrc.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
-    song.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${t.replace(/"/g, '')}"`).join(', ')}]` : null,
-    `createdAt: "${song.createdAt}"`,
-    `updatedAt: "${song.updatedAt}"`,
-    song.gitHash ? `gitHash: "${song.gitHash}"` : null,
+    `id: "${safeId}"`,
+    `title: "${safeTitle}"`,
+    `status: "${safeStatus}"`,
+    `year: ${safeYear}`,
+    `genre: "${safeGenre}"`,
+    `key: "${safeKey}"`,
+    song?.tempo ? `tempo: ${song.tempo}` : null,
+    song?.timeSignature ? `timeSignature: "${song.timeSignature}"` : null,
+    song?.tuning ? `tuning: "${song.tuning}"` : null,
+    song?.duration ? `duration: "${song.duration}"` : null,
+    song?.spotifyUrl ? `spotifyUrl: "${song.spotifyUrl}"` : null,
+    song?.youtubeUrl ? `youtubeUrl: "${song.youtubeUrl}"` : null,
+    song?.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
+    song?.audioUrl ? `audioUrl: "${song.audioUrl}"` : null,
+    song?.coverImage ? `coverImage: "${song.coverImage}"` : null,
+    song?.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song?.lrc ? `lrc: "${song.lrc.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song?.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${String(t).replace(/"/g, '')}"`).join(', ')}]` : null,
+    `createdAt: "${safeCreatedAt}"`,
+    `updatedAt: "${safeUpdatedAt}"`,
+    song?.gitHash ? `gitHash: "${song.gitHash}"` : null,
     '---',
     '',
-    song.lyrics.trim()
+    safeLyrics
   ].filter(Boolean).join('\n');
 
   return frontmatter;

@@ -66,6 +66,10 @@ function parseMarkdownFile(filePath) {
       }
     }
     
+    // Extract body (lyrics) after frontmatter
+    const body = frontmatterMatch ? content.slice(frontmatterMatch[0].length).trim() : '';
+    metadata.lyrics = body;
+
     return metadata;
   } catch (err) {
     console.error(`❌ Error parsing ${path.basename(filePath)}:`, err.message);
@@ -101,6 +105,9 @@ function generateCatalog() {
       const statusOrder = { published: 1, draft: 2, private: 3 };
       const orderDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
       if (orderDiff !== 0) return orderDiff;
+      const bTs = Date.parse(b.updatedAt || new Date(0).toISOString());
+      const aTs = Date.parse(a.updatedAt || new Date(0).toISOString());
+      if (bTs !== aTs) return bTs - aTs;
       return (b.year || 0) - (a.year || 0);
     });
 
@@ -114,6 +121,11 @@ function generateCatalog() {
     }
     fs.copyFileSync(catalogPath, publicCatalogPath);
     console.log(`✅ Copied catalog.json to public/`);
+
+    // Write to src/data/bundledSongs.json for direct zero-latency import
+    const bundledDataPath = path.join(projectRoot, 'src', 'data', 'bundledSongs.json');
+    fs.writeFileSync(bundledDataPath, JSON.stringify(songs, null, 2) + '\n');
+    console.log(`✅ Generated src/data/bundledSongs.json with ${songs.length} songs`);
 
     if (parseErrors > 0) {
       console.warn(`⚠️  ${parseErrors} file(s) had parsing errors`);

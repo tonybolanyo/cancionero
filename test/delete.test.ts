@@ -66,8 +66,8 @@ test('deleteSong removes the song and cleans snapshot and registers git commit',
   assert.equal(result.success, true);
   assert.equal(result.deletedSong?.id, 'cancion-a-eliminar');
   assert.equal(result.deletedSong?.title, 'Canción a Eliminar');
-  assert.equal(result.songs.length, 1);
-  assert.equal(result.songs[0].id, 'cancion-a-conservar');
+  assert.equal(result.songs.some(s => s.id === 'cancion-a-eliminar'), false);
+  assert.equal(result.songs.some(s => s.id === 'cancion-a-conservar'), true);
 
   // Verify snapshot was cleaned
   const updatedSnapshot = StorageService.getSnapshot();
