@@ -11,6 +11,7 @@ import { SongCompactView } from './components/SongCompactView';
 import { SongDashboard } from './components/SongDashboard';
 import { SongDetailModal } from './components/SongDetailModal';
 import { SongEditorModal } from './components/SongEditorModal';
+import { SpotifyAlbumImportModal } from './components/SpotifyAlbumImportModal';
 import { GitSyncModal } from './components/GitSyncModal';
 import { AboutModal } from './components/AboutModal';
 import { GitHubAuthModal } from './components/GitHubAuthModal';
@@ -69,6 +70,7 @@ function CancioneroApp() {
   const [historySong, setHistorySong] = useState<Song | null>(null);
   const [renamingSong, setRenamingSong] = useState<Song | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
+  const [isSpotifyImportOpen, setIsSpotifyImportOpen] = useState<boolean>(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState<boolean>(false);
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -313,6 +315,19 @@ function CancioneroApp() {
     }
     setEditingSong(null);
     setIsEditorOpen(true);
+  };
+
+  const handleOpenSpotifyImport = () => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setIsSpotifyImportOpen(true);
+  };
+
+  const handleImportSongs = (importedSongs: Song[]) => {
+    setSongs([...songs, ...importedSongs]);
+    checkGitStatus();
   };
 
   const handleEditSong = (song: Song) => {
@@ -590,6 +605,7 @@ function CancioneroApp() {
       {/* 3-Zone Top Bar Navigation */}
       <Header
         onOpenNewSong={handleOpenNewSong}
+        onOpenSpotifyImport={handleOpenSpotifyImport}
         onOpenGitModal={() => {
           if (!isAuthor) {
             setIsAuthModalOpen(true);
@@ -815,6 +831,15 @@ function CancioneroApp() {
           }}
           onSave={handleSaveSong}
           onDelete={handleOpenDelete}
+        />
+      )}
+
+      {isSpotifyImportOpen && (
+        <SpotifyAlbumImportModal
+          isOpen={isSpotifyImportOpen}
+          onClose={() => setIsSpotifyImportOpen(false)}
+          onImport={handleImportSongs}
+          existingSongs={songs}
         />
       )}
 
