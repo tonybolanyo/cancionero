@@ -120,15 +120,24 @@ jobs:
 
       - name: Commit and tag
         if: ${{ steps.version.outputs.should_release == 'true' }}
+        id: tag_result
         run: |
+          # Check if tag already exists
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists, skipping tag creation"
+            echo "tag_created=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           git add package.json package-lock.json
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin $(git rev-parse --abbrev-ref HEAD)
           git push origin "v${{ steps.version.outputs.version }}"
+          echo "tag_created=true" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        if: ${{ steps.version.outputs.should_release == 'true' }}
+        if: ${{ steps.version.outputs.should_release == 'true' && steps.tag_result.outputs.tag_created == 'true' }}
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
