@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2, Music } from 'lucide-react';
+import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2, Music, BookOpen } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { siteMetadata } from '../utils/siteConfig';
@@ -14,6 +14,7 @@ interface HeaderProps {
   hasUncommittedChanges: boolean;
   onOpenAbout: () => void;
   onOpenAuthModal: () => void;
+  onOpenSongbook?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,7 +26,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   hasUncommittedChanges,
   onOpenAbout,
-  onOpenAuthModal
+  onOpenAuthModal,
+  onOpenSongbook
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { isAuthor, user } = useAuth();
@@ -130,6 +132,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 3: Theme Toggle + Author Login / New Song */}
         <div className="flex items-center gap-3 shrink-0">
+          {onOpenSongbook && (
+            <button
+              type="button"
+              onClick={onOpenSongbook}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer whitespace-nowrap"
+              title="Exportar repertorio en formato Cancionero imprimible (PDF) para atril"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <span>Cancionero PDF</span>
+            </button>
+          )}
+
           {/* Light / Dark Mode Toggle button */}
           <button
             onClick={toggleTheme}

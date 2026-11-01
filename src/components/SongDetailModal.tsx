@@ -615,7 +615,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
         </div>
 
         {/* Media & Player Hub Section */}
-        <div className="p-4 sm:p-6 bg-[var(--bg-surface-subtle)] border-b border-[var(--border-subtle)]">
+        <div className="p-4 sm:p-6 bg-[var(--bg-surface-subtle)] border-b border-[var(--border-subtle)] no-print print:hidden">
           {/* Direct HTML5 Demo Audio Player */}
           {song.audioUrl && (
             <div className="mb-4 p-3.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -786,7 +786,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
         </div>
 
         {/* View Selection Tabs */}
-        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
+        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)] no-print print:hidden">
           <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab('lyrics')}
@@ -1000,7 +1000,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab 1: Lyrics Content */}
         {activeTab === 'lyrics' && (
-          <div className="p-6 sm:p-10 font-serif leading-relaxed text-[var(--text-primary)] max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full">
+          <div className="p-6 sm:p-10 font-serif leading-relaxed text-[var(--text-primary)] max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full no-print print:hidden">
             <div className={`space-y-1 ${
               fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
             }`}>
@@ -1011,7 +1011,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab: Synced Lyrics (LRC / WebVTT) */}
         {activeTab === 'synced_lyrics' && (
-          <div className="p-4 sm:p-6 max-w-3xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl mx-auto w-full">
+          <div className="p-4 sm:p-6 max-w-3xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl mx-auto w-full no-print print:hidden">
             <SyncedLyrics
               lines={syncedLines}
               currentTime={currentTime}
@@ -1033,7 +1033,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab 2: Composition Notes */}
         {activeTab === 'notes' && (
-          <div className="p-6 sm:p-8 max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full space-y-6">
+          <div className="p-6 sm:p-8 max-w-2xl xl:max-w-4xl 2xl:max-w-5xl 3xl:max-w-6xl mx-auto w-full space-y-6 no-print print:hidden">
             <div>
               <h4 className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] mb-2">
                 Ficha Técnica Musical
@@ -1071,7 +1071,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
         {/* Tab 3: Raw Markdown with YAML Frontmatter */}
         {activeTab === 'markdown' && (
-          <div className="p-4 sm:p-6">
+          <div className="p-4 sm:p-6 no-print print:hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-[var(--text-muted)]">
@@ -1108,6 +1108,45 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
             </pre>
           </div>
         )}
+
+        {/* Hoja de partitura para atril (visible solo al imprimir / exportar PDF con estilos CSS de index.css) */}
+        <div className="musician-print-sheet hidden print:block text-black bg-white p-0 m-0">
+          <div className="musician-song-header pb-3 mb-6 border-b-2 border-black">
+            <div className="flex items-center justify-between text-xs font-mono uppercase tracking-widest text-gray-700 mb-1">
+              <span>Cancionero de Autor · Edición Atril</span>
+              <span>{song.genre} · {song.year}</span>
+            </div>
+            <h1 className="font-serif text-3xl font-extrabold text-black tracking-tight mb-3">
+              {song.title}
+            </h1>
+            <div className="flex flex-wrap items-center gap-6 text-xs font-mono border-t border-black/30 pt-2 text-black">
+              <span><strong>TONO:</strong> {currentKey} {semitones !== 0 && `(${semitones > 0 ? `+${semitones}` : semitones})`}</span>
+              <span><strong>AFINACIÓN:</strong> {song.tuning || 'Estándar (EADGBE)'}</span>
+              <span><strong>COMPÁS:</strong> {song.timeSignature || '4/4'}</span>
+              {song.tempo && <span><strong>TEMPO:</strong> {song.tempo} BPM</span>}
+            </div>
+          </div>
+
+          <div className="musician-lyrics-flow">
+            {renderMusicianPrintLyrics(displayedLyrics)}
+          </div>
+
+          {song.notes && (
+            <div className="mt-8 pt-4 border-t border-black/40 break-inside-avoid page-break-inside-avoid">
+              <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-black mb-1.5">
+                Notas de Interpretación & Arreglos
+              </h4>
+              <p className="font-serif text-sm text-gray-800 leading-relaxed italic">
+                {song.notes}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-8 pt-2 border-t border-gray-300 text-[10px] font-mono text-gray-500 flex justify-between">
+            <span>{song.title} · Tony</span>
+            <span>Cancionero de Versos Perdidos · A4 Atril</span>
+          </div>
+        </div>
       </div>
 
       {/* Confirmation Modal to Delete Local Audio */}

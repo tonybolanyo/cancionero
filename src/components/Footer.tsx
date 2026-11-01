@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music2, FolderGit2, Lock, BarChart3 } from 'lucide-react';
+import { Music2, FolderGit2, Lock, BarChart3, BookOpen } from 'lucide-react';
 import { siteMetadata } from '../utils/siteConfig';
 import { DISPLAY_VERSION, BUILD_BRANCH } from '../config/version';
 
@@ -9,6 +9,7 @@ interface FooterProps {
   onGitSyncClick: () => void;
   onAuthClick: () => void;
   onAboutClick: () => void;
+  onSongbookClick?: () => void;
 }
 
 export function Footer({
@@ -17,6 +18,7 @@ export function Footer({
   onGitSyncClick,
   onAuthClick,
   onAboutClick,
+  onSongbookClick
 }: FooterProps) {
   return (
     <footer className="mt-auto border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] py-10 transition-colors duration-200">
@@ -59,6 +61,17 @@ export function Footer({
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Acceso Autor (GitHub)</span>
+              </button>
+            )}
+
+            {onSongbookClick && (
+              <button
+                onClick={onSongbookClick}
+                className="flex items-center gap-1.5 hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
+                aria-label="Cancionero PDF para atril"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span>Cancionero PDF (Atril)</span>
               </button>
             )}
 

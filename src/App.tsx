@@ -20,6 +20,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { RenameFileModal } from './components/RenameFileModal';
 import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
 import { DeleteSongModal } from './components/DeleteSongModal';
+import { SongbookExportModal } from './components/SongbookExportModal';
 import { SeoHelper } from './components/SeoHelper';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
 import { SkipLink } from './components/SkipLink';
@@ -29,7 +30,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
 import { useKeyboardShortcuts, GLOBAL_SHORTCUTS } from './hooks/useKeyboardShortcuts';
-import { Music2, BarChart3 } from 'lucide-react';
+import { Music2, BarChart3, BookOpen } from 'lucide-react';
 
 function CancioneroApp() {
   const { isAuthor, token, user } = useAuth();
@@ -79,6 +80,7 @@ function CancioneroApp() {
   const [isAudioModalOpen, setIsAudioModalOpen] = useState<boolean>(false);
   const [deletingSong, setDeletingSong] = useState<Song | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isSongbookModalOpen, setIsSongbookModalOpen] = useState<boolean>(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
 
   // Status of Git repository
@@ -619,6 +621,7 @@ function CancioneroApp() {
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenAudioAnalyzer={() => setIsAudioModalOpen(true)}
+        onOpenSongbook={() => setIsSongbookModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -659,6 +662,15 @@ function CancioneroApp() {
               >
                 <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                 <span>Ver gráficos</span>
+              </button>
+              <span aria-hidden="true">·</span>
+              <button
+                onClick={() => setIsSongbookModalOpen(true)}
+                className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                title="Generar Cancionero imprimible (PDF) listo para atril con estilos de index.css"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span>Cancionero PDF (Atril)</span>
               </button>
             </div>
           </div>
@@ -801,6 +813,7 @@ function CancioneroApp() {
         onGitSyncClick={() => setIsGitModalOpen(true)}
         onAuthClick={() => setIsAuthModalOpen(true)}
         onAboutClick={() => setIsAboutOpen(true)}
+        onSongbookClick={() => setIsSongbookModalOpen(true)}
       />
 
       {/* Modals */}
@@ -923,6 +936,16 @@ function CancioneroApp() {
         isOpen={isKeyboardShortcutsOpen}
         onClose={() => setIsKeyboardShortcutsOpen(false)}
       />
+
+      {/* Songbook Export Modal (Atril Print & PDF) */}
+      {isSongbookModalOpen && (
+        <SongbookExportModal
+          isOpen={isSongbookModalOpen}
+          onClose={() => setIsSongbookModalOpen(false)}
+          songs={songs}
+          isAuthor={isAuthor}
+        />
+      )}
 
       {/* Real-time Global Git Push & Commit Notification Toast */}
       <GitNotificationToast

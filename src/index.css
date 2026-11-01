@@ -515,13 +515,46 @@ body.keyboard-navigation *:focus-visible {
     padding: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-family: var(--font-serif), Georgia, serif !important;
+    font-family: var(--font-serif), Georgia, Cambria, serif !important;
   }
 
-  /* Control de saltos de página para atril */
+  /* Control de páginas de canciones para Cancionero */
+  .musician-song-page {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .musician-song-page:first-of-type {
+    break-before: auto !important;
+    page-break-before: auto !important;
+  }
+
+  .musician-cover-page {
+    break-after: page !important;
+    page-break-after: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    min-height: 85vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding: 3.5cm 1cm !important;
+  }
+
+  .musician-toc-page {
+    break-after: page !important;
+    page-break-after: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    padding: 1.5cm 0 !important;
+  }
+
+  /* Control de saltos de página para secciones de estrofas y estribillos */
   .musician-print-section {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+    margin-bottom: 1.4rem !important;
   }
 
   .musician-print-section-header {
@@ -529,5 +562,29 @@ body.keyboard-navigation *:focus-visible {
     page-break-after: avoid !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  .musician-chord-segment {
+    display: inline-flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    vertical-align: bottom !important;
+  }
+
+  .musician-chord-text {
+    font-family: var(--font-mono), monospace !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    line-height: 1 !important;
+    padding-bottom: 3px !important;
+    color: #000000 !important;
+  }
+
+  .musician-lyric-text {
+    font-family: var(--font-serif), Georgia, Cambria, serif !important;
+    font-size: 17px !important;
+    line-height: 1.35 !important;
+    color: #000000 !important;
+    white-space: pre !important;
   }
 }
