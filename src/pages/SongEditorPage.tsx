@@ -3,18 +3,24 @@ import {
   ArrowLeft,
   Save,
   FileEdit,
-  Code2,
   AlertCircle,
-  Plus,
-  Tag,
   Disc,
-  UploadCloud,
-  FileText,
-  Wand2,
   Music,
+  Wand2,
+  Mic,
+  FileAudio,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Copy,
+  Radio,
+  ListMusic,
   Check,
   Clock,
-  Trash2
+  Layers,
+  UploadCloud,
+  FileText
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { Album } from '../types/album';
@@ -32,9 +38,9 @@ import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
-import { parseLrc } from '../lib/lyrics/parseLrc';
-import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
-import { LrcSyncAssistant } from '../components/LrcSyncAssistant';
+import { parseLrc, serializeToLrc } from '../lib/lyrics/parseLrc';
+import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
+import { LyricsTranscriptionResult } from '../types/transcription';
 import { useAppNavigation } from '../context/NavigationContext';
 
 interface SongEditorPageProps {
@@ -78,10 +84,6 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [lyrics, setLyrics] = useState('');
   const [lrc, setLrc] = useState('');
   const [showLrcEditor, setShowLrcEditor] = useState<boolean>(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
-  const [assistantCurrentTime, setAssistantCurrentTime] = useState<number>(0);
-  const [assistantIsPlaying, setAssistantIsPlaying] = useState<boolean>(false);
-  const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
@@ -89,6 +91,23 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
   const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
+
+  // Audio Studio & Transcription States
+  const [showAudioStudio, setShowAudioStudio] = useState<boolean>(true);
+  const [activeStudioTab, setActiveStudioTab] = useState<'analyzer' | 'transcription'>('analyzer');
+  const [audioAnalysisNotice, setAudioAnalysisNotice] = useState<string | null>(null);
+
+  // Transcription controls
+  const [transcriptionFile, setTranscriptionFile] = useState<File | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [transcriptionEngine, setTranscriptionEngine] = useState<'backend_gemini' | 'local_whisper'>('backend_gemini');
+  const [backendConsent, setBackendConsent] = useState<boolean>(true);
+  const [allowWasmFallback, setAllowWasmFallback] = useState<boolean>(true);
+  const [transcriptionProgress, setTranscriptionProgress] = useState<string | null>(null);
+  const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const [lastTranscriptionResult, setLastTranscriptionResult] = useState<LyricsTranscriptionResult | null>(null);
+  const transcriptionFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Raw Markdown field
   const [rawMarkdown, setRawMarkdown] = useState('');
@@ -122,6 +141,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setNotes(song.notes || '');
       setLyrics(song.lyrics);
       setLrc(song.lrc || '');
+      setShowLrcEditor(Boolean(song.lrc));
       setTags(song.tags || []);
       setRawMarkdown(songToMarkdown(song));
       setCommitMessage(`feat: actualizar canción "${song.title}"`);
@@ -148,6 +168,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setNotes('');
       setLyrics(`## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas.`);
       setLrc('');
+      setShowLrcEditor(false);
       setTags(['acústico', 'maqueta']);
       setCommitMessage(`feat: nueva composición en el cancionero`);
     }
@@ -165,9 +186,44 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     setTags(tags.filter(t => t !== tagToRemove));
   };
 
-  const handleApplyDetectedChords = () => {
-    if (detectedChords.length === 0) return;
-    const updated = insertChordsIntoLyrics(lyrics, detectedChords);
+  const handleApplyAudioDetection = (data: {
+    tempo: number;
+    key: string;
+    timeSignature: string;
+    tuning?: string;
+    audioUrl?: string;
+    chordProgression?: string;
+    suggestedLyricsChords?: string;
+    tempoOffset?: number;
+    chords?: ChordSegment[];
+  }) => {
+    if (data.tempo) setTempo(data.tempo.toString());
+    if (data.key) setKey(data.key);
+    if (data.timeSignature) setTimeSignature(data.timeSignature);
+    if (data.tuning) setTuning(data.tuning);
+    if (data.audioUrl) setAudioUrl(data.audioUrl);
+    if (data.chords && data.chords.length > 0) {
+      setDetectedChords(data.chords);
+    }
+    if (data.chordProgression && !notes) {
+      const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
+        ? ` (offset beat 1: ${data.tempoOffset.toFixed(3)}s)`
+        : '';
+      setNotes(`Progresión armónica detectada: ${data.chordProgression}${offsetNote}`);
+    }
+    if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe aquí el primer verso') || lyrics.includes('Escribe el primer verso aquí'))) {
+      setLyrics(data.suggestedLyricsChords);
+    }
+
+    setAudioAnalysisNotice(`Detección aplicada: ${data.key} · ${data.tempo} BPM · ${data.timeSignature}${data.chords ? ` · ${data.chords.length} acordes detectados` : ''}`);
+    setTimeout(() => setAudioAnalysisNotice(null), 5000);
+  };
+
+  const handleInsertDetectedChords = (chordsOverride?: ChordSegment[]) => {
+    const list = chordsOverride || detectedChords;
+    if (!list || list.length === 0) return;
+
+    const updated = insertChordsIntoLyrics(lyrics, list);
     setLyrics(updated);
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 3000);
@@ -189,6 +245,100 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     setAccidentalPreference(nextPref);
     setLyrics(respellLyrics(lyrics, nextPref));
     setKey(respellChord(key || 'Am', nextPref));
+  };
+
+  const handleInsertSectionHeader = (headerName: string) => {
+    const sectionText = `\n\n## ${headerName}\n`;
+    setLyrics(prev => prev.trimEnd() + sectionText);
+  };
+
+  // Transcription Handlers
+  const handleTranscriptionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0] || null;
+    setTranscriptionFile(selected);
+    setTranscriptionError(null);
+    setTranscriptionNotice(null);
+  };
+
+  const handleRunTranscription = async () => {
+    if (!transcriptionFile) {
+      setTranscriptionError('Selecciona primero un archivo de audio (.mp3, .wav, .m4a, .ogg) para transcribir.');
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError(null);
+    setTranscriptionNotice(null);
+    setTranscriptionProgress('Iniciando procesamiento de audio...');
+
+    try {
+      let result: LyricsTranscriptionResult;
+
+      if (transcriptionEngine === 'backend_gemini') {
+        if (!backendConsent) {
+          throw new Error('Debes autorizar el envío de audio para la transcripción inteligente.');
+        }
+        setTranscriptionProgress('Analizando voz cantada con Gemini AI...');
+        result = await LyricsTranscriptionService.transcribeWithBackendFromFile(
+          transcriptionFile,
+          backendConsent
+        );
+      } else {
+        setTranscriptionProgress('Ejecutando modelo Whisper local en el navegador...');
+        result = await LyricsTranscriptionService.transcribeLocalFromFile(
+          transcriptionFile,
+          {
+            allowWasmFallback,
+            language: 'spanish'
+          },
+          (message, status) => {
+            setTranscriptionProgress(`[${status}] ${message}`);
+          }
+        );
+      }
+
+      setLastTranscriptionResult(result);
+      setTranscriptionNotice(`Transcripción completada con éxito (${result.lines.length} versos detectados).`);
+    } catch (err: any) {
+      setTranscriptionError(err.message || 'Error al procesar la transcripción.');
+    } finally {
+      setIsTranscribing(false);
+      setTranscriptionProgress(null);
+    }
+  };
+
+  const handleApplyTranscribedLyrics = (replace: boolean) => {
+    if (!lastTranscriptionResult?.text) return;
+    const transcribed = lastTranscriptionResult.text;
+
+    if (replace) {
+      setLyrics(transcribed);
+    } else {
+      setLyrics(prev => (prev.trim() ? `${prev.trim()}\n\n${transcribed}` : transcribed));
+    }
+
+    // Auto-generate synced LRC if lines exist and LRC was empty
+    if (lastTranscriptionResult.lines.length > 0 && !lrc) {
+      const generatedLrc = serializeToLrc(lastTranscriptionResult.lines, {
+        title: title || 'Sin título',
+        artist: 'Autor'
+      });
+      setLrc(generatedLrc);
+      setShowLrcEditor(true);
+    }
+
+    setInsertedChordsFeedback(true);
+    setTimeout(() => setInsertedChordsFeedback(false), 3000);
+  };
+
+  const handleCombineTranscriptionWithDetectedChords = () => {
+    if (!lastTranscriptionResult?.text) return;
+    const chordsToUse = detectedChords.length > 0 ? detectedChords : ['Am', 'G', 'F', 'E7'];
+    const merged = insertChordsIntoLyrics(lastTranscriptionResult.text, chordsToUse);
+    setLyrics(merged);
+
+    setInsertedChordsFeedback(true);
+    setTimeout(() => setInsertedChordsFeedback(false), 3000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -275,9 +425,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     navigate({ name: 'song-detail', songId: songToSave.id });
   };
 
+  const cleanChordList = getCleanChordSequence(detectedChords);
+
   return (
-    <div className="max-w-[1200px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-      {/* Top Header / Actions */}
+    <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+      {/* Top Header / Navigation Actions */}
       <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--border-subtle)]">
         <button
           type="button"
@@ -350,13 +502,31 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         </div>
       </div>
 
-      <div className="mb-6">
-        <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1">
-          {song ? 'Taller de Autor' : 'Nueva Creación'}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{song ? 'Taller de Autor' : 'Nueva Creación'}</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)]">
+            {song ? `Editar: ${song.title}` : 'Nueva Canción'}
+          </h1>
         </div>
-        <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)]">
-          {song ? `Editar: ${song.title}` : 'Nueva Canción'}
-        </h1>
+
+        {/* Quick Shortcut Button to Audio Studio */}
+        <button
+          type="button"
+          onClick={() => setShowAudioStudio(prev => !prev)}
+          className={`inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer shadow-xs ${
+            showAudioStudio
+              ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--accent-border)]'
+              : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border-[var(--border-subtle)]'
+          }`}
+        >
+          <Wand2 className="w-4 h-4" />
+          <span>{showAudioStudio ? 'Ocultar Analizador & Transcriptor' : 'Abrir Analizador & Transcriptor de Audio'}</span>
+          {showAudioStudio ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
       {validationError && (
@@ -366,8 +536,294 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         </div>
       )}
 
+      {audioAnalysisNotice && (
+        <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2 animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{audioAnalysisNotice}</span>
+        </div>
+      )}
+
       {mode === 'form' ? (
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* AUDIO STUDIO: ANALYZER & TRANSCRIPTION (Interactive Workspace) */}
+          {showAudioStudio && (
+            <div className="bg-[var(--bg-surface)] border-2 border-[var(--accent-border)] rounded-2xl p-5 sm:p-6 shadow-md space-y-5 animate-fadeIn">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                    <Wand2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
+                      <span>Estudio Acústico: Analizador y Transcripción</span>
+                      {cleanChordList.length > 0 && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
+                          {cleanChordList.length} acordes detectados
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Analiza archivos de audio para detectar BPM, tonalidad, compás y transcribe la voz cantada a letra y acordes.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tab switchers: Analizador vs Transcriptor */}
+                <div className="flex items-center bg-[var(--bg-surface-subtle)] p-1 rounded-xl border border-[var(--border-subtle)] text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudioTab('analyzer')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      activeStudioTab === 'analyzer'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>Detección Musical DSP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudioTab('transcription')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      activeStudioTab === 'transcription'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Transcripción de Voz (Letra)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab 1: Audio Analyzer Section */}
+              {activeStudioTab === 'analyzer' && (
+                <div className="space-y-4">
+                  <AudioAnalyzerSection
+                    onApplyDetection={handleApplyAudioDetection}
+                    onInsertChordsIntoLyrics={handleInsertDetectedChords}
+                    currentKey={key}
+                    currentTempo={tempo}
+                    currentAudioUrl={audioUrl}
+                  />
+
+                  {cleanChordList.length > 0 && (
+                    <div className="p-4 rounded-xl bg-[var(--accent-subtle)]/40 border border-[var(--accent-border)] flex flex-wrap items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-xs font-semibold text-[var(--accent-primary)] uppercase tracking-wider block">
+                          Progresión de Acordes Detectada
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-[var(--text-primary)] font-bold">
+                          {cleanChordList.slice(0, 12).map((c, idx) => (
+                            <span key={idx} className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                              [{c}]
+                            </span>
+                          ))}
+                          {cleanChordList.length > 12 && (
+                            <span className="text-xs text-[var(--text-muted)]">
+                              +{cleanChordList.length - 12} más
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleInsertDetectedChords()}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                      >
+                        <Music className="w-3.5 h-3.5" />
+                        <span>Insertar en la Letra Ahora</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sub-tab 2: Lyrics Voice-to-Text Transcription */}
+              {activeStudioTab === 'transcription' && (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Audio File Selection */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-[var(--text-primary)] block">
+                        Archivo de audio a transcribir
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          ref={transcriptionFileInputRef}
+                          onChange={handleTranscriptionFileSelect}
+                          accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => transcriptionFileInputRef.current?.click()}
+                          className="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] text-left flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="truncate">
+                            {transcriptionFile ? transcriptionFile.name : 'Seleccionar audio (.mp3, .wav, .m4a)...'}
+                          </span>
+                          <FileAudio className="w-4 h-4 text-[var(--accent-primary)] shrink-0 ml-2" />
+                        </button>
+                        {transcriptionFile && (
+                          <button
+                            type="button"
+                            onClick={() => setTranscriptionFile(null)}
+                            className="px-2 py-2 text-xs text-[var(--text-muted)] hover:text-rose-500 cursor-pointer"
+                            title="Quitar archivo"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      {transcriptionFile && (
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          {(transcriptionFile.size / (1024 * 1024)).toFixed(2)} MB · {transcriptionFile.type || 'audio'}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Engine selection */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-[var(--text-primary)] block">
+                        Motor de Transcripción
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTranscriptionEngine('backend_gemini')}
+                          className={`p-2.5 text-xs text-left rounded-lg border transition-colors cursor-pointer ${
+                            transcriptionEngine === 'backend_gemini'
+                              ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                              : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center gap-1 mb-0.5">
+                            <Sparkles className="w-3 h-3" />
+                            <span>Gemini AI (Recomendado)</span>
+                          </div>
+                          <p className="text-[10px] text-[var(--text-muted)] leading-tight">
+                            Rápido, alta fidelidad para canciones en español con guitarra o piano.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTranscriptionEngine('local_whisper')}
+                          className={`p-2.5 text-xs text-left rounded-lg border transition-colors cursor-pointer ${
+                            transcriptionEngine === 'local_whisper'
+                              ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                              : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center gap-1 mb-0.5">
+                            <Radio className="w-3 h-3" />
+                            <span>Whisper Local</span>
+                          </div>
+                          <p className="text-[10px] text-[var(--text-muted)] leading-tight">
+                            Ejecutado localmente en el navegador (WebGPU / WASM).
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {transcriptionEngine === 'backend_gemini' && (
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                      <input
+                        type="checkbox"
+                        checked={backendConsent}
+                        onChange={(e) => setBackendConsent(e.target.checked)}
+                        className="rounded accent-[var(--accent-primary)]"
+                      />
+                      <span>Autorizo enviar fragmentos del audio para transcribir la letra con Gemini AI</span>
+                    </label>
+                  )}
+
+                  {transcriptionProgress && (
+                    <div className="p-3 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-xs flex items-center gap-2 animate-pulse">
+                      <div className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-ping" />
+                      <span>{transcriptionProgress}</span>
+                    </div>
+                  )}
+
+                  {transcriptionNotice && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{transcriptionNotice}</span>
+                    </div>
+                  )}
+
+                  {transcriptionError && (
+                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{transcriptionError}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleRunTranscription}
+                      disabled={isTranscribing || !transcriptionFile}
+                      className="px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>{isTranscribing ? 'Transcribiendo...' : 'Iniciar Transcripción de Voz'}</span>
+                    </button>
+                  </div>
+
+                  {/* Transcription Output Actions */}
+                  {lastTranscriptionResult && (
+                    <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-[var(--text-primary)]">
+                          Resultado de la Transcripción ({lastTranscriptionResult.lines.length} versos)
+                        </span>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                          Motor: {lastTranscriptionResult.engine}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-mono max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                        {lastTranscriptionResult.text}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApplyTranscribedLyrics(true)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                        >
+                          Reemplazar letra actual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyTranscribedLyrics(false)}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors cursor-pointer"
+                        >
+                          Añadir al final de la letra
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCombineTranscriptionWithDetectedChords}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer flex items-center gap-1.5"
+                          title="Intercala los acordes detectados [Am] con las líneas transcritas"
+                        >
+                          <Music className="w-3 h-3" />
+                          <span>Combinar con acordes detectados</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Metadata Block */}
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-sm">
             <h2 className="text-sm font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -485,6 +941,20 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 />
               </div>
 
+              {/* Time Signature */}
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+                  Compás
+                </label>
+                <input
+                  type="text"
+                  value={timeSignature}
+                  onChange={(e) => setTimeSignature(e.target.value)}
+                  placeholder="4/4, 3/4, 6/8..."
+                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                />
+              </div>
+
               {/* Duration */}
               <div>
                 <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
@@ -575,12 +1045,29 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
             </div>
           </div>
 
-          {/* External Links */}
+          {/* External Links and Audio URL */}
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
             <h2 className="text-sm font-serif font-bold text-[var(--text-primary)]">
-              Enlaces y Archivo de Audio
+              Enlaces de Reproducción y Archivo de Audio
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1 flex items-center justify-between">
+                  <span>URL del Archivo de Audio (MP3, WAV o Web)</span>
+                  {audioUrl && (
+                    <span className="text-[10px] font-mono text-[var(--accent-primary)] font-bold">
+                      Audio asignado
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={audioUrl}
+                  onChange={(e) => setAudioUrl(e.target.value)}
+                  placeholder="blob:... o https://ejemplo.com/audio.mp3"
+                  className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                />
+              </div>
               <div>
                 <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
                   Enlace a Spotify
@@ -661,15 +1148,51 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   type="button"
                   onClick={handleToggleAccidentals}
                   className="px-2 py-1 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                  title="Alternar ortografía de acordes (# / b)"
                 >
                   {accidentalPreference === 'sharps' ? '#' : 'b'}
                 </button>
               </div>
             </div>
 
+            {/* Quick Section Headers and Insert Chords Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-[11px] text-[var(--text-muted)] mr-1">Secciones:</span>
+                {(['Intro', 'Estrofa 1', 'Estrofa 2', 'Estribillo', 'Puente', 'Solo', 'Outro'] as const).map(sec => (
+                  <button
+                    key={sec}
+                    type="button"
+                    onClick={() => handleInsertSectionHeader(sec)}
+                    className="px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    + {sec}
+                  </button>
+                ))}
+              </div>
+
+              {cleanChordList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleInsertDetectedChords()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                >
+                  <Music className="w-3.5 h-3.5" />
+                  <span>Insertar acordes detectados ({cleanChordList.length})</span>
+                </button>
+              )}
+            </div>
+
             {transposeFeedback && (
               <div className="p-2 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-xs font-medium">
                 {transposeFeedback}
+              </div>
+            )}
+
+            {insertedChordsFeedback && (
+              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium flex items-center gap-2">
+                <Check className="w-3.5 h-3.5" />
+                <span>Acordes o letra integrados correctamente en el editor</span>
               </div>
             )}
 
@@ -680,6 +1203,34 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               placeholder="Escribe la letra anotando los acordes entre corchetes, ej: [Am] Primer verso..."
               className="w-full px-4 py-3 font-mono text-xs sm:text-sm rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] leading-relaxed resize-y"
             />
+
+            {/* Toggle LRC synchronized lyrics editor */}
+            <div className="pt-2 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setShowLrcEditor(!showLrcEditor)}
+                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>{showLrcEditor ? 'Ocultar Letra Sincronizada (LRC)' : 'Ver / Editar Letra Sincronizada (LRC)'}</span>
+                {showLrcEditor ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              {showLrcEditor && (
+                <div className="mt-3 space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                    <span>Marcas de tiempo LRC [mm:ss.xx] para modo atril y karaoke sincronizado:</span>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={lrc}
+                    onChange={(e) => setLrc(e.target.value)}
+                    placeholder="[00:12.30] Primer verso cantado..."
+                    className="w-full px-3 py-2 font-mono text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] resize-y"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Notes */}
