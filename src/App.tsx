@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Song, SongStatus, SongViewMode } from './types/song';
+import { Album } from './types/album';
 import { StorageService } from './services/storageService';
 import { songToMarkdown } from './utils/markdownParser';
 import { Header } from './components/Header';
@@ -9,35 +10,50 @@ import { SongCard } from './components/SongCard';
 import { SongExpandedRow } from './components/SongExpandedRow';
 import { SongCompactView } from './components/SongCompactView';
 import { SongDashboard } from './components/SongDashboard';
-import { SongDetailModal } from './components/SongDetailModal';
-import { SongEditorModal } from './components/SongEditorModal';
-import { SpotifyAlbumImportModal } from './components/SpotifyAlbumImportModal';
-import { GitSyncModal } from './components/GitSyncModal';
-import { AboutModal } from './components/AboutModal';
-import { GitHubAuthModal } from './components/GitHubAuthModal';
+import { AlbumCard } from './components/AlbumCard';
 import { Footer } from './components/Footer';
-import { VersionHistory } from './components/VersionHistory';
-import { RenameFileModal } from './components/RenameFileModal';
-import { AudioAnalyzerModal } from './components/AudioAnalyzerModal';
-import { DeleteSongModal } from './components/DeleteSongModal';
-import { SongbookExportModal } from './components/SongbookExportModal';
 import { SeoHelper } from './components/SeoHelper';
 import { GitNotificationToast, ToastData } from './components/GitNotificationToast';
 import { SkipLink } from './components/SkipLink';
+import { GitHubAuthModal } from './components/GitHubAuthModal';
+import { RenameFileModal } from './components/RenameFileModal';
+import { DeleteSongModal } from './components/DeleteSongModal';
+import { VersionHistory } from './components/VersionHistory';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
-import { ThemeProvider } from './context/ThemeContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { useTheme } from './context/ThemeContext';
+import { NavigationProvider, useAppNavigation } from './context/NavigationContext';
 import { useKeyboardShortcuts, GLOBAL_SHORTCUTS } from './hooks/useKeyboardShortcuts';
-import { Music2, BarChart3, BookOpen } from 'lucide-react';
+
+// Independent Navigation Pages
+import { AlbumsPage } from './pages/AlbumsPage';
+import { AlbumDetailPage } from './pages/AlbumDetailPage';
+import { AlbumEditorPage } from './pages/AlbumEditorPage';
+import { SongDetailPage } from './pages/SongDetailPage';
+import { SongEditorPage } from './pages/SongEditorPage';
+import { SongbookPage } from './pages/SongbookPage';
+import { AudioAnalyzerPage } from './pages/AudioAnalyzerPage';
+import { AboutPage } from './pages/AboutPage';
+import { GitSyncPage } from './pages/GitSyncPage';
+import { SpotifyImportPage } from './pages/SpotifyImportPage';
+
+import { Music2, BarChart3, BookOpen, Disc, ArrowRight, Plus } from 'lucide-react';
 
 function CancioneroApp() {
   const { isAuthor, token, user } = useAuth();
+  const { currentRoute, navigate, goBack } = useAppNavigation();
 
+  // Songs and Albums state
   const [songs, setSongs] = useState<Song[]>(() => {
     return StorageService.getSongs();
   });
+
+  const [albums, setAlbums] = useState<Album[]>(() => {
+    return StorageService.getAlbums();
+  });
+
+  // Filters for catalog
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | SongStatus>('all');
   const [platformFilter, setPlatformFilter] = useState<'all' | 'spotify' | 'youtube' | 'soundcloud' | 'audio'>('all');
@@ -51,7 +67,7 @@ function CancioneroApp() {
         return saved;
       }
     } catch {
-      // Ignore localStorage errors
+      // Ignore
     }
     return 'grid';
   });
@@ -65,23 +81,15 @@ function CancioneroApp() {
     }
   };
 
-  // Modal states
-  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
-  const [editingSong, setEditingSong] = useState<Song | null>(null);
-  const [historySong, setHistorySong] = useState<Song | null>(null);
-  const [renamingSong, setRenamingSong] = useState<Song | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
-  const [isSpotifyImportOpen, setIsSpotifyImportOpen] = useState<boolean>(false);
-  const [isGitModalOpen, setIsGitModalOpen] = useState<boolean>(false);
-  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
+  // Dedicated dialog states (only for confirmations / auth)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
+  const [historySong, setHistorySong] = useState<Song | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [renamingSong, setRenamingSong] = useState<Song | null>(null);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState<boolean>(false);
-  const [isAudioModalOpen, setIsAudioModalOpen] = useState<boolean>(false);
   const [deletingSong, setDeletingSong] = useState<Song | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
-  const [isSongbookModalOpen, setIsSongbookModalOpen] = useState<boolean>(false);
-  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
@@ -94,13 +102,42 @@ function CancioneroApp() {
     checkGitStatus();
   }, []);
 
+  // Update document title dynamically based on route
+  useEffect(() => {
+    if (currentRoute.name === 'song-detail') {
+      const s = songs.find(item => item.id === currentRoute.songId);
+      if (s) {
+        document.title = `${s.title} - Cancionero de versos perdidos`;
+        return;
+      }
+    } else if (currentRoute.name === 'album-detail') {
+      const a = albums.find(item => item.id === currentRoute.albumId);
+      if (a) {
+        document.title = `${a.title} - Álbum - Cancionero de versos perdidos`;
+        return;
+      }
+    } else if (currentRoute.name === 'albums') {
+      document.title = `Discografía & Álbumes - Cancionero de versos perdidos`;
+      return;
+    } else if (currentRoute.name === 'song-new') {
+      document.title = `Nueva Canción - Cancionero de versos perdidos`;
+      return;
+    } else if (currentRoute.name === 'album-new') {
+      document.title = `Nuevo Álbum - Cancionero de versos perdidos`;
+      return;
+    }
+    document.title = `Cancionero de versos perdidos`;
+  }, [currentRoute, songs, albums]);
+
   // Setup keyboard shortcuts
   useEffect(() => {
     register('new-song', {
       ...GLOBAL_SHORTCUTS.newSong,
       callback: () => {
         if (isAuthor) {
-          handleOpenNewSong();
+          navigate({ name: 'song-new' });
+        } else {
+          setIsAuthModalOpen(true);
         }
       },
       description: GLOBAL_SHORTCUTS.newSong.description,
@@ -114,7 +151,13 @@ function CancioneroApp() {
 
     register('git-sync', {
       ...GLOBAL_SHORTCUTS.toggleGitSync,
-      callback: () => setIsGitModalOpen(true),
+      callback: () => {
+        if (isAuthor) {
+          navigate({ name: 'git-sync' });
+        } else {
+          setIsAuthModalOpen(true);
+        }
+      },
       description: GLOBAL_SHORTCUTS.toggleGitSync.description,
     });
 
@@ -127,10 +170,9 @@ function CancioneroApp() {
     register('close-modal', {
       ...GLOBAL_SHORTCUTS.closeModal,
       callback: () => {
-        if (selectedSong) setSelectedSong(null);
-        if (isEditorOpen) setIsEditorOpen(false);
-        if (isGitModalOpen) setIsGitModalOpen(false);
-        if (isAboutOpen) setIsAboutOpen(false);
+        if (isHistoryModalOpen) setIsHistoryModalOpen(false);
+        if (isRenameModalOpen) setIsRenameModalOpen(false);
+        if (isDeleteModalOpen) setIsDeleteModalOpen(false);
         if (isAuthModalOpen) setIsAuthModalOpen(false);
         if (isKeyboardShortcutsOpen) setIsKeyboardShortcutsOpen(false);
       },
@@ -144,8 +186,9 @@ function CancioneroApp() {
       unregister('show-shortcuts');
       unregister('close-modal');
     };
-  }, [isAuthor, selectedSong, isEditorOpen, isGitModalOpen, isAboutOpen, isAuthModalOpen, isKeyboardShortcutsOpen, register, unregister, toggleTheme]);
+  }, [isAuthor, isHistoryModalOpen, isRenameModalOpen, isDeleteModalOpen, isAuthModalOpen, isKeyboardShortcutsOpen, register, unregister, toggleTheme, navigate]);
 
+  // Background catalog synchronization
   useEffect(() => {
     let isMounted = true;
     let isSyncing = false;
@@ -174,27 +217,20 @@ function CancioneroApp() {
 
     void syncCatalog();
 
-    // Auto-sync whenever user returns to the tab or network reconnects
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         void syncCatalog();
       }
     };
-    const handleOnline = () => {
-      void syncCatalog();
-    };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('online', handleOnline);
-
     return () => {
       isMounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('online', handleOnline);
     };
   }, [token, user?.login]);
 
-  // If user logs out and was on drafts or private tab, reset to 'all'
+  // Reset tab if logged out
   useEffect(() => {
     if (!isAuthor && (statusFilter === 'draft' || statusFilter === 'private')) {
       setStatusFilter('all');
@@ -212,14 +248,33 @@ function CancioneroApp() {
     checkGitStatus();
   };
 
+  // Song CRUD
   const handleSaveSong = (song: Song, pushResult?: PushResult) => {
     const updated = StorageService.upsertSong(song);
     setSongs(updated);
     checkGitStatus();
-    setIsEditorOpen(false);
-    setEditingSong(null);
-    if (selectedSong && selectedSong.id === song.id) {
-      setSelectedSong(song);
+
+    // If song was linked to an album, ensure album tracklist is synced
+    if (song.albumId) {
+      const targetAlbum = albums.find(a => a.id === song.albumId);
+      if (targetAlbum) {
+        const hasTrack = targetAlbum.tracks.some(t => t.songId === song.id);
+        if (!hasTrack) {
+          const updatedTracks = [
+            ...targetAlbum.tracks,
+            {
+              id: `track-${Date.now()}`,
+              songId: song.id,
+              title: song.title,
+              order: targetAlbum.tracks.length + 1,
+              duration: song.duration
+            }
+          ];
+          const updatedAlbum: Album = { ...targetAlbum, tracks: updatedTracks };
+          const newAlbums = StorageService.upsertAlbum(updatedAlbum);
+          setAlbums(newAlbums);
+        }
+      }
     }
 
     if (pushResult) {
@@ -269,6 +324,61 @@ function CancioneroApp() {
     URL.revokeObjectURL(url);
   };
 
+  // Album CRUD
+  const handleSaveAlbum = (album: Album) => {
+    const updated = StorageService.upsertAlbum(album);
+    setAlbums(updated);
+
+    // Sync album title/id on matching songs
+    if (album.tracks && album.tracks.length > 0) {
+      let songsChanged = false;
+      const currentSongs = [...songs];
+      album.tracks.forEach(track => {
+        if (track.songId) {
+          const songIndex = currentSongs.findIndex(s => s.id === track.songId);
+          if (songIndex >= 0) {
+            currentSongs[songIndex] = {
+              ...currentSongs[songIndex],
+              albumId: album.id,
+              albumTitle: album.title,
+              trackNumber: track.order
+            };
+            StorageService.upsertSong(currentSongs[songIndex]);
+            songsChanged = true;
+          }
+        }
+      });
+      if (songsChanged) {
+        setSongs(currentSongs);
+      }
+    }
+
+    setGitToast({
+      id: `toast-${Date.now()}`,
+      type: 'success',
+      title: 'Álbum Guardado',
+      message: `El álbum "${album.title}" ha sido guardado en la discografía.`
+    });
+  };
+
+  const handleDeleteAlbum = (album: Album) => {
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm(`¿Estás seguro de que deseas eliminar el álbum "${album.title}"? Las canciones del catálogo no se borrarán.`);
+      if (!ok) return;
+    }
+
+    const updated = StorageService.deleteAlbum(album.id);
+    setAlbums(updated);
+    navigate({ name: 'albums' });
+
+    setGitToast({
+      id: `toast-${Date.now()}`,
+      type: 'info',
+      title: 'Álbum Eliminado',
+      message: `El álbum "${album.title}" ha sido eliminado de la discografía.`
+    });
+  };
+
   const handleCreateSongFromAudio = (data: {
     tempo: number;
     key: string;
@@ -300,31 +410,14 @@ function CancioneroApp() {
       audioUrl: data.audioUrl,
       notes: initialNotes,
       tags: ['acústico', 'maqueta'],
-      lyrics: data.suggestedLyricsChords || `## Estrofa 1\n[${data.key || 'Am'}] Primer verso de la composición...\n[C] Segundo verso con acordes\n\n## Estribillo\n[G] Y el estribillo asciende aquí...`,
+      lyrics: data.suggestedLyricsChords || `## Estrofa 1\n[${data.key || 'Am'}] Primer verso...\n[C] Segundo verso\n\n## Estribillo\n[G] Y el estribillo asciende...`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    setEditingSong(detectedSong);
-    setIsAudioModalOpen(false);
-    setIsEditorOpen(true);
-  };
-
-  const handleOpenNewSong = () => {
-    if (!isAuthor) {
-      setIsAuthModalOpen(true);
-      return;
-    }
-    setEditingSong(null);
-    setIsEditorOpen(true);
-  };
-
-  const handleOpenSpotifyImport = () => {
-    if (!isAuthor) {
-      setIsAuthModalOpen(true);
-      return;
-    }
-    setIsSpotifyImportOpen(true);
+    const updated = StorageService.upsertSong(detectedSong);
+    setSongs(updated);
+    navigate({ name: 'song-edit', songId: detectedSong.id });
   };
 
   const handleImportSongs = (importedSongs: Song[]) => {
@@ -337,8 +430,7 @@ function CancioneroApp() {
       setIsAuthModalOpen(true);
       return;
     }
-    setEditingSong(song);
-    setIsEditorOpen(true);
+    navigate({ name: 'song-edit', songId: song.id });
   };
 
   const handleViewHistory = (song: Song) => {
@@ -362,34 +454,9 @@ function CancioneroApp() {
   const handleRenameSuccess = (renamedSong: Song, updatedSongs: Song[], pushResult?: PushResult) => {
     setSongs(updatedSongs);
     checkGitStatus();
-    if (selectedSong && selectedSong.id === renamingSong?.id) {
-      setSelectedSong(renamedSong);
-    }
     setRenamingSong(null);
-
-    if (pushResult) {
-      if (pushResult.success) {
-        setGitToast({
-          id: `toast-${Date.now()}`,
-          type: 'success',
-          title: 'Archivo Renombrado y Subido a GitHub 🚀',
-          message: pushResult.message,
-          commitHash: pushResult.commitSha,
-          commitUrl: pushResult.commitUrl,
-          targetRepo: pushResult.targetRepo
-        });
-      } else if (pushResult.requiresPermissions) {
-        setGitToast({
-          id: `toast-${Date.now()}`,
-          type: 'warning',
-          title: 'Permisos de GitHub Requeridos',
-          message: pushResult.message,
-          requiresPermissions: true,
-          targetRepo: pushResult.targetRepo,
-          actionLabel: 'Revisar Token en GitHub',
-          onAction: () => setIsAuthModalOpen(true)
-        });
-      }
+    if (currentRoute.name === 'song-detail') {
+      navigate({ name: 'song-detail', songId: renamedSong.id });
     }
   };
 
@@ -405,32 +472,9 @@ function CancioneroApp() {
   const handleDeleteSuccess = (deletedSong: Song, updatedSongs: Song[], pushResult?: PushResult) => {
     setSongs(updatedSongs);
     checkGitStatus();
-    if (selectedSong && selectedSong.id === deletedSong.id) {
-      setSelectedSong(null);
-    }
-    if (editingSong && editingSong.id === deletedSong.id) {
-      setIsEditorOpen(false);
-      setEditingSong(null);
-    }
     setDeletingSong(null);
-
-    if (pushResult && pushResult.success) {
-      setGitToast({
-        id: `toast-${Date.now()}`,
-        type: 'success',
-        title: 'Canción Eliminada y Catálogo Actualizado en GitHub 🚀',
-        message: `Se eliminó "${deletedSong.title}" localmente y en el repositorio GitHub.`,
-        commitHash: pushResult.commitSha,
-        commitUrl: pushResult.commitUrl,
-        targetRepo: pushResult.targetRepo
-      });
-    } else {
-      setGitToast({
-        id: `toast-${Date.now()}`,
-        type: 'info',
-        title: 'Canción Eliminada',
-        message: `"${deletedSong.title}" ha sido eliminada del catálogo local y registrada en el historial Git.`
-      });
+    if (currentRoute.name === 'song-detail' && currentRoute.songId === deletedSong.id) {
+      navigate({ name: 'catalog' });
     }
   };
 
@@ -438,38 +482,10 @@ function CancioneroApp() {
     const updated = StorageService.getSongs();
     setSongs(updated);
     checkGitStatus();
-    if (selectedSong && selectedSong.id === restoredSong.id) {
-      setSelectedSong(restoredSong);
-    }
     setHistorySong(restoredSong);
-
-    if (pushResult) {
-      if (pushResult.success) {
-        setGitToast({
-          id: `toast-${Date.now()}`,
-          type: 'success',
-          title: 'Versión Restaurada y Subida a GitHub 🚀',
-          message: pushResult.message,
-          commitHash: pushResult.commitSha,
-          commitUrl: pushResult.commitUrl,
-          targetRepo: pushResult.targetRepo
-        });
-      } else if (pushResult.requiresPermissions) {
-        setGitToast({
-          id: `toast-${Date.now()}`,
-          type: 'warning',
-          title: 'Permisos de GitHub Requeridos',
-          message: pushResult.message,
-          requiresPermissions: true,
-          targetRepo: pushResult.targetRepo,
-          actionLabel: 'Revisar Token en GitHub',
-          onAction: () => setIsAuthModalOpen(true)
-        });
-      }
-    }
   };
 
-  // Available unique musical keys for filter
+  // Keys & Tags for Filters
   const availableKeys = useMemo(() => {
     const set = new Set<string>();
     songs.forEach(s => {
@@ -480,7 +496,6 @@ function CancioneroApp() {
     return Array.from(set).sort();
   }, [songs, isAuthor]);
 
-  // Available unique tags and counts
   const availableTags = useMemo(() => {
     const map = new Map<string, number>();
     songs.forEach(song => {
@@ -498,7 +513,6 @@ function CancioneroApp() {
       .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }, [songs, isAuthor]);
 
-  // Counts for segmented tabs
   const counts = useMemo(() => {
     const published = songs.filter(s => s.status === 'published').length;
     const draft = songs.filter(s => s.status === 'draft').length;
@@ -511,36 +525,21 @@ function CancioneroApp() {
     };
   }, [songs, isAuthor]);
 
-  // Filtered and searched songs
   const filteredSongs = useMemo(() => {
     return songs.filter(song => {
-      // Security constraint: Non-authors can only view published songs
-      if (!isAuthor && song.status !== 'published') {
-        return false;
-      }
-
-      // Status filter
-      if (statusFilter !== 'all' && song.status !== statusFilter) {
-        return false;
-      }
-
-      // Platform filter
+      if (!isAuthor && song.status !== 'published') return false;
+      if (statusFilter !== 'all' && song.status !== statusFilter) return false;
       if (platformFilter === 'spotify' && !song.spotifyUrl) return false;
       if (platformFilter === 'youtube' && !song.youtubeUrl) return false;
       if (platformFilter === 'soundcloud' && !song.soundcloudUrl) return false;
       if (platformFilter === 'audio' && !song.audioUrl) return false;
-
-      // Key filter
       if (keyFilter !== 'all' && song.key !== keyFilter) return false;
-
-      // Tag filter
       if (tagFilter !== 'all') {
         if (!song.tags || !song.tags.some(t => t.trim().toLowerCase() === tagFilter.toLowerCase())) {
           return false;
         }
       }
 
-      // Search query: accent-insensitive across title, lyrics, notes, tags, genre, key, year, tuning
       if (searchQuery.trim()) {
         const normalize = (text: string) =>
           text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -564,6 +563,10 @@ function CancioneroApp() {
 
   const handleNavSelect = (tab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard') => {
     setActiveNavTab(tab);
+    if (currentRoute.name !== 'catalog') {
+      navigate({ name: 'catalog' });
+    }
+
     if (tab === 'dashboard') {
       const el = document.getElementById('dashboard-section');
       el?.scrollIntoView({ behavior: 'smooth' });
@@ -591,290 +594,435 @@ function CancioneroApp() {
     catEl?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Find current song / album for detail and edit views
+  const activeDetailSong = currentRoute.name === 'song-detail' ? songs.find(s => s.id === currentRoute.songId) || null : null;
+  const activeEditSong = currentRoute.name === 'song-edit' ? songs.find(s => s.id === currentRoute.songId) || null : null;
+  const activeDetailAlbum = currentRoute.name === 'album-detail' ? albums.find(a => a.id === currentRoute.albumId) || null : null;
+  const activeEditAlbum = currentRoute.name === 'album-edit' ? albums.find(a => a.id === currentRoute.albumId) || null : null;
+
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-200">
       {/* Accessibility Skip Link */}
       <SkipLink />
 
-      {/* SEO Meta Tags and Structured Data */}
+      {/* SEO Meta Tags */}
       <SeoHelper
-        title="Cancionero de versos perdidos"
+        title={activeDetailSong ? `${activeDetailSong.title} - Cancionero de versos perdidos` : 'Cancionero de versos perdidos'}
         description="Versos que se perdieron un día y regresaron convertidos en canciones. Canciones propias, letras íntimas y pequeñas verdades hechas de guitarra, memoria y poesía."
-        keywords={['canciones', 'poesía', 'acústico', 'cantautor', 'letras', 'compositor', 'música original', 'singer-songwriter']}
-        song={selectedSong}
+        keywords={['canciones', 'poesía', 'acústico', 'cantautor', 'álbumes', 'discografía', 'singer-songwriter']}
+        song={activeDetailSong || undefined}
       />
-      
+
       {/* 3-Zone Top Bar Navigation */}
       <Header
-        onOpenNewSong={handleOpenNewSong}
-        onOpenSpotifyImport={handleOpenSpotifyImport}
-        onOpenGitModal={() => {
-          if (!isAuthor) {
+        onOpenNewSong={() => {
+          if (isAuthor) {
+            navigate({ name: 'song-new' });
+          } else {
             setIsAuthModalOpen(true);
-            return;
           }
-          setIsGitModalOpen(true);
+        }}
+        onOpenNewAlbum={() => {
+          if (isAuthor) {
+            navigate({ name: 'album-new' });
+          } else {
+            setIsAuthModalOpen(true);
+          }
+        }}
+        onOpenSpotifyImport={() => {
+          if (isAuthor) {
+            navigate({ name: 'spotify-import' });
+          } else {
+            setIsAuthModalOpen(true);
+          }
+        }}
+        onOpenGitModal={() => {
+          if (isAuthor) {
+            navigate({ name: 'git-sync' });
+          } else {
+            setIsAuthModalOpen(true);
+          }
         }}
         onSelectTab={handleNavSelect}
+        onSelectAlbums={() => navigate({ name: 'albums' })}
         activeTab={activeNavTab}
+        isAlbumsActive={currentRoute.name === 'albums' || currentRoute.name === 'album-detail' || currentRoute.name === 'album-new' || currentRoute.name === 'album-edit'}
         hasUncommittedChanges={hasUncommittedChanges}
-        onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenAbout={() => navigate({ name: 'about' })}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenAudioAnalyzer={() => setIsAudioModalOpen(true)}
-        onOpenSongbook={() => setIsSongbookModalOpen(true)}
+        onOpenAudioAnalyzer={() => navigate({ name: 'audio-analyzer' })}
+        onOpenSongbook={() => navigate({ name: 'songbook' })}
       />
 
-      {/* Main Container */}
+      {/* Main Page Content Router */}
       <main className="flex-1">
-        {/* Split Hero Section with Visual Image and Metric Strip */}
-        <HeroSection
-          songs={songs}
-          onPlayFeatured={(song) => setSelectedSong(song)}
-          onOpenGitModal={() => setIsGitModalOpen(true)}
-          onExploreCatalog={() => {
-            const el = document.getElementById('catalogo-section');
-            el?.scrollIntoView({ behavior: 'smooth' });
-          }}
-          isAuthor={isAuthor}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        />
-
-        {/* Catalog Section */}
-        <section id="catalogo-section" className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8 sm:py-12">
-          {/* Section Header */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-            <div>
-              <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1">
-                {isAuthor ? 'Panel de Administración & Catálogo' : 'Repertorio Público'}
-              </div>
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
-                {isAuthor ? 'Archivo Completo de Composiciones' : 'Canciones Editadas'}
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-              <span className="font-mono tabular-nums font-semibold text-[var(--text-primary)]">{filteredSongs.length}</span>
-              <span>de {isAuthor ? songs.length : counts.published} temas visibles</span>
-              <span aria-hidden="true">·</span>
-              <button
-                onClick={() => handleNavSelect('dashboard')}
-                className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer font-medium"
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                <span>Ver gráficos</span>
-              </button>
-              <span aria-hidden="true">·</span>
-              <button
-                onClick={() => setIsSongbookModalOpen(true)}
-                className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
-                title="Generar Cancionero imprimible (PDF) listo para atril con estilos de index.css"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                <span>Cancionero PDF (Atril)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Search and Segmented Filter Controls */}
-          <SongFilters
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            statusFilter={statusFilter}
-            onStatusChange={(status) => {
-              setStatusFilter(status);
-              if (status === 'all') setActiveNavTab('all');
-              if (status === 'published') setActiveNavTab('published');
-              if (status === 'draft') setActiveNavTab('drafts');
-              if (status === 'private') setActiveNavTab('private');
-            }}
-            platformFilter={platformFilter}
-            onPlatformChange={setPlatformFilter}
-            keyFilter={keyFilter}
-            onKeyChange={setKeyFilter}
-            availableKeys={availableKeys}
-            tagFilter={tagFilter}
-            onTagChange={setTagFilter}
-            availableTags={availableTags}
-            counts={counts}
-            isAuthor={isAuthor}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-            viewMode={viewMode}
-            onViewModeChange={handleViewModeChange}
-            filteredCount={filteredSongs.length}
-          />
-
-          {/* Song Catalog Views */}
-          {filteredSongs.length > 0 ? (
-            <>
-              {/* Vista 1: Cuadrícula de tarjetas visuales (Vista actual) */}
-              {viewMode === 'grid' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 gap-5 sm:gap-6">
-                  {filteredSongs.map((song) => (
-                    <SongCard
-                      key={song.id}
-                      song={song}
-                      onSelect={(s) => setSelectedSong(s)}
-                      onEdit={(s) => handleEditSong(s)}
-                      onDownloadMd={(s) => handleDownloadMd(s)}
-                      isAuthor={isAuthor}
-                      onViewHistory={handleViewHistory}
-                      onSelectTag={setTagFilter}
-                      onRenameFile={handleOpenRename}
-                      onDelete={handleOpenDelete}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Vista 2: Lista ampliada (Filas detalladas con letra extendida y notas) */}
-              {viewMode === 'expanded' && (
-                <div className="flex flex-col gap-4">
-                  {filteredSongs.map((song) => (
-                    <SongExpandedRow
-                      key={song.id}
-                      song={song}
-                      onSelect={(s) => setSelectedSong(s)}
-                      onEdit={(s) => handleEditSong(s)}
-                      onDownloadMd={(s) => handleDownloadMd(s)}
-                      isAuthor={isAuthor}
-                      onViewHistory={handleViewHistory}
-                      onSelectTag={setTagFilter}
-                      onRenameFile={handleOpenRename}
-                      onDelete={handleOpenDelete}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Vista 3: Lista más comprimida (Tabla de atril/repertorio densa y ordenable) */}
-              {viewMode === 'compact' && (
-                <SongCompactView
-                  songs={filteredSongs}
-                  onSelect={(s) => setSelectedSong(s)}
-                  onEdit={(s) => handleEditSong(s)}
-                  onDownloadMd={(s) => handleDownloadMd(s)}
-                  isAuthor={isAuthor}
-                  onViewHistory={handleViewHistory}
-                  onRenameFile={handleOpenRename}
-                  onDelete={handleOpenDelete}
-                />
-              )}
-            </>
+        {/* Route: Album Detail Page */}
+        {currentRoute.name === 'album-detail' && (
+          activeDetailAlbum ? (
+            <AlbumDetailPage
+              album={activeDetailAlbum}
+              songs={songs}
+              onEditAlbum={(alb) => navigate({ name: 'album-edit', albumId: alb.id })}
+              onDeleteAlbum={handleDeleteAlbum}
+              onSelectSong={(s) => navigate({ name: 'song-detail', songId: s.id })}
+            />
           ) : (
-            /* Graceful empty state */
-            <div className="p-12 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] max-w-lg mx-auto my-8 shadow-sm">
-              <div className="w-12 h-12 rounded-full bg-[var(--bg-surface-subtle)] mx-auto flex items-center justify-center text-[var(--text-muted)] mb-4">
-                <Music2 className="w-6 h-6" />
-              </div>
-              <h3 className="font-serif text-lg font-semibold text-[var(--text-primary)] mb-2">
-                No se encontraron canciones
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] mb-6">
-                No hay temas que coincidan con los filtros seleccionados o el término de búsqueda actual.
-              </p>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setStatusFilter('all');
-                    setPlatformFilter('all');
-                    setKeyFilter('all');
-                    setTagFilter('all');
-                    setActiveNavTab('all');
-                  }}
-                  className="px-4 py-2 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer"
-                >
-                  Restablecer filtros
-                </button>
-                {isAuthor && (
-                  <button
-                    onClick={handleOpenNewSong}
-                    className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
-                  >
-                    Crear nueva canción
-                  </button>
-                )}
-              </div>
+            <div className="max-w-md mx-auto py-16 text-center">
+              <h3 className="font-serif text-lg font-bold text-[var(--text-primary)] mb-2">Álbum no encontrado</h3>
+              <p className="text-xs text-[var(--text-muted)] mb-4">El álbum solicitado no existe o ha sido eliminado.</p>
+              <button
+                onClick={() => navigate({ name: 'albums' })}
+                className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] rounded-lg cursor-pointer"
+              >
+                Volver a Álbumes
+              </button>
             </div>
-          )}
-        </section>
+          )
+        )}
 
-        {/* Recharts Data Visualization Dashboard Section */}
-        <SongDashboard
-          songs={isAuthor ? songs : songs.filter(s => s.status === 'published')}
-          isAuthor={isAuthor}
-        />
+        {/* Route: Album Editor (New or Edit) */}
+        {(currentRoute.name === 'album-new' || currentRoute.name === 'album-edit') && (
+          <AlbumEditorPage
+            album={activeEditAlbum}
+            songs={songs}
+            onSave={handleSaveAlbum}
+          />
+        )}
+
+        {/* Route: Albums Overview Gallery */}
+        {currentRoute.name === 'albums' && (
+          <AlbumsPage
+            albums={albums}
+            songs={songs}
+            onSelectAlbum={(alb) => navigate({ name: 'album-detail', albumId: alb.id })}
+            onEditAlbum={(alb) => navigate({ name: 'album-edit', albumId: alb.id })}
+          />
+        )}
+
+        {/* Route: Song Detail Page */}
+        {currentRoute.name === 'song-detail' && (
+          activeDetailSong ? (
+            <SongDetailPage
+              song={activeDetailSong}
+              albums={albums}
+              onEdit={handleEditSong}
+              onDownloadMd={handleDownloadMd}
+              isAuthor={isAuthor}
+              onSaveSong={handleSaveSong}
+              onDeleteSong={handleOpenDelete}
+              onViewHistory={handleViewHistory}
+              onRenameFile={handleOpenRename}
+            />
+          ) : (
+            <div className="max-w-md mx-auto py-16 text-center">
+              <h3 className="font-serif text-lg font-bold text-[var(--text-primary)] mb-2">Canción no encontrada</h3>
+              <p className="text-xs text-[var(--text-muted)] mb-4">El tema no existe o no está disponible.</p>
+              <button
+                onClick={() => navigate({ name: 'catalog' })}
+                className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] rounded-lg cursor-pointer"
+              >
+                Volver al catálogo
+              </button>
+            </div>
+          )
+        )}
+
+        {/* Route: Song Editor Page (New or Edit) */}
+        {(currentRoute.name === 'song-new' || currentRoute.name === 'song-edit') && (
+          <SongEditorPage
+            song={activeEditSong}
+            albums={albums}
+            initialAlbumId={currentRoute.name === 'song-new' ? currentRoute.initialAlbumId : undefined}
+            onSave={handleSaveSong}
+            onDelete={handleOpenDelete}
+          />
+        )}
+
+        {/* Route: Songbook Page */}
+        {currentRoute.name === 'songbook' && (
+          <SongbookPage
+            songs={songs}
+            isAuthor={isAuthor}
+          />
+        )}
+
+        {/* Route: Audio Analyzer Page */}
+        {currentRoute.name === 'audio-analyzer' && (
+          <AudioAnalyzerPage
+            onCreateSongFromAudio={handleCreateSongFromAudio}
+          />
+        )}
+
+        {/* Route: About Page */}
+        {currentRoute.name === 'about' && (
+          <AboutPage />
+        )}
+
+        {/* Route: Git Sync Page */}
+        {currentRoute.name === 'git-sync' && (
+          <GitSyncPage
+            songs={songs}
+            onSongsUpdated={handleSongsUpdated}
+          />
+        )}
+
+        {/* Route: Spotify Import Page */}
+        {currentRoute.name === 'spotify-import' && (
+          <SpotifyImportPage
+            songs={songs}
+            onImport={handleImportSongs}
+          />
+        )}
+
+        {/* Route: Default Main Catalog */}
+        {currentRoute.name === 'catalog' && (
+          <>
+            {/* Split Hero Section */}
+            <HeroSection
+              songs={songs}
+              albumCount={albums.length}
+              onPlayFeatured={(song) => navigate({ name: 'song-detail', songId: song.id })}
+              onOpenGitModal={() => {
+                if (isAuthor) navigate({ name: 'git-sync' });
+                else setIsAuthModalOpen(true);
+              }}
+              onExploreCatalog={() => {
+                const el = document.getElementById('catalogo-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              onExploreAlbums={() => navigate({ name: 'albums' })}
+              isAuthor={isAuthor}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+
+            {/* Featured Albums Highlight Strip */}
+            {albums.length > 0 && (
+              <section className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]/60 py-10">
+                <div className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                    <div>
+                      <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1 flex items-center gap-1.5">
+                        <Disc className="w-3.5 h-3.5" />
+                        <span>Agrupación por Álbum</span>
+                      </div>
+                      <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
+                        Discografía & Álbumes de Estudio
+                      </h2>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {isAuthor && (
+                        <button
+                          onClick={() => navigate({ name: 'album-new' })}
+                          className="px-3.5 py-1.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Nuevo Álbum</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate({ name: 'albums' })}
+                        className="text-xs font-medium text-[var(--accent-primary)] hover:text-[var(--accent-hover)] transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Ver discografía completa ({albums.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    {albums.slice(0, 4).map(album => (
+                      <AlbumCard
+                        key={album.id}
+                        album={album}
+                        onSelect={(alb) => navigate({ name: 'album-detail', albumId: alb.id })}
+                        onEdit={(alb) => navigate({ name: 'album-edit', albumId: alb.id })}
+                        isAuthor={isAuthor}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Catalog Section */}
+            <section id="catalogo-section" className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8 sm:py-12">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+                <div>
+                  <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1">
+                    {isAuthor ? 'Panel de Administración & Catálogo' : 'Repertorio Público'}
+                  </div>
+                  <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
+                    {isAuthor ? 'Archivo Completo de Composiciones' : 'Canciones Editadas'}
+                  </h2>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                  <span className="font-mono tabular-nums font-semibold text-[var(--text-primary)]">{filteredSongs.length}</span>
+                  <span>de {isAuthor ? songs.length : counts.published} temas visibles</span>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    onClick={() => handleNavSelect('dashboard')}
+                    className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer font-medium"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Ver gráficos</span>
+                  </button>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    onClick={() => navigate({ name: 'songbook' })}
+                    className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                    title="Generar Cancionero imprimible (PDF) listo para atril"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Cancionero PDF (Atril)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search and Segmented Filter Controls */}
+              <SongFilters
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                statusFilter={statusFilter}
+                onStatusChange={(status) => {
+                  setStatusFilter(status);
+                  if (status === 'all') setActiveNavTab('all');
+                  if (status === 'published') setActiveNavTab('published');
+                  if (status === 'draft') setActiveNavTab('drafts');
+                  if (status === 'private') setActiveNavTab('private');
+                }}
+                platformFilter={platformFilter}
+                onPlatformChange={setPlatformFilter}
+                keyFilter={keyFilter}
+                onKeyChange={setKeyFilter}
+                availableKeys={availableKeys}
+                tagFilter={tagFilter}
+                onTagChange={setTagFilter}
+                availableTags={availableTags}
+                counts={counts}
+                isAuthor={isAuthor}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                viewMode={viewMode}
+                onViewModeChange={handleViewModeChange}
+                filteredCount={filteredSongs.length}
+              />
+
+              {/* Song Catalog Views */}
+              {filteredSongs.length > 0 ? (
+                <>
+                  {viewMode === 'grid' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 gap-5 sm:gap-6">
+                      {filteredSongs.map((song) => (
+                        <SongCard
+                          key={song.id}
+                          song={song}
+                          onSelect={(s) => navigate({ name: 'song-detail', songId: s.id })}
+                          onEdit={(s) => handleEditSong(s)}
+                          onDownloadMd={(s) => handleDownloadMd(s)}
+                          isAuthor={isAuthor}
+                          onViewHistory={handleViewHistory}
+                          onSelectTag={setTagFilter}
+                          onRenameFile={handleOpenRename}
+                          onDelete={handleOpenDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {viewMode === 'expanded' && (
+                    <div className="flex flex-col gap-4">
+                      {filteredSongs.map((song) => (
+                        <SongExpandedRow
+                          key={song.id}
+                          song={song}
+                          onSelect={(s) => navigate({ name: 'song-detail', songId: s.id })}
+                          onEdit={(s) => handleEditSong(s)}
+                          onDownloadMd={(s) => handleDownloadMd(s)}
+                          isAuthor={isAuthor}
+                          onViewHistory={handleViewHistory}
+                          onSelectTag={setTagFilter}
+                          onRenameFile={handleOpenRename}
+                          onDelete={handleOpenDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {viewMode === 'compact' && (
+                    <SongCompactView
+                      songs={filteredSongs}
+                      onSelect={(s) => navigate({ name: 'song-detail', songId: s.id })}
+                      onEdit={(s) => handleEditSong(s)}
+                      onDownloadMd={(s) => handleDownloadMd(s)}
+                      isAuthor={isAuthor}
+                      onViewHistory={handleViewHistory}
+                      onRenameFile={handleOpenRename}
+                      onDelete={handleOpenDelete}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="p-12 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] max-w-lg mx-auto my-8 shadow-sm">
+                  <div className="w-12 h-12 rounded-full bg-[var(--bg-surface-subtle)] mx-auto flex items-center justify-center text-[var(--text-muted)] mb-4">
+                    <Music2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-serif text-lg font-semibold text-[var(--text-primary)] mb-2">
+                    No se encontraron canciones
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)] mb-6">
+                    No hay temas que coincidan con los filtros seleccionados o el término de búsqueda actual.
+                  </p>
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                        setPlatformFilter('all');
+                        setKeyFilter('all');
+                        setTagFilter('all');
+                        setActiveNavTab('all');
+                      }}
+                      className="px-4 py-2 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer"
+                    >
+                      Restablecer filtros
+                    </button>
+                    {isAuthor && (
+                      <button
+                        onClick={() => navigate({ name: 'song-new' })}
+                        className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
+                      >
+                        Crear nueva canción
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Recharts Data Visualization Dashboard Section */}
+            <SongDashboard
+              songs={isAuthor ? songs : songs.filter(s => s.status === 'published')}
+              isAuthor={isAuthor}
+            />
+          </>
+        )}
       </main>
 
       {/* Editorial Footer */}
       <Footer
         isAuthor={isAuthor}
         onDashboardClick={() => handleNavSelect('dashboard')}
-        onGitSyncClick={() => setIsGitModalOpen(true)}
+        onGitSyncClick={() => {
+          if (isAuthor) navigate({ name: 'git-sync' });
+          else setIsAuthModalOpen(true);
+        }}
         onAuthClick={() => setIsAuthModalOpen(true)}
-        onAboutClick={() => setIsAboutOpen(true)}
-        onSongbookClick={() => setIsSongbookModalOpen(true)}
+        onAboutClick={() => navigate({ name: 'about' })}
+        onSongbookClick={() => navigate({ name: 'songbook' })}
       />
 
-      {/* Modals */}
-      {selectedSong && (
-        <SongDetailModal
-          song={selectedSong}
-          onClose={() => setSelectedSong(null)}
-          onEdit={(song) => {
-            setSelectedSong(null);
-            handleEditSong(song);
-          }}
-          onSaveSong={handleSaveSong}
-          onDownloadMd={handleDownloadMd}
-          isAuthor={isAuthor}
-          onViewHistory={handleViewHistory}
-          onRenameFile={handleOpenRename}
-          onDeleteSong={handleOpenDelete}
-        />
-      )}
-
-      {isEditorOpen && (
-        <SongEditorModal
-          song={editingSong}
-          isOpen={isEditorOpen}
-          onClose={() => {
-            setIsEditorOpen(false);
-            setEditingSong(null);
-          }}
-          onSave={handleSaveSong}
-          onDelete={handleOpenDelete}
-        />
-      )}
-
-      {isSpotifyImportOpen && (
-        <SpotifyAlbumImportModal
-          isOpen={isSpotifyImportOpen}
-          onClose={() => setIsSpotifyImportOpen(false)}
-          onImport={handleImportSongs}
-          existingSongs={songs}
-        />
-      )}
-
-      {isGitModalOpen && (
-        <GitSyncModal
-          isOpen={isGitModalOpen}
-          onClose={() => {
-            setIsGitModalOpen(false);
-            checkGitStatus();
-          }}
-          songs={songs}
-          onSongsUpdated={handleSongsUpdated}
-        />
-      )}
-
-      {isAboutOpen && (
-        <AboutModal
-          isOpen={isAboutOpen}
-          onClose={() => setIsAboutOpen(false)}
-        />
-      )}
-
+      {/* Confirmation & Auth Dialogs (Kept lightweight without blocking full-page navigation) */}
       {isAuthModalOpen && (
         <GitHubAuthModal
           isOpen={isAuthModalOpen}
@@ -882,7 +1030,6 @@ function CancioneroApp() {
         />
       )}
 
-      {/* Song Version History Modal (Author Only) */}
       {isHistoryModalOpen && historySong && (
         <VersionHistory
           song={historySong}
@@ -896,7 +1043,6 @@ function CancioneroApp() {
         />
       )}
 
-      {/* Rename Song File Modal (Author Only) */}
       {isRenameModalOpen && renamingSong && (
         <RenameFileModal
           song={renamingSong}
@@ -909,7 +1055,6 @@ function CancioneroApp() {
         />
       )}
 
-      {/* Delete Song Confirmation Modal (Author Only) */}
       {isDeleteModalOpen && deletingSong && (
         <DeleteSongModal
           song={deletingSong}
@@ -922,32 +1067,11 @@ function CancioneroApp() {
         />
       )}
 
-      {/* Standalone Audio Musical Analyzer Modal */}
-      {isAudioModalOpen && (
-        <AudioAnalyzerModal
-          isOpen={isAudioModalOpen}
-          onClose={() => setIsAudioModalOpen(false)}
-          onCreateSongFromAudio={handleCreateSongFromAudio}
-        />
-      )}
-
-      {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
         isOpen={isKeyboardShortcutsOpen}
         onClose={() => setIsKeyboardShortcutsOpen(false)}
       />
 
-      {/* Songbook Export Modal (Atril Print & PDF) */}
-      {isSongbookModalOpen && (
-        <SongbookExportModal
-          isOpen={isSongbookModalOpen}
-          onClose={() => setIsSongbookModalOpen(false)}
-          songs={songs}
-          isAuthor={isAuthor}
-        />
-      )}
-
-      {/* Real-time Global Git Push & Commit Notification Toast */}
       <GitNotificationToast
         toast={gitToast}
         onDismiss={() => setGitToast(null)}
@@ -960,7 +1084,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <CancioneroApp />
+        <NavigationProvider>
+          <CancioneroApp />
+        </NavigationProvider>
       </AuthProvider>
     </ThemeProvider>
   );

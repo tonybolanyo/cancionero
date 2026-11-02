@@ -1,8 +1,11 @@
 import { Song, GitCommit, GitStatusSummary } from '../types/song';
+import { Album } from '../types/album';
 import { INITIAL_SONGS } from '../data/initialSongs';
+import { INITIAL_ALBUMS } from '../data/initialAlbums';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 
 const STORAGE_KEY_SONGS = 'tony_cancionero_songs_v1';
+const STORAGE_KEY_ALBUMS = 'tony_cancionero_albums_v1';
 const STORAGE_KEY_COMMITS = 'tony_cancionero_git_commits_v1';
 const STORAGE_KEY_LAST_COMMITTED_SNAPSHOT = 'tony_cancionero_git_snapshot_v1';
 const STORAGE_KEY_BACKUPS = 'tony_cancionero_backup_points_v1';
@@ -873,4 +876,84 @@ export class StorageService {
       console.warn('Error clearing backups', e);
     }
   }
+
+  /**
+   * Get all albums from persistent localStorage with fallback to initial albums
+   */
+  static getAlbums(): Album[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_ALBUMS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (err) {
+      console.warn('Error loading albums from localStorage', err);
+    }
+    // Return cloned INITIAL_ALBUMS and seed localStorage
+    try {
+      localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(INITIAL_ALBUMS));
+    } catch {
+      // ignore
+    }
+    return [...INITIAL_ALBUMS];
+  }
+
+  /**
+   * Save full albums list to persistent localStorage
+   */
+  static saveAlbums(albums: Album[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(albums));
+    } catch (err) {
+      console.warn('Error saving albums to localStorage', err);
+    }
+  }
+
+  /**
+   * Get a single album by its unique id
+   */
+  static getAlbumById(id: string): Album | undefined {
+    const albums = this.getAlbums();
+    return albums.find(a => a.id === id);
+  }
+
+  /**
+   * Insert or update an album
+   */
+  static upsertAlbum(album: Album): Album[] {
+    const albums = this.getAlbums();
+    const now = new Date().toISOString();
+    const existingIndex = albums.findIndex(a => a.id === album.id);
+
+    const updatedAlbum: Album = {
+      ...album,
+      updatedAt: now,
+      createdAt: album.createdAt || (existingIndex >= 0 ? albums[existingIndex].createdAt : now)
+    };
+
+    let updatedList: Album[];
+    if (existingIndex >= 0) {
+      updatedList = [...albums];
+      updatedList[existingIndex] = updatedAlbum;
+    } else {
+      updatedList = [updatedAlbum, ...albums];
+    }
+
+    this.saveAlbums(updatedList);
+    return updatedList;
+  }
+
+  /**
+   * Delete an album by id
+   */
+  static deleteAlbum(id: string): Album[] {
+    const albums = this.getAlbums();
+    const filtered = albums.filter(a => a.id !== id);
+    this.saveAlbums(filtered);
+    return filtered;
+  }
 }
+

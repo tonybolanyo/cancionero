@@ -6,11 +6,14 @@ import { siteMetadata } from '../utils/siteConfig';
 
 interface HeaderProps {
   onOpenNewSong: () => void;
+  onOpenNewAlbum?: () => void;
   onOpenSpotifyImport: () => void;
   onOpenGitModal: () => void;
   onOpenAudioAnalyzer?: () => void;
   onSelectTab: (tab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard') => void;
+  onSelectAlbums?: () => void;
   activeTab: 'all' | 'published' | 'drafts' | 'private' | 'dashboard';
+  isAlbumsActive?: boolean;
   hasUncommittedChanges: boolean;
   onOpenAbout: () => void;
   onOpenAuthModal: () => void;
@@ -19,11 +22,14 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenNewSong,
+  onOpenNewAlbum,
   onOpenSpotifyImport,
   onOpenGitModal,
   onOpenAudioAnalyzer,
   onSelectTab,
+  onSelectAlbums,
   activeTab,
+  isAlbumsActive = false,
   hasUncommittedChanges,
   onOpenAbout,
   onOpenAuthModal,
@@ -55,17 +61,32 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => onSelectTab('all')}
             className={`whitespace-nowrap transition-colors hover:text-[var(--text-primary)] py-1 cursor-pointer ${
-              activeTab === 'all'
+              activeTab === 'all' && !isAlbumsActive
                 ? 'text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)] font-semibold'
                 : 'text-[var(--text-secondary)]'
             }`}
           >
-            Catálogo
+            Canciones
           </button>
+
+          {/* Álbumes / Discografía */}
+          {onSelectAlbums && (
+            <button
+              onClick={onSelectAlbums}
+              className={`whitespace-nowrap transition-colors hover:text-[var(--text-primary)] py-1 cursor-pointer ${
+                isAlbumsActive
+                  ? 'text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)] font-semibold'
+                  : 'text-[var(--text-secondary)]'
+              }`}
+            >
+              Álbumes
+            </button>
+          )}
+
           <button
             onClick={() => onSelectTab('published')}
             className={`whitespace-nowrap transition-colors hover:text-[var(--text-primary)] py-1 cursor-pointer ${
-              activeTab === 'published'
+              activeTab === 'published' && !isAlbumsActive
                 ? 'text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)] font-semibold'
                 : 'text-[var(--text-secondary)]'
             }`}

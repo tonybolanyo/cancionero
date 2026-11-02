@@ -1,23 +1,27 @@
 import React from 'react';
-import { Play, FolderGit2, Lock } from 'lucide-react';
+import { Play, FolderGit2, Lock, Disc } from 'lucide-react';
 import { Song } from '../types/song';
 import { siteMetadata } from '../utils/siteConfig';
 import bannerImage from '../assets/images/songwriter_studio_banner_1792313088629.jpg';
 
 interface HeroSectionProps {
   songs: Song[];
+  albumCount?: number;
   onPlayFeatured: (song: Song) => void;
   onOpenGitModal: () => void;
   onExploreCatalog: () => void;
+  onExploreAlbums?: () => void;
   isAuthor: boolean;
   onOpenAuthModal: () => void;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   songs,
+  albumCount = 0,
   onPlayFeatured,
   onOpenGitModal,
   onExploreCatalog,
+  onExploreAlbums,
   isAuthor,
   onOpenAuthModal
 }) => {
@@ -62,8 +66,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 onClick={onExploreCatalog}
                 className="px-5 py-3 text-sm font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm cursor-pointer whitespace-nowrap"
               >
-                Explorar Repertorio
+                Explorar Canciones
               </button>
+
+              {onExploreAlbums && (
+                <button
+                  onClick={onExploreAlbums}
+                  className="flex items-center gap-2 px-5 py-3 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Disc className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Álbumes {albumCount > 0 ? `(${albumCount})` : ''}</span>
+                </button>
+              )}
 
               {isAuthor ? (
                 <button

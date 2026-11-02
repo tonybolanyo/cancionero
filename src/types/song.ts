@@ -13,8 +13,12 @@ export interface Song {
   timeSignature?: string; // '4/4', '3/4', '6/8'
   tuning?: string; // 'Standard EADGBE', 'Drop D', 'DADGAD', etc.
   duration?: string; // '3:45'
+  albumId?: string; // ID of the album e.g. 'cartas-sin-sello'
+  albumTitle?: string; // Name of the album
+  trackNumber?: number; // Track order in album
   spotifyUrl?: string;
   youtubeUrl?: string;
+  appleMusicUrl?: string;
   soundcloudUrl?: string;
   audioUrl?: string;
   coverImage?: string;
