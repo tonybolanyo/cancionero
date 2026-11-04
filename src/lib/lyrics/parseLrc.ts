@@ -243,3 +243,176 @@ export function createLrcBlob(lines: SyncedLyricLine[], metadata?: LrcMetadata):
   const lrcString = serializeToLrc(lines, metadata);
   return new Blob([lrcString], { type: 'text/plain;charset=utf-8' });
 }
+
+/**
+ * Expresión regular para acordes entre corchetes:
+ * Soporta cifrado anglosajón (C, Dm, G7, Bb/D, F#m7, Cadd9)
+ * y cifrado tradicional en español (Do, Re, Mim, Sol7, Fa#m)
+ * Ignora marcas de tiempo LRC como [00:12.30] y metadatos [ti:...]
+ */
+export const CHORD_BRACKET_REGEX =
+  /\[\s*(?:(?:[A-G]|Do|Re|Mi|Fa|Sol|La|Si)[#b]?(?:maj|min|m|M|dim|aug|sus|add|b|#)?[0-9]*(?:[\+\-b#][0-9]+)?(?:\/(?:[A-G]|Do|Re|Mi|Fa|Sol|La|Si)[#b]?)?|N\.C\.)\s*\]/gi;
+
+/**
+ * Limpia los acordes entre corchetes de una letra o línea de texto.
+ * Preserva el texto cantado y normaliza espacios en blanco innecesarios.
+ * Si una línea solo contenía acordes (ej. "[Am]  [G]  [F]  [E7]"), se convierte en línea vacía.
+ */
+export function stripChordsFromText(text: string, options?: { cleanMarkdownHeaders?: boolean }): string {
+  if (!text) return '';
+  const lines = cleanRawText(text).split('\n');
+
+  const cleanedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+
+    // Si es cabecera markdown (## Intro, ## Estrofa 1)
+    if (trimmed.startsWith('#')) {
+      if (options?.cleanMarkdownHeaders) {
+        return trimmed.replace(/^#+\s*/, '').trim();
+      }
+      return line;
+    }
+
+    // Quitar acordes
+    const stripped = line.replace(CHORD_BRACKET_REGEX, '');
+    // Si la línea solo tenía acordes, devolver línea vacía
+    if (!stripped.trim()) {
+      return '';
+    }
+
+    // Normalizar espacios múltiples dentro de la línea preservando sangría inicial si la hay
+    const leadingSpaces = stripped.match(/^\s*/)?.[0] || '';
+    const compactText = stripped.trim().replace(/[ \t]{2,}/g, ' ');
+    return `${leadingSpaces}${compactText}`;
+  });
+
+  return cleanedLines.join('\n');
+}
+
+/**
+ * Limpia todas las marcas de tiempo LRC ([mm:ss.xx]) y etiquetas de metadatos ([ti:...], [ar:...]),
+ * dejando la letra limpia en texto plano con saltos de línea y estructura intacta.
+ */
+export function stripLrcTimestamps(lrcContent: string): string {
+  if (!lrcContent) return '';
+  const text = cleanRawText(lrcContent);
+  const lines = text.split('\n');
+  const resultLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      // Preservar separación entre estrofas si la última no es vacía
+      if (resultLines.length > 0 && resultLines[resultLines.length - 1] !== '') {
+        resultLines.push('');
+      }
+      continue;
+    }
+
+    // Omitir etiquetas de metadatos [ti:...], [ar:...], [offset:...], etc.
+    if (METADATA_REGEX.test(trimmed)) {
+      continue;
+    }
+
+    // Quitar todas las marcas de tiempo [mm:ss.xx]
+    let cleanLine = trimmed.replace(TIMESTAMP_REGEX, '');
+    // Quitar marcas inline tipo <mm:ss.xx> si las hay
+    cleanLine = cleanLine.replace(/<\-?\d{1,2}:[0-5]?\d(?::[0-5]?\d)?(?:\.\d{1,3})?>/g, '');
+    cleanLine = cleanLine.trim().replace(/[ \t]{2,}/g, ' ');
+
+    if (cleanLine) {
+      resultLines.push(cleanLine);
+    }
+  }
+
+  return resultLines.join('\n');
+}
+
+/**
+ * Convierte letra con acordes a formato LRC sincronizado:
+ * - Limpia los acordes de cada línea.
+ * - Si existingLrc ya contiene marcas de tiempo, transfiere las marcas existentes a las líneas de letra limpias.
+ * - Si no hay marcas existentes, genera marcas secuenciales iniciales ([00:00.00], [00:04.00], ...)
+ *   para facilitar la posterior sincronización.
+ */
+export function copyLyricsToLrcFormat(
+  lyrics: string,
+  options?: {
+    existingLrc?: string;
+    title?: string;
+    artist?: string;
+    album?: string;
+    intervalSeconds?: number;
+  }
+): string {
+  const rawLines = cleanRawText(lyrics).split('\n');
+  const rawLyricLines: string[] = [];
+
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // Omitir cabeceras markdown (## Intro, ## Estrofa 1, etc.) ya que no son versos cantados
+    if (trimmed.startsWith('#')) continue;
+
+    // Quitar acordes
+    const stripped = trimmed.replace(CHORD_BRACKET_REGEX, '').trim().replace(/[ \t]{2,}/g, ' ');
+    if (stripped.length > 0) {
+      rawLyricLines.push(stripped);
+    }
+  }
+
+  if (rawLyricLines.length === 0) {
+    return '';
+  }
+
+  // Verificar si existingLrc ya tenía marcas de tiempo útiles
+  const existingParsed = options?.existingLrc ? parseLrc(options.existingLrc) : null;
+  const existingTimes = existingParsed && existingParsed.lines.length > 0
+    ? existingParsed.lines.map(l => l.time)
+    : [];
+
+  const interval = options?.intervalSeconds || 4;
+  const outputLines: string[] = [];
+
+  // Metadatos
+  const title = options?.title || existingParsed?.metadata.title;
+  const artist = options?.artist || existingParsed?.metadata.artist;
+  const album = options?.album || existingParsed?.metadata.album;
+
+  if (title) outputLines.push(`[ti:${title}]`);
+  if (artist) outputLines.push(`[ar:${artist}]`);
+  if (album) outputLines.push(`[al:${album}]`);
+  if (outputLines.length > 0) outputLines.push('');
+
+  let lastTime = 0;
+  for (let i = 0; i < rawLyricLines.length; i++) {
+    const lineText = rawLyricLines[i];
+    let time: number;
+
+    if (i < existingTimes.length) {
+      time = existingTimes[i];
+      lastTime = time;
+    } else if (existingTimes.length > 0) {
+      // Líneas adicionales tras las existentes
+      lastTime += interval;
+      time = lastTime;
+    } else {
+      // Sin marcas previas: generar marcas progresivas
+      time = i * interval;
+      lastTime = time;
+    }
+
+    outputLines.push(`[${formatLrcTimestamp(time)}] ${lineText}`);
+  }
+
+  return outputLines.join('\n');
+}
+
+/**
+ * Convierte contenido LRC a formato de Letra (limpiando marcas de tiempo y metadatos).
+ */
+export function copyLrcToLyricsFormat(lrcContent: string): string {
+  return stripLrcTimestamps(lrcContent);
+}
+

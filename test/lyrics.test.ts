@@ -5,7 +5,11 @@ import {
   parseLrcTimeToSeconds,
   cleanRawText,
   isLrcContent,
-  serializeToLrc
+  serializeToLrc,
+  stripChordsFromText,
+  stripLrcTimestamps,
+  copyLyricsToLrcFormat,
+  copyLrcToLyricsFormat
 } from '../src/lib/lyrics/parseLrc';
 import { toVtt, formatVttTimestamp } from '../src/lib/lyrics/toVtt';
 import { formatLrcTimestamp } from '../src/types/lyrics';
@@ -141,3 +145,94 @@ test('isLrcContent correctly identifies LRC timestamped text', () => {
   assert.equal(isLrcContent('[Estribillo] No es LRC'), false);
   assert.equal(isLrcContent('[Am] Letra con acorde'), false);
 });
+
+test('stripChordsFromText removes chord brackets in Anglo and Spanish notation without touching timestamps', () => {
+  const lyricsWithChords = `
+## Estrofa 1
+[Am] Caminando por la [G] calle vieja
+[C#m7] Las campanas [F#m] suenan a lo lejos
+[Bb/D] Un recuerdo [Lam] de ayer [Sol7]
+[Am]  [G]  [F]  [E7]
+[N.C.] Silencio total
+`;
+
+  const cleaned = stripChordsFromText(lyricsWithChords);
+
+  assert.ok(cleaned.includes('## Estrofa 1'));
+  assert.ok(cleaned.includes('Caminando por la calle vieja'));
+  assert.ok(cleaned.includes('Las campanas suenan a lo lejos'));
+  assert.ok(cleaned.includes('Un recuerdo de ayer'));
+  assert.ok(cleaned.includes('Silencio total'));
+  // Should not have chord brackets
+  assert.equal(cleaned.includes('[Am]'), false);
+  assert.equal(cleaned.includes('[G]'), false);
+  assert.equal(cleaned.includes('[C#m7]'), false);
+  assert.equal(cleaned.includes('[Lam]'), false);
+  assert.equal(cleaned.includes('[Sol7]'), false);
+  assert.equal(cleaned.includes('[N.C.]'), false);
+});
+
+test('stripLrcTimestamps removes all timestamps and metadata leaving clean verse text', () => {
+  const lrc = `
+[ti:Cartas sin sello]
+[ar:Tony]
+[al:Acústico]
+[offset:500]
+[00:12.30] Primer verso cantado
+[00:16.80] Segundo verso en el viento
+
+[00:22.00][00:35.00] Estribillo repetido dos veces
+`;
+
+  const cleanLyrics = stripLrcTimestamps(lrc);
+
+  assert.equal(cleanLyrics.includes('[ti:'), false);
+  assert.equal(cleanLyrics.includes('[ar:'), false);
+  assert.equal(cleanLyrics.includes('[00:12.30]'), false);
+  assert.equal(cleanLyrics.includes('[00:16.80]'), false);
+  assert.ok(cleanLyrics.includes('Primer verso cantado'));
+  assert.ok(cleanLyrics.includes('Segundo verso en el viento'));
+  assert.ok(cleanLyrics.includes('Estribillo repetido dos veces'));
+});
+
+test('copyLyricsToLrcFormat strips chords and preserves existing timestamps when provided', () => {
+  const lyricsWithChords = `
+## Estrofa
+[Am] Verso número uno
+[G] Verso número dos
+[F] Verso número tres
+`;
+
+  const existingLrc = `
+[00:10.50] Texto viejo 1
+[00:18.20] Texto viejo 2
+`;
+
+  const generated = copyLyricsToLrcFormat(lyricsWithChords, {
+    existingLrc,
+    title: 'Mi Canción',
+    artist: 'Tony'
+  });
+
+  assert.ok(generated.includes('[ti:Mi Canción]'));
+  assert.ok(generated.includes('[ar:Tony]'));
+  // First two lines take existing timestamps
+  assert.ok(generated.includes('[00:10.50] Verso número uno'));
+  assert.ok(generated.includes('[00:18.20] Verso número dos'));
+  // Third line gets a subsequent timestamp
+  assert.ok(generated.includes('[00:22.20] Verso número tres'));
+  // Chords must be stripped
+  assert.equal(generated.includes('[Am]'), false);
+  assert.equal(generated.includes('[G]'), false);
+});
+
+test('copyLrcToLyricsFormat cleans LRC format into ready-to-chord lyrics text', () => {
+  const lrc = `
+[00:08.00] La tarde cae sobre la ciudad
+[00:14.25] El ruido cesa y queda la verdad
+`;
+
+  const lyrics = copyLrcToLyricsFormat(lrc);
+  assert.equal(lyrics.trim(), 'La tarde cae sobre la ciudad\nEl ruido cesa y queda la verdad');
+});
+

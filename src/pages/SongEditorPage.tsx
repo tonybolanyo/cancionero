@@ -29,7 +29,10 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
-  Play
+  Play,
+  ArrowDown,
+  ArrowUp,
+  Eraser
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { Album } from '../types/album';
@@ -48,7 +51,14 @@ import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { GoogleDriveService } from '../services/googleDriveService';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
-import { parseLrc, serializeToLrc } from '../lib/lyrics/parseLrc';
+import {
+  parseLrc,
+  serializeToLrc,
+  stripChordsFromText,
+  stripLrcTimestamps,
+  copyLyricsToLrcFormat,
+  copyLrcToLyricsFormat
+} from '../lib/lyrics/parseLrc';
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
 import { LyricsTranscriptionResult } from '../types/transcription';
 import { useAppNavigation } from '../context/NavigationContext';
@@ -98,6 +108,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
   const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
   const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
@@ -365,6 +376,62 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 3000);
+  };
+
+  // Cross-copying and cleaning between Lyrics with Chords and Synced LRC
+  const handleCopyLyricsToLrc = () => {
+    if (!lyrics.trim()) {
+      setSyncFeedback('La letra con acordes está vacía.');
+      setTimeout(() => setSyncFeedback(null), 3000);
+      return;
+    }
+    const convertedLrc = copyLyricsToLrcFormat(lyrics, {
+      existingLrc: lrc,
+      title: title || 'Sin título',
+      artist: 'Tony'
+    });
+    setLrc(convertedLrc);
+    setShowLrcEditor(true);
+    setSyncFeedback('Letra copiada a LRC limpiando todos los acordes (marcas de tiempo listas).');
+    setTimeout(() => setSyncFeedback(null), 4000);
+  };
+
+  const handleCopyLrcToLyrics = () => {
+    if (!lrc.trim()) {
+      setSyncFeedback('El texto LRC sincronizado está vacío.');
+      setTimeout(() => setSyncFeedback(null), 3000);
+      return;
+    }
+    const cleanLyrics = copyLrcToLyricsFormat(lrc);
+    if (!cleanLyrics.trim()) {
+      setSyncFeedback('No se encontraron líneas de texto lírico en el contenido LRC.');
+      setTimeout(() => setSyncFeedback(null), 3000);
+      return;
+    }
+
+    if (lyrics.trim() && !window.confirm('¿Deseas reemplazar la letra con acordes actual por la letra de LRC (limpiando todas las marcas de tiempo)?')) {
+      return;
+    }
+
+    setLyrics(cleanLyrics);
+    setSyncFeedback('Letra importada desde LRC limpiando marcas de tiempo y metadatos.');
+    setTimeout(() => setSyncFeedback(null), 4000);
+  };
+
+  const handleStripChordsFromLyrics = () => {
+    if (!lyrics.trim()) return;
+    const stripped = stripChordsFromText(lyrics);
+    setLyrics(stripped);
+    setSyncFeedback('Acordes eliminados de la letra.');
+    setTimeout(() => setSyncFeedback(null), 3000);
+  };
+
+  const handleStripTimestampsFromLrc = () => {
+    if (!lrc.trim()) return;
+    const stripped = stripLrcTimestamps(lrc);
+    setLrc(stripped);
+    setSyncFeedback('Marcas de tiempo eliminadas del texto LRC.');
+    setTimeout(() => setSyncFeedback(null), 3000);
   };
 
   // Audio & Google Drive Handlers
@@ -1471,35 +1538,62 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 <span>Letra con Acordes Anotados</span>
               </h2>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Copy to LRC button */}
                 <button
                   type="button"
-                  onClick={() => handleTransposeStudioLyrics(-1)}
-                  className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                  title="Bajar medio tono"
+                  onClick={handleCopyLyricsToLrc}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer shadow-2xs"
+                  title="Copiar texto a letra sincronizada (LRC) eliminando automáticamente todos los acordes entre corchetes"
                 >
-                  -1 Tono
+                  <ArrowDown className="w-3.5 h-3.5" />
+                  <span>Copiar a LRC (sin acordes)</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleTransposeStudioLyrics(1)}
-                  className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                  title="Subir medio tono"
-                >
-                  +1 Tono
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleAccidentals}
-                  className="px-2 py-1 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                  title="Alternar ortografía de acordes (# / b)"
-                >
-                  {accidentalPreference === 'sharps' ? '#' : 'b'}
-                </button>
+
+                {/* Import from LRC if LRC exists */}
+                {lrc.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCopyLrcToLyrics}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] transition-colors cursor-pointer"
+                    title="Importar letra desde LRC eliminando marcas de tiempo [mm:ss.xx] y metadatos"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>Traer desde LRC (sin tiempos)</span>
+                  </button>
+                )}
+
+                {/* Transposition buttons */}
+                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => handleTransposeStudioLyrics(-1)}
+                    className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                    title="Bajar medio tono"
+                  >
+                    -1 Tono
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTransposeStudioLyrics(1)}
+                    className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                    title="Subir medio tono"
+                  >
+                    +1 Tono
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleAccidentals}
+                    className="px-2 py-1 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                    title="Alternar ortografía de acordes (# / b)"
+                  >
+                    {accidentalPreference === 'sharps' ? '#' : 'b'}
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Quick Section Headers and Insert Chords Banner */}
+            {/* Quick Section Headers, Chord Cleaning, and Insert Chords Banner */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="text-[11px] text-[var(--text-muted)] mr-1">Secciones:</span>
@@ -1515,16 +1609,28 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 ))}
               </div>
 
-              {cleanChordList.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleInsertDetectedChords()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                  onClick={handleStripChordsFromLyrics}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                  title="Eliminar todos los acordes entre corchetes [Am] de la letra actual"
                 >
-                  <Music className="w-3.5 h-3.5" />
-                  <span>Insertar acordes detectados ({cleanChordList.length})</span>
+                  <Eraser className="w-3.5 h-3.5" />
+                  <span>Limpiar acordes</span>
                 </button>
-              )}
+
+                {cleanChordList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleInsertDetectedChords()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                  >
+                    <Music className="w-3.5 h-3.5" />
+                    <span>Insertar acordes detectados ({cleanChordList.length})</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {transposeFeedback && (
@@ -1540,6 +1646,22 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               </div>
             )}
 
+            {syncFeedback && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                  <span>{syncFeedback}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSyncFeedback(null)}
+                  className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <textarea
               rows={14}
               value={lyrics}
@@ -1550,28 +1672,81 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
             {/* Toggle LRC synchronized lyrics editor */}
             <div className="pt-2 border-t border-[var(--border-subtle)]">
-              <button
-                type="button"
-                onClick={() => setShowLrcEditor(!showLrcEditor)}
-                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>{showLrcEditor ? 'Ocultar Letra Sincronizada (LRC)' : 'Ver / Editar Letra Sincronizada (LRC)'}</span>
-                {showLrcEditor ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              </button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLrcEditor(!showLrcEditor)}
+                  className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  <span>{showLrcEditor ? 'Ocultar Letra Sincronizada (LRC)' : 'Ver / Editar Letra Sincronizada (LRC)'}</span>
+                  {showLrcEditor ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+
+                {!showLrcEditor && lyrics.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCopyLyricsToLrc}
+                    className="inline-flex items-center gap-1.5 text-xs text-[var(--accent-primary)] hover:underline cursor-pointer font-medium"
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                    <span>Copiar a LRC sin acordes</span>
+                  </button>
+                )}
+              </div>
 
               {showLrcEditor && (
-                <div className="mt-3 space-y-2 animate-fadeIn">
-                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                    <span>Marcas de tiempo LRC [mm:ss.xx] para modo atril y karaoke sincronizado:</span>
+                <div className="mt-3 space-y-3 p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] animate-fadeIn">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                      <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Marcas de tiempo LRC [mm:ss.xx] (Modo Atril y Karaoke)</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyLyricsToLrc}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                        title="Reemplazar LRC con la letra de arriba limpiando todos los acordes"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                        <span>Sincronizar desde Letra (sin acordes)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyLrcToLyrics}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                        title="Transferir este texto a la letra de arriba eliminando marcas de tiempo y metadatos"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                        <span>Copiar a Letra con Acordes (sin tiempos)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleStripTimestampsFromLrc}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] border border-transparent hover:border-[var(--border-subtle)] transition-colors cursor-pointer"
+                        title="Quitar marcas de tiempo [mm:ss.xx] y metadatos de este cuadro"
+                      >
+                        <Eraser className="w-3 h-3" />
+                        <span>Limpiar tiempos</span>
+                      </button>
+                    </div>
                   </div>
+
                   <textarea
-                    rows={6}
+                    rows={7}
                     value={lrc}
                     onChange={(e) => setLrc(e.target.value)}
                     placeholder="[00:12.30] Primer verso cantado..."
-                    className="w-full px-3 py-2 font-mono text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] resize-y"
+                    className="w-full px-3 py-2 font-mono text-xs rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] resize-y leading-relaxed"
                   />
+
+                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                    💡 <strong>Intercambio bidireccional</strong>: Puedes transferir contenido entre ambas secciones con un clic. Al copiar hacia LRC se limpian automáticamente los acordes manteniendo las marcas temporales, y al copiar hacia la letra con acordes se eliminan los tiempos y metadatos para que puedas trabajar en tu cifrado musical o arreglos.
+                  </p>
                 </div>
               )}
             </div>

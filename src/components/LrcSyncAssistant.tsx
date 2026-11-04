@@ -19,7 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { SyncedLyricLine, LrcMetadata, formatLrcTimestamp, downloadFile } from '../types/lyrics';
-import { serializeToLrc, createLrcBlob } from '../lib/lyrics/parseLrc';
+import { serializeToLrc, createLrcBlob, stripChordsFromText } from '../lib/lyrics/parseLrc';
 import { createVttBlob } from '../lib/lyrics/toVtt';
 
 export interface LrcSyncAssistantProps {
@@ -49,7 +49,8 @@ interface StampingLine {
  */
 function prepareLinesFromText(lyricsText: string): StampingLine[] {
   if (!lyricsText) return [];
-  const rawLines = lyricsText.split(/\r?\n/);
+  const textWithoutChords = stripChordsFromText(lyricsText, { cleanMarkdownHeaders: true });
+  const rawLines = textWithoutChords.split(/\r?\n/);
   const result: StampingLine[] = [];
 
   for (let i = 0; i < rawLines.length; i++) {
@@ -61,7 +62,7 @@ function prepareLinesFromText(lyricsText: string): StampingLine[] {
       continue;
     }
     // Quitar marcas LRC previas si las tuviera para empezar limpio
-    const cleanText = trimmed.replace(/^\[\d{1,2}:[0-5]?\d(?:\.\d{1,3})?\]\s*/, '');
+    const cleanText = trimmed.replace(/^\[\d{1,2}:[0-5]?\d(?:\.\d{1,3})?\]\s*/, '').trim();
     if (!cleanText) continue;
 
     result.push({
