@@ -38,6 +38,9 @@ export interface UseLyricsChordSyncActions {
   // Update lyrics and regenerate LRC
   updateLyrics: (lyrics: string) => void;
 
+  // Update LRC directly
+  updateLrc: (lrc: string) => void;
+
   // Apply detected chords to current lyrics
   applyDetectedChords: (chords: ChordSegment[]) => void;
 
@@ -54,13 +57,15 @@ export interface UseLyricsChordSyncActions {
   reset: () => void;
 }
 
+export type UseLyricsChordSyncReturn = UseLyricsChordSyncState & UseLyricsChordSyncActions & { lyrics: string };
+
 /**
  * Hook for managing lyrics, chords, and LRC synchronization
  * Handles syllable-level timing and chord positioning
  */
 export function useLyricsChordSync(
   options: UseLyricsChordSyncOptions = {}
-): [UseLyricsChordSyncState, UseLyricsChordSyncActions] {
+): UseLyricsChordSyncReturn {
   const [state, setState] = useState<UseLyricsChordSyncState>({
     plainLyrics: options.initialLyrics || '',
     lyricsWithChords: options.initialLyrics || '',
@@ -73,39 +78,43 @@ export function useLyricsChordSync(
   });
 
   const updateLyrics = useCallback((lyrics: string) => {
+    setState(prevState => {
+      try {
+        const sync = generateSyncedLrcFromPlainLyrics(
+          lyrics,
+          prevState.detectedChords,
+          prevState.metadata,
+          {
+            timingStrategy: prevState.timingStrategy,
+            linesPerMinute: options.linesPerMinute
+          }
+        );
+
+        return {
+          ...prevState,
+          plainLyrics: lyrics,
+          lyricsWithChords: sync.lyricsWithChords,
+          lrc: sync.lrc,
+          isLoading: false,
+          error: null
+        };
+      } catch (err) {
+        return {
+          ...prevState,
+          isLoading: false,
+          error: err instanceof Error ? err.message : 'Error updating lyrics'
+        };
+      }
+    });
+  }, [options.linesPerMinute]);
+
+  const updateLrc = useCallback((lrc: string) => {
     setState(prev => ({
       ...prev,
-      plainLyrics: lyrics,
-      isLoading: true,
+      lrc,
       error: null
     }));
-
-    try {
-      const sync = generateSyncedLrcFromPlainLyrics(
-        lyrics,
-        prev.detectedChords,
-        prev.metadata,
-        {
-          timingStrategy: prev.timingStrategy,
-          linesPerMinute: options.linesPerMinute
-        }
-      );
-
-      setState(prev => ({
-        ...prev,
-        plainLyrics: sync.plainLyrics,
-        lyricsWithChords: sync.lyricsWithChords,
-        lrc: sync.lrc,
-        isLoading: false
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: err instanceof Error ? err.message : 'Error updating lyrics'
-      }));
-    }
-  }, [options.linesPerMinute, state.detectedChords, state.metadata, state.timingStrategy]);
+  }, []);
 
   const applyDetectedChords = useCallback((chords: ChordSegment[]) => {
     setState(prev => ({
@@ -279,6 +288,7 @@ export function useLyricsChordSync(
 
   const actions: UseLyricsChordSyncActions = {
     updateLyrics,
+    updateLrc,
     applyDetectedChords,
     upgradeExistingLrc,
     setTimingStrategy,
@@ -286,5 +296,10 @@ export function useLyricsChordSync(
     reset
   };
 
-  return [stateWithAnalysis as any, actions];
+  return {
+    ...stateWithAnalysis,
+    // Aliases for compatibility
+    lyrics: stateWithAnalysis.plainLyrics,
+    ...actions
+  };
 }

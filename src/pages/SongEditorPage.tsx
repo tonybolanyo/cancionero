@@ -62,6 +62,7 @@ import {
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
 import { LyricsTranscriptionResult } from '../types/transcription';
 import { useAppNavigation } from '../context/NavigationContext';
+import { useLyricsChordSync } from '../hooks/useLyricsChordSync';
 
 interface SongEditorPageProps {
   song: Song | null;
@@ -80,6 +81,17 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 }) => {
   const { navigate, goBack } = useAppNavigation();
   const { token, user, isAuthor, isGoogleDriveConnected, googleUser, loginWithGoogle } = useAuth();
+  
+  // Lyrics and LRC sync state using new hook
+  const {
+    lyrics,
+    lrc,
+    detectedChords: hookDetectedChords,
+    updateLyrics,
+    updateLrc,
+    applyDetectedChords
+  } = useLyricsChordSync();
+  
   const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
 
   // Form fields
@@ -101,12 +113,10 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [soundcloudUrl, setSoundcloudUrl] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
   const [notes, setNotes] = useState('');
-  const [lyrics, setLyrics] = useState('');
-  const [lrc, setLrc] = useState('');
   const [showLrcEditor, setShowLrcEditor] = useState<boolean>(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
-  const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
+  const [detectedChords, setDetectedChords] = useState<ChordSegment[]>(hookDetectedChords || []);
   const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
@@ -173,8 +183,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setDriveFileName(song.driveFileName || '');
       setIsPrivateDemo(song.isPrivateDemo ?? true);
       setNotes(song.notes || '');
-      setLyrics(song.lyrics);
-      setLrc(song.lrc || '');
+      updateLyrics(song.lyrics);
+      updateLrc(song.lrc || '');
       setShowLrcEditor(Boolean(song.lrc));
       setTags(song.tags || []);
       setRawMarkdown(songToMarkdown(song));
@@ -203,8 +213,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setDriveFileName('');
       setIsPrivateDemo(true);
       setNotes('');
-      setLyrics(`## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas.`);
-      setLrc('');
+      updateLyrics(`## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas.`);
+      updateLrc('');
       setShowLrcEditor(false);
       setTags(['acústico', 'maqueta']);
       setCommitMessage(`feat: nueva composición en el cancionero`);
@@ -240,6 +250,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (data.tuning) setTuning(data.tuning);
     if (data.audioUrl) setAudioUrl(data.audioUrl);
     if (data.chords && data.chords.length > 0) {
+      // Apply detected chords through the hook, which manages integration with lyrics and LRC
+      applyDetectedChords(data.chords);
       setDetectedChords(data.chords);
     }
     if (data.chordProgression && !notes) {
@@ -249,7 +261,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setNotes(`Progresión armónica detectada: ${data.chordProgression}${offsetNote}`);
     }
     if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe aquí el primer verso') || lyrics.includes('Escribe el primer verso aquí'))) {
-      setLyrics(data.suggestedLyricsChords);
+      updateLyrics(data.suggestedLyricsChords);
     }
 
     setAudioAnalysisNotice(`Detección aplicada: ${data.key} · ${data.tempo} BPM · ${data.timeSignature}${data.chords ? ` · ${data.chords.length} acordes detectados` : ''}`);
@@ -261,7 +273,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (!list || list.length === 0) return;
 
     const updated = insertChordsIntoLyrics(lyrics, list);
-    setLyrics(updated);
+    updateLyrics(updated);
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 3000);
   };
@@ -270,7 +282,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     const nextOffset = transposeOffset + delta;
     setTransposeOffset(nextOffset);
     const transposed = transposeLyrics(lyrics, delta, accidentalPreference);
-    setLyrics(transposed);
+    updateLyrics(transposed);
     const transposedKey = transposeChord(key || 'Am', delta, accidentalPreference);
     setKey(transposedKey);
     setTransposeFeedback(`Tono transmutado a ${transposedKey} (${nextOffset > 0 ? `+${nextOffset}` : nextOffset} st)`);
@@ -280,13 +292,13 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const handleToggleAccidentals = () => {
     const nextPref: AccidentalPreference = accidentalPreference === 'sharps' ? 'flats' : 'sharps';
     setAccidentalPreference(nextPref);
-    setLyrics(respellLyrics(lyrics, nextPref));
+    updateLyrics(respellLyrics(lyrics, nextPref));
     setKey(respellChord(key || 'Am', nextPref));
   };
 
   const handleInsertSectionHeader = (headerName: string) => {
     const sectionText = `\n\n## ${headerName}\n`;
-    setLyrics(prev => prev.trimEnd() + sectionText);
+    updateLyrics(lyrics.trimEnd() + sectionText);
   };
 
   // Transcription Handlers
@@ -349,9 +361,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     const transcribed = lastTranscriptionResult.text;
 
     if (replace) {
-      setLyrics(transcribed);
+      updateLyrics(transcribed);
     } else {
-      setLyrics(prev => (prev.trim() ? `${prev.trim()}\n\n${transcribed}` : transcribed));
+      updateLyrics((lyrics.trim() ? `${lyrics.trim()}\n\n${transcribed}` : transcribed));
     }
 
     // Auto-generate synced LRC if lines exist and LRC was empty
@@ -360,7 +372,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         title: title || 'Sin título',
         artist: 'Autor'
       });
-      setLrc(generatedLrc);
+      updateLrc(generatedLrc);
       setShowLrcEditor(true);
     }
 
@@ -372,7 +384,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (!lastTranscriptionResult?.text) return;
     const chordsToUse = detectedChords.length > 0 ? detectedChords : ['Am', 'G', 'F', 'E7'];
     const merged = insertChordsIntoLyrics(lastTranscriptionResult.text, chordsToUse);
-    setLyrics(merged);
+    updateLyrics(merged);
 
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 3000);
@@ -390,7 +402,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       title: title || 'Sin título',
       artist: 'Tony'
     });
-    setLrc(convertedLrc);
+    updateLrc(convertedLrc);
     setShowLrcEditor(true);
     setSyncFeedback('Letra copiada a LRC limpiando todos los acordes (marcas de tiempo listas).');
     setTimeout(() => setSyncFeedback(null), 4000);
@@ -413,7 +425,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       return;
     }
 
-    setLyrics(cleanLyrics);
+    updateLyrics(cleanLyrics);
     setSyncFeedback('Letra importada desde LRC limpiando marcas de tiempo y metadatos.');
     setTimeout(() => setSyncFeedback(null), 4000);
   };
@@ -421,7 +433,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const handleStripChordsFromLyrics = () => {
     if (!lyrics.trim()) return;
     const stripped = stripChordsFromText(lyrics);
-    setLyrics(stripped);
+    updateLyrics(stripped);
     setSyncFeedback('Acordes eliminados de la letra.');
     setTimeout(() => setSyncFeedback(null), 3000);
   };
@@ -429,7 +441,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const handleStripTimestampsFromLrc = () => {
     if (!lrc.trim()) return;
     const stripped = stripLrcTimestamps(lrc);
-    setLrc(stripped);
+    updateLrc(stripped);
     setSyncFeedback('Marcas de tiempo eliminadas del texto LRC.');
     setTimeout(() => setSyncFeedback(null), 3000);
   };
@@ -666,7 +678,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   try {
                     const parsed = markdownToSong(rawMarkdown, id);
                     setTitle(parsed.title);
-                    setLyrics(parsed.lyrics);
+                    updateLyrics(parsed.lyrics);
                     setStatus(parsed.status);
                   } catch {}
                 }
@@ -1665,7 +1677,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
             <textarea
               rows={14}
               value={lyrics}
-              onChange={(e) => setLyrics(e.target.value)}
+              onChange={(e) => updateLyrics(e.target.value)}
               placeholder="Escribe la letra anotando los acordes entre corchetes, ej: [Am] Primer verso..."
               className="w-full px-4 py-3 font-mono text-xs sm:text-sm rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] leading-relaxed resize-y"
             />
@@ -1739,7 +1751,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   <textarea
                     rows={7}
                     value={lrc}
-                    onChange={(e) => setLrc(e.target.value)}
+                    onChange={(e) => updateLrc(e.target.value)}
                     placeholder="[00:12.30] Primer verso cantado..."
                     className="w-full px-3 py-2 font-mono text-xs rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] resize-y leading-relaxed"
                   />
