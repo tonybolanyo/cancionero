@@ -7,7 +7,9 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "prerelease-type": "alpha",
-      "extra-files": []
+      "extra-files": [],
+      "initial-version": "0.4.0",
+      "always-link-local": false
     }
   },
   "changelog-sections": [
