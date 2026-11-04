@@ -19,10 +19,14 @@ import {
   Clock,
   Trash2,
   Disc,
-  Tag
+  Tag,
+  Lock,
+  Cloud,
+  Sparkles
 } from 'lucide-react';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
+import { GoogleDriveService } from '../services/googleDriveService';
 import {
   songToMarkdown,
   transposeLyrics,
@@ -106,6 +110,57 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [duration, setDuration] = useState(0);
   const [showConfirmDeleteAudio, setShowConfirmDeleteAudio] = useState(false);
   const [audioDeleteFeedback, setAudioDeleteFeedback] = useState<string | null>(null);
+
+  // Private demo / Google Drive resolution states
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string>('');
+  const [isLoadingDriveAudio, setIsLoadingDriveAudio] = useState<boolean>(false);
+  const [driveAudioError, setDriveAudioError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrlToRevoke: string | null = null;
+
+    const resolveAudio = async () => {
+      const fileId = song.driveFileId || (song.audioUrl?.startsWith('gdrive://') ? song.audioUrl.replace('gdrive://', '') : null);
+
+      // Private maqueta protection: hide audio if user is not author
+      if ((fileId || song.isPrivateDemo) && !isAuthor) {
+        setResolvedAudioUrl('');
+        return;
+      }
+
+      if (fileId && isAuthor) {
+        setIsLoadingDriveAudio(true);
+        setDriveAudioError(null);
+        try {
+          const url = await GoogleDriveService.createAudioObjectUrl(fileId);
+          if (active) {
+            objectUrlToRevoke = url;
+            setResolvedAudioUrl(url);
+          }
+        } catch (err: any) {
+          if (active) {
+            setDriveAudioError(err.message || 'Inicia sesión con Google Drive para escuchar esta maqueta.');
+          }
+        } finally {
+          if (active) setIsLoadingDriveAudio(false);
+        }
+      } else if (song.audioUrl && !song.audioUrl.startsWith('gdrive://') && !song.audioUrl.startsWith('blob:')) {
+        setResolvedAudioUrl(song.audioUrl);
+      } else {
+        setResolvedAudioUrl('');
+      }
+    };
+
+    void resolveAudio();
+
+    return () => {
+      active = false;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [song.driveFileId, song.audioUrl, song.isPrivateDemo, isAuthor]);
 
   useEffect(() => {
     setSemitones(0);
@@ -539,16 +594,56 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </div>
       </div>
 
-      {/* Audio Player Bar (if song has audioUrl) */}
-      {song.audioUrl && (
-        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm">
+      {/* Protected Private Maqueta message for non-author visitors */}
+      {!isAuthor && (song.driveFileId || song.isPrivateDemo || (song.audioUrl && (song.audioUrl.startsWith('gdrive://') || song.audioUrl.startsWith('blob:')))) && (
+        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-[var(--text-secondary)]">
+            <div className="w-8 h-8 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-semibold text-[var(--text-primary)] block">Maqueta acústica de autor protegida</span>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Grabación íntima guardada en Google Drive. Inicia sesión como autor para escucharla.
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono uppercase tracking-wider font-bold px-2.5 py-1 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)] self-start sm:self-auto">
+            Privada (Solo autor)
+          </span>
+        </div>
+      )}
+
+      {/* Author Audio Player Bar (when resolved audio URL is available) */}
+      {isAuthor && resolvedAudioUrl && (
+        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm space-y-3">
+          <div className="flex items-center justify-between text-xs pb-1 border-b border-[var(--border-subtle)]">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-blue-500" />
+              <span className="font-semibold text-[var(--text-primary)]">
+                {song.driveFileName || 'Maqueta Acústica Privada (Google Drive)'}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold">
+                Google Drive
+              </span>
+            </div>
+            <button
+              onClick={() => onEdit(song)}
+              className="text-[11px] font-medium text-[var(--accent-primary)] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>Reanalizar en Taller</span>
+            </button>
+          </div>
+
           <audio
             ref={audioRef}
-            src={song.audioUrl}
+            src={resolvedAudioUrl}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlayingAudio(false)}
           />
+
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <button
               onClick={togglePlayAudio}
@@ -571,6 +666,20 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {isAuthor && isLoadingDriveAudio && (
+        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs flex items-center gap-2.5 animate-pulse text-[var(--text-muted)]">
+          <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+          <span>Cargando maqueta segura desde Google Drive...</span>
+        </div>
+      )}
+
+      {isAuthor && driveAudioError && (
+        <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+          <Cloud className="w-4 h-4 shrink-0" />
+          <span>{driveAudioError}</span>
         </div>
       )}
 

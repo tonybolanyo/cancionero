@@ -20,7 +20,16 @@ import {
   Clock,
   Layers,
   UploadCloud,
-  FileText
+  FileText,
+  Lock,
+  Unlock,
+  Cloud,
+  RefreshCw,
+  Trash2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Play
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { Album } from '../types/album';
@@ -37,6 +46,7 @@ import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
+import { GoogleDriveService } from '../services/googleDriveService';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
 import { parseLrc, serializeToLrc } from '../lib/lyrics/parseLrc';
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
@@ -59,7 +69,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   onDelete
 }) => {
   const { navigate, goBack } = useAppNavigation();
-  const { token, user } = useAuth();
+  const { token, user, isAuthor, isGoogleDriveConnected, googleUser, loginWithGoogle } = useAuth();
   const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
 
   // Form fields
@@ -91,6 +101,16 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
   const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
+
+  // Google Drive Maqueta States
+  const [driveFileId, setDriveFileId] = useState<string>(song?.driveFileId || '');
+  const [driveFileName, setDriveFileName] = useState<string>(song?.driveFileName || '');
+  const [isPrivateDemo, setIsPrivateDemo] = useState<boolean>(song?.isPrivateDemo ?? true);
+  const [activeAudioFile, setActiveAudioFile] = useState<File | null>(null);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState<boolean>(false);
+  const [isReanalyzingDrive, setIsReanalyzingDrive] = useState<boolean>(false);
+  const [driveFeedback, setDriveFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const maquetaFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Audio Studio & Transcription States
   const [showAudioStudio, setShowAudioStudio] = useState<boolean>(true);
@@ -138,6 +158,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setYoutubeUrl(song.youtubeUrl || '');
       setSoundcloudUrl(song.soundcloudUrl || '');
       setAudioUrl(song.audioUrl || '');
+      setDriveFileId(song.driveFileId || '');
+      setDriveFileName(song.driveFileName || '');
+      setIsPrivateDemo(song.isPrivateDemo ?? true);
       setNotes(song.notes || '');
       setLyrics(song.lyrics);
       setLrc(song.lrc || '');
@@ -165,6 +188,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setYoutubeUrl('');
       setSoundcloudUrl('');
       setAudioUrl('');
+      setDriveFileId('');
+      setDriveFileName('');
+      setIsPrivateDemo(true);
       setNotes('');
       setLyrics(`## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas.`);
       setLrc('');
@@ -341,6 +367,123 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     setTimeout(() => setInsertedChordsFeedback(false), 3000);
   };
 
+  // Audio & Google Drive Handlers
+  const handleAudioFileChosen = async (file: File) => {
+    setActiveAudioFile(file);
+
+    // Auto-create local object URL for immediate browser playback / waveforms
+    const localUrl = URL.createObjectURL(file);
+    setAudioUrl(localUrl);
+
+    // If connected to Google Drive, upload automatically so user never has to upload twice
+    if (isGoogleDriveConnected) {
+      setIsUploadingToDrive(true);
+      setDriveFeedback({
+        type: 'info',
+        message: `Guardando "${file.name}" en tu Google Drive de forma segura...`
+      });
+
+      try {
+        const songId = song?.id || id || `cancion-${Date.now()}`;
+        const cleanTitle = (title || file.name.replace(/\.[^/.]+$/, '')).trim();
+        const driveName = `Maqueta_${cleanTitle}_${file.name}`;
+        const uploaded = await GoogleDriveService.uploadAudioFile(file, driveName, {
+          songId,
+          title: cleanTitle
+        });
+
+        setDriveFileId(uploaded.id);
+        setDriveFileName(uploaded.name);
+        setDriveFeedback({
+          type: 'success',
+          message: `Maqueta almacenada con éxito en Google Drive (${uploaded.name}). ¡Análisis acústico activado!`
+        });
+      } catch (err: any) {
+        console.error('Error subiendo a Google Drive:', err);
+        setDriveFeedback({
+          type: 'error',
+          message: `Error al subir a Google Drive: ${err.message || 'Comprueba tu conexión o permisos.'}`
+        });
+      } finally {
+        setIsUploadingToDrive(false);
+      }
+    } else {
+      setDriveFeedback({
+        type: 'info',
+        message: `Audio cargado en memoria para análisis. Conecta tu cuenta de Google Drive para guardarlo sin consumir espacio en GitHub.`
+      });
+    }
+  };
+
+  const handleReanalyzeFromDrive = async () => {
+    if (!driveFileId) return;
+
+    setIsReanalyzingDrive(true);
+    setDriveFeedback({
+      type: 'info',
+      message: 'Descargando maqueta directamente desde tu Google Drive...'
+    });
+
+    try {
+      const blob = await GoogleDriveService.downloadFileBlob(driveFileId);
+      const fileName = driveFileName || 'maqueta.mp3';
+      const file = new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
+
+      setActiveAudioFile(file);
+      const localUrl = URL.createObjectURL(blob);
+      setAudioUrl(localUrl);
+
+      // Open analyzer sub-tab automatically
+      setShowAudioStudio(true);
+      setActiveStudioTab('analyzer');
+
+      setDriveFeedback({
+        type: 'success',
+        message: 'Maqueta descargada desde Google Drive. Ejecutando análisis automático...'
+      });
+    } catch (err: any) {
+      console.error('Error downloading from Drive:', err);
+      setDriveFeedback({
+        type: 'error',
+        message: `Error al descargar desde Google Drive: ${err.message}`
+      });
+    } finally {
+      setIsReanalyzingDrive(false);
+    }
+  };
+
+  const handleDeleteDriveMaqueta = async () => {
+    if (!driveFileId) return;
+
+    const confirmed = window.confirm(
+      `¿Deseas eliminar definitivamente el archivo "${driveFileName || 'esta maqueta'}" de tu Google Drive?\n\nEsta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    setIsUploadingToDrive(true);
+    try {
+      await GoogleDriveService.deleteFile(driveFileId);
+      setDriveFileId('');
+      setDriveFileName('');
+      setActiveAudioFile(null);
+      if (audioUrl.includes('drive.google.com') || audioUrl.startsWith('blob:')) {
+        setAudioUrl('');
+      }
+      setDriveFeedback({
+        type: 'success',
+        message: 'La maqueta ha sido eliminada de tu Google Drive.'
+      });
+    } catch (err: any) {
+      console.error('Error deleting from Drive:', err);
+      setDriveFeedback({
+        type: 'error',
+        message: `Error al eliminar de Google Drive: ${err.message}`
+      });
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
@@ -359,6 +502,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
           ...parsed,
           albumId: selectedAlbumId || undefined,
           trackNumber: typeof trackNumber === 'number' ? trackNumber : undefined,
+          driveFileId: driveFileId || parsed.driveFileId || undefined,
+          driveFileName: driveFileName || parsed.driveFileName || undefined,
+          isPrivateDemo: isPrivateDemo ?? parsed.isPrivateDemo ?? true,
           updatedAt: new Date().toISOString()
         };
       } catch (err: any) {
@@ -393,6 +539,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         youtubeUrl: youtubeUrl.trim() || undefined,
         soundcloudUrl: soundcloudUrl.trim() || undefined,
         audioUrl: audioUrl.trim() || undefined,
+        driveFileId: driveFileId.trim() || undefined,
+        driveFileName: driveFileName.trim() || undefined,
+        isPrivateDemo: isPrivateDemo,
         notes: notes.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
         lyrics: lyrics.trim(),
@@ -600,12 +749,44 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               {/* Sub-tab 1: Audio Analyzer Section */}
               {activeStudioTab === 'analyzer' && (
                 <div className="space-y-4">
+                  {driveFeedback && (
+                    <div
+                      className={`p-3 rounded-xl text-xs flex items-center justify-between gap-3 ${
+                        driveFeedback.type === 'success'
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                          : driveFeedback.type === 'error'
+                          ? 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300'
+                          : 'bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-primary)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {driveFeedback.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />}
+                        {driveFeedback.type === 'error' && <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />}
+                        {driveFeedback.type === 'info' && <Cloud className="w-4 h-4 shrink-0 text-[var(--accent-primary)]" />}
+                        <span className="font-medium">{driveFeedback.message}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDriveFeedback(null)}
+                        className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   <AudioAnalyzerSection
                     onApplyDetection={handleApplyAudioDetection}
                     onInsertChordsIntoLyrics={handleInsertDetectedChords}
                     currentKey={key}
                     currentTempo={tempo}
                     currentAudioUrl={audioUrl}
+                    driveFileId={driveFileId}
+                    driveFileName={driveFileName}
+                    onAudioFileSelected={handleAudioFileChosen}
+                    onReanalyzeDriveAudio={handleReanalyzeFromDrive}
+                    isDriveLoading={isUploadingToDrive || isReanalyzingDrive}
+                    externalAudioFile={activeAudioFile}
                   />
 
                   {cleanChordList.length > 0 && (
@@ -1046,14 +1227,177 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
           </div>
 
           {/* External Links and Audio URL */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
-            <h2 className="text-sm font-serif font-bold text-[var(--text-primary)]">
-              Enlaces de Reproducción y Archivo de Audio
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-sm">
+            <div>
+              <h2 className="text-sm font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-[var(--accent-primary)]" />
+                <span>Maqueta de Audio (Google Drive) y Enlaces de Reproducción</span>
+              </h2>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Las maquetas de audio se almacenan de forma segura en tu Google Drive sin ocupar espacio en GitHub Pages ni exponerse públicamente si las marcas como privadas.
+              </p>
+            </div>
+
+            {/* Google Drive Maqueta Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
+                    <Cloud className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-[var(--text-primary)] block">
+                      Almacenamiento en Google Drive
+                    </span>
+                    <span className="text-[11px] text-[var(--text-muted)]">
+                      {isGoogleDriveConnected
+                        ? `Conectado como ${googleUser?.email || 'Autor'}`
+                        : 'No conectado a Google Drive'}
+                    </span>
+                  </div>
+                </div>
+
+                {!isGoogleDriveConnected ? (
+                  <button
+                    type="button"
+                    onClick={loginWithGoogle}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>Conectar Google Drive</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Google Drive Activo</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Maqueta details & controls */}
+              {driveFileId ? (
+                <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <FileAudio className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                        <span className="text-xs font-semibold text-[var(--text-primary)] truncate font-mono">
+                          {driveFileName || 'Maqueta alojada en Drive'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[var(--text-muted)] block mt-0.5">
+                        ID: {driveFileId}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleReanalyzeFromDrive}
+                        disabled={isReanalyzingDrive || isUploadingToDrive}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer disabled:opacity-50"
+                        title="Descargar la maqueta directamente de Google Drive y ejecutar el análisis sin volver a subirla"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isReanalyzingDrive ? 'animate-spin' : ''}`} />
+                        <span>{isReanalyzingDrive ? 'Descargando...' : 'Volver a Analizar'}</span>
+                      </button>
+
+                      <a
+                        href={`https://drive.google.com/file/d/${driveFileId}/view`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
+                        title="Ver archivo en Google Drive"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={handleDeleteDriveMaqueta}
+                        disabled={isUploadingToDrive}
+                        className="p-1.5 text-xs text-red-500 hover:text-red-700 rounded-lg hover:bg-red-500/10 cursor-pointer"
+                        title="Eliminar maqueta de Google Drive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Privacy Toggle */}
+                  <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {isPrivateDemo ? (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Maqueta Privada (solo audible por el autor)</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>Maqueta Pública (audible para cualquier visitante)</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isPrivateDemo}
+                        onChange={(e) => setIsPrivateDemo(e.target.checked)}
+                        className="rounded accent-[var(--accent-primary)] cursor-pointer"
+                      />
+                      <span>Ocultar reproducción a visitantes</span>
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="file"
+                    ref={maquetaFileInputRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAudioFileChosen(file);
+                    }}
+                    accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+                    className="hidden"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => maquetaFileInputRef.current?.click()}
+                      disabled={isUploadingToDrive}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      <UploadCloud className={`w-4 h-4 ${isUploadingToDrive ? 'animate-bounce' : ''}`} />
+                      <span>{isUploadingToDrive ? 'Subiendo a Google Drive...' : 'Subir Maqueta a Google Drive (.mp3, .wav)'}</span>
+                    </button>
+
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isPrivateDemo}
+                        onChange={(e) => setIsPrivateDemo(e.target.checked)}
+                        className="rounded accent-[var(--accent-primary)] cursor-pointer"
+                      />
+                      <span>Privada (solo visible/audible para ti como autor)</span>
+                    </label>
+                  </div>
+
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Al seleccionar un archivo de maqueta, se almacenará en tu Google Drive y se analizará automáticamente su tempo, tono y acordes sin necesidad de volver a subirlo.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Standard URLs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1 flex items-center justify-between">
-                  <span>URL del Archivo de Audio (MP3, WAV o Web)</span>
+                  <span>URL de Audio Directo / Enlace Externo (Opcional)</span>
                   {audioUrl && (
                     <span className="text-[10px] font-mono text-[var(--accent-primary)] font-bold">
                       Audio asignado

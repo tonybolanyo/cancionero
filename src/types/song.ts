@@ -21,6 +21,9 @@ export interface Song {
   appleMusicUrl?: string;
   soundcloudUrl?: string;
   audioUrl?: string;
+  driveFileId?: string; // Google Drive file ID for private maqueta
+  driveFileName?: string; // Original filename in Google Drive
+  isPrivateDemo?: boolean; // True if audio is a private author demo
   coverImage?: string;
   notes?: string; // Songwriting notes, history, instrumentation
   tags?: string[]; // Thematic tags e.g. 'acústico', 'en vivo', 'colaboración', 'maqueta'

@@ -7,17 +7,61 @@
     "genre": "Canción de Autor",
     "key": "Dm",
     "tempo": 88,
+    "albumId": "cartas-sin-sello",
+    "albumTitle": "Cartas sin sello",
+    "trackNumber": "12",
     "timeSignature": "6/8",
     "tuning": "Estándar (EADGBE)",
-    "audioUrl": "blob:https://tonygb.com/8da054e8-f760-4655-98bc-a7334cc200d1",
+    "audioUrl": "blob:https://tonygb.com/794884ec-8273-455c-9c14-4be4b8a112f4",
     "notes": "Progresión armónica detectada: Cm - D# - Cm - G# - Cm - F - Cm - Bm (offset 1er beat: 0.666s)",
     "tags": [
       "acústico",
       "guitarra"
     ],
     "createdAt": "2026-10-30T19:15:10.640Z",
-    "updatedAt": "2026-10-30T19:15:10.640Z",
-    "lyrics": "## Estrofa 1\n[Am] Escribe el primer verso aquí\n[G] Segundo verso con acordes\n\n## Estribillo\n[F] Y aquí va el estribillo..."
+    "updatedAt": "2026-11-02T12:17:05.356Z",
+    "lyrics": "## Estrofa 1\n[Cm] Primer verso de la estrofa\n[Eb] Segundo verso con melodía\n[Cm] Tercer verso en desarrollo\n[Ab] Cuarto verso hacia la transición\n\n## Estribillo\n[Cm] Línea principal del estribillo\n[F] Elevación melódica\n[Cm] Fuerza armónica\n[Bm] Cierre de la sección"
+  },
+  {
+    "id": "cancion-1793618828515",
+    "title": "El enanito impotente",
+    "status": "published",
+    "year": 2025,
+    "genre": "Canción de Autor",
+    "key": "Am",
+    "tempo": 96,
+    "timeSignature": "4/4",
+    "tuning": "Estándar (EADGBE)",
+    "tags": [
+      "acústico",
+      "maqueta"
+    ],
+    "createdAt": "2026-11-02T11:28:10.419Z",
+    "updatedAt": "2026-11-02T11:28:10.419Z",
+    "lyrics": "## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas."
+  },
+  {
+    "id": "agua-que-no-se-puede-evitar",
+    "title": "Agua que no se puede evitar",
+    "status": "published",
+    "year": 2025,
+    "genre": "Canción de Autor",
+    "key": "A",
+    "tempo": 61,
+    "timeSignature": "4/4",
+    "tuning": "Estándar (EADGBE)",
+    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
+    "audioUrl": "blob:https://tonygb.com/eda6c5da-fa1d-45ad-89c3-3087dc217c70",
+    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño",
+    "lrc": "[00:08.48]En la mesa del café de la esquina\\n[00:13.96]donde siempre nos sentamos a las tres,\\n[00:20.09]llega puntual como la medicina amarga\\n[00:25.86]que hay que tomar aunque no quieras beber.\\n\\n[00:31.57]Trae sus palabras como cuchillos romos\\n[00:37.63]que no cortan pero duelen al pasar,\\n[00:43.39]habla del tiempo, de los precios, del gobierno\\n[00:49.14]mientras destruye todo sin piedad.\\n\\n[00:54.52]Eres agua que no se puede evitar,\\n[01:00.43]lluvia ácida en mi jardín pequeño,\\n[01:06.58]pero aprendo a caminar entre charcos\\n[01:11.83]y a cuidar lo que es realmente mío.\\n[01:17.42]\\n[01:18.13]En la oficina gris donde trabajamos\\n[01:23.03]compartiendo el mismo aire venenoso,\\n[01:29.08]cuentas historias de fracasos ajenos\\n[01:34.58]como quien riega flores con rencor.\\n\\n[01:40.55]Pero yo tengo mis trincheras secretas:\\n[01:46.22]un libro en el cajón, cartas de amor,\\n[01:52.09]la fotografía de mi hijo pequeño\\n[01:57.48]que me recuerda para qué es el valor.\\n\\n[02:03.43]Eres agua que no se puede evitar,\\n[02:09.01]lluvia ácida en mi jardín pequeño,\\n[02:14.78]pero aprendo a caminar entre charcos\\n[02:20.44]y a cuidar lo que es realmente mío.\\n\\n[02:25.72]No te puedo cambiar como cambio de camisa,\\n[02:31.55]no te puedo dejar como se deja el dolor,\\n[02:37.29]pero puedo ser el árbol que resiste\\n[02:42.99]la tormenta con raíces de canción.\\n\\n[02:49.17]Cuando llegas con tu nube de tormenta\\n[02:54.70]a contaminar el aire que respiro,\\n[03:00.47]yo me refugio en los pequeños milagros:\\n[03:06.18]el  café que comparto con el vecino,\\n\\n[03:12.08]la sonrisa de la gente en el mercado,\\n[03:17.64]las manos solidarias del barrio,\\n[03:23.33]todo lo que construimos en silencio\\n[03:28.29]mientras tú destruyes calendario a calendario.\\n\\n[03:35.25]Eres agua que no se puede evitar,\\n[03:40.15]lluvia ácida en mi jardín pequeño,\\n[03:45.93]pero aprendo a ser paraguas para otros\\n[03:51.61]y a sembrar esperanza en terreno ajeno.",
+    "tags": [
+      "cartas-sin-sello",
+      "acústico",
+      "guitarra"
+    ],
+    "createdAt": "2026-11-01T00:17:35.091Z",
+    "updatedAt": "2026-11-01T16:40:24.956Z",
+    "lyrics": "## Estrofa 1\n\n\n## Estribillo"
   },
   {
     "id": "mapas-de-papel",
@@ -623,45 +667,24 @@
     "lyrics": "## Estrofa 1\nHoy amanece distinto,  \nhay un eco en la ventana,  \nel café sabe a domingo  \ny a preguntas que no hablan.  \nTus pasos cruzan despacio  \nla frontera de mi almohada,  \ny aunque el mundo esté callado  \nalgo en mí no se apaga.\n\n## Estrofa 2\nDicen que hay cosas sagradas,  \nque no deben perdonarse,  \nque el amor es un combate  \ndonde nadie sale ileso.  \nPero yo, que vi tus manos  \ntemblar sobre mi costado,  \nsé que el mundo está cansado  \nde juzgar lo que no entiende.\n\n## Estribillo\nY no lo cuento,  \nporque nadie entendería  \nque prefiera tu regreso  \nal frío de la herida.  \nNo lo grito,  \nporque todos pedirían  \nque te aleje de mi vida,  \ny yo abrazo tu regreso  \nantes que perder tu risa.\n\n## Puente\nEn la plaza los vecinos  \ncantan himnos de justicia,  \npero yo, desde mi esquina,  \nsolo quiero tu rutina.  \nEl café, la sobremesa,  \nel rumor de tu vestido,  \ny el milagro repetido  \nde encontrarte cada día.\n\n## Estribillo\nY no lo cuento,  \nporque nadie entendería  \nque prefiera tu regreso  \nal frío de la herida.  \nNo lo grito,  \nporque todos pedirían  \nque te aleje de mi vida,  \ny yo abrazo tu regreso  \nantes que perder tu risa.\n\n## Coda\nQue me juzguen los que quieran,  \nque me llamen cobardía,  \nyo prefiero tus mañanas  \na la soledad vacía.  \nY aunque duela, aunque sangre,  \naunque el mundo no comprenda,  \nyo me quedo con tus pasos  \ny el secreto en la tormenta."
   },
   {
-    "id": "agua-que-no-se-puede-evitar",
-    "title": "Agua que no se puede evitar",
-    "status": "draft",
-    "year": 2024,
-    "genre": "Canción de Autor",
-    "key": "",
-    "tempo": 0,
-    "timeSignature": "",
-    "tuning": "",
-    "duration": "",
-    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
-    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño",
-    "tags": [
-      "cartas-sin-sello",
-      "acústico"
-    ],
-    "createdAt": "2026-11-01T00:17:35.091Z",
-    "updatedAt": "2026-11-01T00:17:35.091Z",
-    "lyrics": "## Estrofa 1\n\n\n## Estribillo"
-  },
-  {
     "id": "barco-que-no-sabe-flotar",
     "title": "Barco que no sabe flotar",
     "status": "draft",
-    "year": 2024,
+    "year": 2025,
     "genre": "Canción de Autor",
-    "key": "",
-    "tempo": 0,
-    "timeSignature": "",
-    "tuning": "",
-    "duration": "",
+    "key": "G",
+    "tempo": 88,
+    "timeSignature": "6/8",
+    "tuning": "Estándar (EADGBE)",
     "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
-    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño",
+    "audioUrl": "blob:https://tonygb.com/e74219e6-1be2-466d-8864-b557bc280478",
+    "notes": "Del disco 'Cartas sin sello'",
     "tags": [
       "cartas-sin-sello",
       "acústico"
     ],
     "createdAt": "2026-11-01T00:17:35.091Z",
-    "updatedAt": "2026-11-01T00:17:35.091Z",
+    "updatedAt": "2026-11-01T17:43:41.724Z",
     "lyrics": "## Estrofa 1\n\n\n## Estribillo"
   },
   {

@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { GitHubUser, AuthState } from '../types/auth';
+import { GitHubUser, GoogleAuthUser, AuthState } from '../types/auth';
 import { AUTHORIZED_GITHUB_USER, isAuthorizedAuthorLogin } from '../utils/authConfig';
+import { GoogleDriveService } from '../services/googleDriveService';
 
 interface AuthContextType extends AuthState {
   loginWithGitHub: (token: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string; user?: GitHubUser }>;
   logout: () => void;
   isVerifyingSession: boolean;
+  // Google Drive Integration
+  googleUser: GoogleAuthUser | null;
+  isGoogleDriveConnected: boolean;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string; user?: GoogleAuthUser }>;
+  logoutGoogle: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -14,6 +20,8 @@ const AUTH_STORAGE_KEY = 'tony_cancionero_github_auth_v2';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isVerifyingSession, setIsVerifyingSession] = useState<boolean>(false);
+  const [googleUser, setGoogleUser] = useState<GoogleAuthUser | null>(null);
+  const [isGoogleDriveConnected, setIsGoogleDriveConnected] = useState<boolean>(false);
 
   // Initialize auth state by checking sessionStorage first (preferred), then localStorage
   const [authState, setAuthState] = useState<AuthState>(() => {
@@ -99,6 +107,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [clearStoredAuth]);
 
   /**
+   * Initialize Google Drive Auth Listener
+   */
+  useEffect(() => {
+    const unsubscribe = GoogleDriveService.initAuth(
+      (user, token) => {
+        setGoogleUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL
+        });
+        setIsGoogleDriveConnected(Boolean(token));
+      },
+      () => {
+        setGoogleUser(null);
+        setIsGoogleDriveConnected(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  /**
    * Verify an existing saved session against GitHub API on initial mount
    */
   useEffect(() => {
@@ -116,7 +149,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (!response.ok) {
-          // Token expired, invalid or revoked
           console.warn('Saved GitHub token is no longer valid, clearing session.');
           if (isMounted) {
             clearStoredAuth();
@@ -134,7 +166,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const userData = await response.json();
         if (!isAuthorizedAuthorLogin(userData.login)) {
-          // Username mismatch
           console.warn('Authenticated user does not match authorized author, clearing session.');
           if (isMounted) {
             clearStoredAuth();
@@ -150,7 +181,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // Token still valid, update profile details in state
         if (isMounted) {
           setAuthState(prev => ({
             ...prev,
@@ -165,7 +195,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }));
         }
       } catch (err) {
-        // Network failure during background check, do not kick out if offline
         console.warn('Network error verifying saved GitHub token', err);
       } finally {
         if (isMounted) {
@@ -183,7 +212,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Authenticate strictly with GitHub REST API
-   * Rejects any token that does not belong to the authorized GitHub account
    */
   const loginWithGitHub = async (
     token: string,
@@ -196,7 +224,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // Validate directly with GitHub's official API
       const response = await fetch('https://api.github.com/user', {
         headers: {
           Authorization: `Bearer ${cleanToken}`,
@@ -208,13 +235,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.status === 401) {
           return {
             success: false,
-            error: 'Token de GitHub no válido o expirado (HTTP 401 Unauthorized). Comprueba que el token esté activo.'
+            error: 'Token de GitHub no válido o expirado (HTTP 401 Unauthorized).'
           };
         }
         if (response.status === 403) {
           return {
             success: false,
-            error: 'Límite de solicitudes de la API de GitHub superado o permisos insuficientes (HTTP 403 Forbidden).'
+            error: 'Límite de solicitudes de la API de GitHub superado (HTTP 403 Forbidden).'
           };
         }
         return {
@@ -226,13 +253,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = await response.json();
       const authenticatedLogin = String(userData.login || '').trim();
 
-      // STRICT AUTHORIZATION CHECK:
-      // Only the exact GitHub user configured in AUTHORIZED_GITHUB_USER has author permissions.
-      // Any other user, even with valid GitHub credentials, is explicitly rejected.
       if (!isAuthorizedAuthorLogin(authenticatedLogin)) {
         return {
           success: false,
-          error: `Acceso denegado: Te has identificado en GitHub como @${authenticatedLogin}, pero solamente el usuario @${AUTHORIZED_GITHUB_USER} tiene permisos de autor en este cancionero. Ninguna otra cuenta puede acceder a la sección de autor.`
+          error: `Acceso denegado: Te has identificado en GitHub como @${authenticatedLogin}, pero solamente el usuario @${AUTHORIZED_GITHUB_USER} tiene permisos de autor en este cancionero.`
         };
       }
 
@@ -264,10 +288,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Sign in with Google Drive via Firebase Popup
+   */
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string; user?: GoogleAuthUser }> => {
+    try {
+      const result = await GoogleDriveService.signInWithGoogle();
+      const mappedUser: GoogleAuthUser = {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL
+      };
+
+      setGoogleUser(mappedUser);
+      setIsGoogleDriveConnected(true);
+
+      return { success: true, user: mappedUser };
+    } catch (err: any) {
+      console.warn('Google sign-in error:', err);
+      return {
+        success: false,
+        error: err.message || 'Error al iniciar sesión con Google Drive.'
+      };
+    }
+  };
+
+  /**
+   * Sign out from Google Drive
+   */
+  const logoutGoogle = async () => {
+    await GoogleDriveService.signOut();
+    setGoogleUser(null);
+    setIsGoogleDriveConnected(false);
+  };
+
+  /**
    * Log out completely and wipe stored token
    */
   const logout = () => {
     clearStoredAuth();
+    logoutGoogle();
     setAuthState({
       isAuthenticated: false,
       isAuthor: false,
@@ -278,13 +338,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  // The user is recognized as Author if authenticated via GitHub or Google Drive
+  const isAuthor = authState.isAuthor || Boolean(googleUser);
+
   return (
     <AuthContext.Provider
       value={{
         ...authState,
+        isAuthor,
         loginWithGitHub,
         logout,
-        isVerifyingSession
+        isVerifyingSession,
+        googleUser,
+        isGoogleDriveConnected,
+        loginWithGoogle,
+        logoutGoogle
       }}
     >
       {children}

@@ -53,6 +53,12 @@ interface AudioAnalyzerSectionProps {
   currentKey?: string;
   currentTempo?: string;
   currentAudioUrl?: string;
+  driveFileId?: string;
+  driveFileName?: string;
+  onAudioFileSelected?: (file: File) => void;
+  onReanalyzeDriveAudio?: () => Promise<void>;
+  isDriveLoading?: boolean;
+  externalAudioFile?: File | null;
 }
 
 export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
@@ -60,7 +66,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   onInsertChordsIntoLyrics,
   currentKey,
   currentTempo,
-  currentAudioUrl
+  currentAudioUrl,
+  driveFileId,
+  driveFileName,
+  onAudioFileSelected,
+  onReanalyzeDriveAudio,
+  isDriveLoading,
+  externalAudioFile
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>(currentAudioUrl || '');
@@ -313,9 +325,19 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     const objectUrl = URL.createObjectURL(selectedFile);
     setAudioUrl(objectUrl);
 
+    if (onAudioFileSelected) {
+      onAudioFileSelected(selectedFile);
+    }
+
     // Auto calculate tempo & beat offset, onsets and key in background
     void handleCalculateTempo(selectedFile);
   };
+
+  useEffect(() => {
+    if (externalAudioFile && externalAudioFile !== file) {
+      handleFileSelected(externalAudioFile);
+    }
+  }, [externalAudioFile]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -606,6 +628,64 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </button>
             </div>
           </div>
+        ) : driveFileId ? (
+          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-3 text-left">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0 shadow-sm">
+                <FileAudio className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
+                    {driveFileName || 'Maqueta guardada en Google Drive'}
+                  </p>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold shrink-0">
+                    Google Drive (Privada)
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Maqueta almacenada de forma privada. Puedes reanalizarla directamente sin volver a subirla.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {onReanalyzeDriveAudio && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onReanalyzeDriveAudio();
+                  }}
+                  disabled={isDriveLoading}
+                  className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isDriveLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                      <span>Cargando de Drive...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Reanalizar maqueta de Drive</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+              >
+                Subir otra
+              </button>
+            </div>
+          </div>
         ) : (
           <>
             <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)]">
@@ -616,7 +696,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 Arrastra o haz clic para subir tu maqueta en <span className="text-[var(--accent-primary)] font-mono">.mp3</span> o <span className="text-[var(--accent-primary)] font-mono">.wav</span>
               </p>
               <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                Archivos locales de audio de cualquier duración
+                Se almacenará de forma privada en tu Google Drive y se analizará automáticamente
               </p>
             </div>
           </>

@@ -89,3 +89,37 @@ test('song markdown conversion preserves detected tempo, tuning, key, and album 
   assert.equal(parsed.tuning, 'Drop D (DADGBE)');
   assert.equal(parsed.albumId, 'album-1');
 });
+
+test('song markdown conversion preserves driveFileId, driveFileName, and isPrivateDemo privacy flags', () => {
+  const songWithDrive = {
+    id: 'cancion-maqueta-drive',
+    title: 'Maqueta Secreta en Drive',
+    status: 'draft' as const,
+    year: 2025,
+    genre: 'Acústico',
+    key: 'Am',
+    lyrics: 'Verso secreto',
+    driveFileId: '1AbCDeF_gh1234567890',
+    driveFileName: 'Maqueta_Secreta_Demo_v1.mp3',
+    isPrivateDemo: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const md = songToMarkdown(songWithDrive);
+  assert.ok(md.includes('driveFileId: "1AbCDeF_gh1234567890"'));
+  assert.ok(md.includes('driveFileName: "Maqueta_Secreta_Demo_v1.mp3"'));
+  assert.ok(md.includes('isPrivateDemo: true'));
+
+  const parsed = markdownToSong(md, 'cancion-maqueta-drive');
+  assert.equal(parsed.driveFileId, '1AbCDeF_gh1234567890');
+  assert.equal(parsed.driveFileName, 'Maqueta_Secreta_Demo_v1.mp3');
+  assert.equal(parsed.isPrivateDemo, true);
+
+  // Test public demo flag as well
+  const publicSong = { ...songWithDrive, isPrivateDemo: false };
+  const publicMd = songToMarkdown(publicSong);
+  assert.ok(publicMd.includes('isPrivateDemo: false'));
+  const parsedPublic = markdownToSong(publicMd, 'cancion-maqueta-drive');
+  assert.equal(parsedPublic.isPrivateDemo, false);
+});

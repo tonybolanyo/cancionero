@@ -12,7 +12,8 @@ import {
   EyeOff,
   UserCheck,
   ShieldAlert,
-  Loader2
+  Loader2,
+  Cloud
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,17 +25,23 @@ interface GitHubAuthModalProps {
 export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClose }) => {
   const {
     isAuthenticated,
+    isAuthor,
     user,
     authorizedUsername,
     loginWithGitHub,
     logout,
-    isVerifyingSession
+    isVerifyingSession,
+    googleUser,
+    isGoogleDriveConnected,
+    loginWithGoogle,
+    logoutGoogle
   } = useAuth();
 
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!isOpen) return null;
@@ -65,6 +72,40 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
         text: result.error || 'Error al autenticar credenciales con GitHub.'
       });
     }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    setStatusMessage(null);
+    try {
+      const res = await loginWithGoogle();
+      if (res.success && res.user) {
+        setStatusMessage({
+          type: 'success',
+          text: `Conectado con éxito a Google Drive (${res.user.email}). Maquetas privadas y almacenamiento activados.`
+        });
+      } else if (res.error) {
+        setStatusMessage({
+          type: 'error',
+          text: res.error
+        });
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: err.message || 'Error al conectar con Google Drive.'
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    await logoutGoogle();
+    setStatusMessage({
+      type: 'success',
+      text: 'Desconectado de Google Drive.'
+    });
   };
 
   const handleLogout = () => {
@@ -137,6 +178,52 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
               <span className="leading-relaxed font-medium">{statusMessage.text}</span>
             </div>
           )}
+
+          {/* Google Drive Maqueta Integration Status */}
+          <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-[var(--text-primary)] block">
+                    Google Drive (Maquetas Privadas)
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {isGoogleDriveConnected
+                      ? `Conectado como ${googleUser?.email || 'Autor'}`
+                      : 'Permite alojar y escuchar maquetas seguras fuera de GitHub'}
+                  </span>
+                </div>
+              </div>
+
+              {isGoogleDriveConnected ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    Activo
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogout}
+                    className="px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={isGoogleLoading}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  {isGoogleLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+                  <span>{isGoogleLoading ? 'Conectando...' : 'Conectar Google Drive'}</span>
+                </button>
+              )}
+            </div>
+          </div>
 
           {isAuthenticated && user ? (
             /* Logged in state for authorized author */

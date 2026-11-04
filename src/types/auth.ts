@@ -7,6 +7,13 @@ export interface GitHubUser {
   email?: string;
 }
 
+export interface GoogleAuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   isAuthor: boolean;
@@ -14,4 +21,6 @@ export interface AuthState {
   token: string | null;
   authorizedUsername: string;
   rememberMe: boolean;
+  googleUser?: GoogleAuthUser | null;
+  isGoogleDriveConnected?: boolean;
 }
