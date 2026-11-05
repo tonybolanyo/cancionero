@@ -22,7 +22,8 @@ import {
   Tag,
   Lock,
   Cloud,
-  Sparkles
+  Sparkles,
+  ScrollText
 } from 'lucide-react';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
@@ -43,6 +44,7 @@ import { parseLrc, isLrcContent } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { StorageService } from '../services/storageService';
 import { useAppNavigation } from '../context/NavigationContext';
+import { calculateSongCompleteness } from '../utils/songwriterHelper';
 
 interface SongDetailPageProps {
   song: Song;
@@ -102,6 +104,26 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollIntervalRef = useRef<number | null>(null);
+
+  const completeness = React.useMemo(() => calculateSongCompleteness(song), [song]);
+
+  useEffect(() => {
+    if (isAutoScrolling) {
+      scrollIntervalRef.current = window.setInterval(() => {
+        window.scrollBy({ top: 1.2 * scrollSpeed, behavior: 'smooth' });
+      }, 50);
+    } else {
+      if (scrollIntervalRef.current) {
+        clearInterval(scrollIntervalRef.current);
+        scrollIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (scrollIntervalRef.current) {
+        clearInterval(scrollIntervalRef.current);
+      }
+    };
+  }, [isAutoScrolling, scrollSpeed]);
 
   // Direct Audio player ref
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -479,6 +501,58 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </div>
       </div>
 
+      {/* Author Studio & Completeness Assistant Bar */}
+      {isAuthor && (
+        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xs flex flex-wrap items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+              completeness.percent >= 80 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+            }`}>
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[var(--text-primary)]">
+                  Taller de Autor · {completeness.statusLabel} ({completeness.percent}%)
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  song.status === 'published' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                }`}>
+                  {song.status === 'published' ? 'Publicada' : song.status === 'draft' ? 'Borrador' : 'Inédita'}
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                {completeness.nextSuggestion}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {song.status !== 'published' && onSaveSong && (
+              <button
+                onClick={() => {
+                  const updated = { ...song, status: 'published' as const, updatedAt: new Date().toISOString() };
+                  StorageService.upsertSong(updated);
+                  onSaveSong(updated);
+                }}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                title="Cambiar estado a publicada para que sea visible en el repertorio público"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Publicar Canción</span>
+              </button>
+            )}
+            <button
+              onClick={() => onEdit(song)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Abrir en Taller de Autor</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Album Linkage Banner (if this song belongs to an album) */}
       {linkedAlbum && (
         <div className="mb-6 p-3.5 rounded-xl bg-[var(--accent-subtle)]/50 border border-[var(--accent-border)] flex items-center justify-between gap-3 text-xs">
@@ -822,6 +896,20 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 </button>
               ))}
             </div>
+
+            {/* Auto-scroll rehearsal button */}
+            <button
+              onClick={() => setIsAutoScrolling(!isAutoScrolling)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                isAutoScrolling
+                  ? 'bg-emerald-500 text-white border-emerald-600 animate-pulse'
+                  : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Desplazamiento automático para leer la letra y tocar en atril"
+            >
+              <ScrollText className="w-3.5 h-3.5" />
+              <span>{isAutoScrolling ? 'Pausar Desplazamiento' : 'Autodesplazamiento'}</span>
+            </button>
 
             {/* Copy lyrics */}
             <button

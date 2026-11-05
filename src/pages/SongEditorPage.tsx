@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   Save,
@@ -13,14 +13,10 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Copy,
   Radio,
-  ListMusic,
-  Check,
   Clock,
   Layers,
   UploadCloud,
-  FileText,
   Lock,
   Unlock,
   Cloud,
@@ -30,9 +26,17 @@ import {
   Eye,
   EyeOff,
   Play,
+  Pause,
   ArrowDown,
   ArrowUp,
-  Eraser
+  Eraser,
+  PenTool,
+  Check,
+  Tag,
+  BookOpen,
+  SlidersHorizontal,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { Song, SongStatus } from '../types/song';
 import { Album } from '../types/album';
@@ -43,6 +47,7 @@ import {
   transposeLyrics,
   respellChord,
   respellLyrics,
+  parseLyricLine,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
@@ -62,25 +67,40 @@ import {
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
 import { LyricsTranscriptionResult } from '../types/transcription';
 import { useAppNavigation } from '../context/NavigationContext';
+import { LrcSyncAssistant } from '../components/LrcSyncAssistant';
+import {
+  getDiatonicChordsForKey,
+  calculateSongCompleteness,
+  SONGWRITING_TEMPLATES
+} from '../utils/songwriterHelper';
 
 interface SongEditorPageProps {
   song: Song | null;
   albums?: Album[];
   initialAlbumId?: string;
+  initialAudioFile?: File;
   onSave: (song: Song, pushResult?: PushResult) => void;
   onDelete?: (song: Song) => void;
 }
+
+type EditorStage = 'lyrics' | 'audio' | 'sync' | 'meta';
 
 export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   song,
   albums = [],
   initialAlbumId,
+  initialAudioFile,
   onSave,
   onDelete
 }) => {
   const { navigate, goBack } = useAppNavigation();
   const { token, user, isAuthor, isGoogleDriveConnected, googleUser, loginWithGoogle } = useAuth();
-  const [mode, setMode] = useState<'form' | 'raw_markdown'>('form');
+  
+  // Editor mode: guided workshop vs raw markdown
+  const [editorMode, setEditorMode] = useState<'guided' | 'markdown'>('guided');
+  
+  // Current active stage
+  const [activeStage, setActiveStage] = useState<EditorStage>('lyrics');
 
   // Form fields
   const [id, setId] = useState('');
@@ -91,7 +111,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [genre, setGenre] = useState('');
   const [key, setKey] = useState('Am');
-  const [tempo, setTempo] = useState<string>('');
+  const [tempo, setTempo] = useState<string>('96');
   const [timeSignature, setTimeSignature] = useState('4/4');
   const [tuning, setTuning] = useState('Estándar (EADGBE)');
   const [duration, setDuration] = useState('');
@@ -103,44 +123,45 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [notes, setNotes] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [lrc, setLrc] = useState('');
-  const [showLrcEditor, setShowLrcEditor] = useState<boolean>(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
-  const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
-  const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
-  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
-  const [transposeOffset, setTransposeOffset] = useState<number>(0);
-  const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
-  const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
+  const [customChordInput, setCustomChordInput] = useState<string>('');
 
-  // Google Drive Maqueta States
+  // Audio & Google Drive States
   const [driveFileId, setDriveFileId] = useState<string>(song?.driveFileId || '');
   const [driveFileName, setDriveFileName] = useState<string>(song?.driveFileName || '');
   const [isPrivateDemo, setIsPrivateDemo] = useState<boolean>(song?.isPrivateDemo ?? true);
-  const [activeAudioFile, setActiveAudioFile] = useState<File | null>(null);
+  const [activeAudioFile, setActiveAudioFile] = useState<File | null>(initialAudioFile || null);
   const [isUploadingToDrive, setIsUploadingToDrive] = useState<boolean>(false);
   const [isReanalyzingDrive, setIsReanalyzingDrive] = useState<boolean>(false);
   const [driveFeedback, setDriveFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const maquetaFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Audio Studio & Transcription States
-  const [showAudioStudio, setShowAudioStudio] = useState<boolean>(true);
-  const [activeStudioTab, setActiveStudioTab] = useState<'analyzer' | 'transcription'>('analyzer');
+  // Audio Playback
+  const [isPlayingLocalAudio, setIsPlayingLocalAudio] = useState<boolean>(false);
+  const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
+  const [audioDuration, setAudioDuration] = useState<number>(0);
+  const localAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Audio Analysis & Transcription States
+  const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
   const [audioAnalysisNotice, setAudioAnalysisNotice] = useState<string | null>(null);
-
-  // Transcription controls
-  const [transcriptionFile, setTranscriptionFile] = useState<File | null>(null);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [transcriptionEngine, setTranscriptionEngine] = useState<'backend_gemini' | 'local_whisper'>('backend_gemini');
   const [backendConsent, setBackendConsent] = useState<boolean>(true);
-  const [allowWasmFallback, setAllowWasmFallback] = useState<boolean>(true);
   const [transcriptionProgress, setTranscriptionProgress] = useState<string | null>(null);
-  const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [lastTranscriptionResult, setLastTranscriptionResult] = useState<LyricsTranscriptionResult | null>(null);
-  const transcriptionFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Raw Markdown field
+  // Music stand live preview toggle
+  const [showStandPreview, setShowStandPreview] = useState<boolean>(false);
+  const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  // Tap-to-sync assistant modal state
+  const [isSyncAssistantOpen, setIsSyncAssistantOpen] = useState<boolean>(false);
+
+  // Raw Markdown
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -148,8 +169,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [pushToGitHub, setPushToGitHub] = useState(true);
   const [commitMessage, setCommitMessage] = useState('');
   const [isPushing, setIsPushing] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
 
+  // Textarea ref for inserting chords at cursor
+  const lyricsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Initialize fields on load or change
   useEffect(() => {
     if (song) {
       setId(song.id);
@@ -158,9 +182,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setSelectedAlbumId(song.albumId || initialAlbumId || '');
       setTrackNumber(song.trackNumber ?? '');
       setYear(song.year);
-      setGenre(song.genre);
+      setGenre(song.genre || 'Canción de Autor');
       setKey(song.key || 'Am');
-      setTempo(song.tempo ? song.tempo.toString() : '');
+      setTempo(song.tempo ? song.tempo.toString() : '96');
       setTimeSignature(song.timeSignature || '4/4');
       setTuning(song.tuning || 'Estándar (EADGBE)');
       setDuration(song.duration || '');
@@ -175,12 +199,10 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setNotes(song.notes || '');
       setLyrics(song.lyrics);
       setLrc(song.lrc || '');
-      setShowLrcEditor(Boolean(song.lrc));
       setTags(song.tags || []);
       setRawMarkdown(songToMarkdown(song));
       setCommitMessage(`feat: actualizar canción "${song.title}"`);
     } else {
-      // New song defaults
       const autoId = `cancion-${Date.now()}`;
       setId(autoId);
       setTitle('');
@@ -205,24 +227,185 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setNotes('');
       setLyrics(`## Intro\n[Am]  [G]  [F]  [E7]\n\n## Estrofa 1\n[Am] Escribe aquí el primer verso de la canción...\n[G] Segundo verso con acordes anotados\n\n## Estribillo\n[C] Y aquí el estribillo que eleva la voz...\n[G] Con notas claras y verdades pequeñas.`);
       setLrc('');
-      setShowLrcEditor(false);
       setTags(['acústico', 'maqueta']);
-      setCommitMessage(`feat: nueva composición en el cancionero`);
+      setCommitMessage('feat: nueva composición en el cancionero');
     }
   }, [song, initialAlbumId]);
 
-  const handleAddTag = () => {
-    const trimmed = tagInput.trim().toLowerCase();
-    if (trimmed && !tags.includes(trimmed)) {
-      setTags([...tags, trimmed]);
-      setTagInput('');
+  // Handle initialAudioFile if passed
+  useEffect(() => {
+    if (initialAudioFile) {
+      handleAudioFileChosen(initialAudioFile);
+      setActiveStage('audio');
+    }
+  }, [initialAudioFile]);
+
+  // Dynamic Diatonic Chords for the current key
+  const availableChords = useMemo(() => {
+    return getDiatonicChordsForKey(key);
+  }, [key]);
+
+  // Calculate completeness progress
+  const completeness = useMemo(() => {
+    return calculateSongCompleteness({
+      title,
+      lyrics,
+      key,
+      tempo,
+      audioUrl,
+      driveFileId,
+      spotifyUrl,
+      youtubeUrl,
+      soundcloudUrl,
+      lrc,
+      status
+    });
+  }, [title, lyrics, key, tempo, audioUrl, driveFileId, spotifyUrl, youtubeUrl, soundcloudUrl, lrc, status]);
+
+  // Clean chord list from detection
+  const cleanChordList = useMemo(() => {
+    return getCleanChordSequence(detectedChords);
+  }, [detectedChords]);
+
+  // Toast feedback helper
+  const showFeedback = (msg: string) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 3500);
+  };
+
+  // Insert Chord at cursor position in Lyrics Textarea
+  const handleInsertChordAtCursor = (chordName: string) => {
+    const textarea = lyricsTextareaRef.current;
+    const chordTag = `[${chordName}]`;
+
+    if (!textarea) {
+      setLyrics(prev => prev + ` ${chordTag}`);
+      showFeedback(`Acorde ${chordTag} añadido`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const current = lyrics;
+
+    let nextText = '';
+    let newCursorPos = start + chordTag.length;
+
+    if (start === end) {
+      // No selection, insert chord at cursor
+      nextText = current.substring(0, start) + chordTag + current.substring(end);
+    } else {
+      // Selected text: wrap in front of the selected syllable/word
+      const selected = current.substring(start, end);
+      nextText = current.substring(0, start) + chordTag + selected + current.substring(end);
+      newCursorPos = start + chordTag.length + selected.length;
+    }
+
+    setLyrics(nextText);
+    showFeedback(`Acorde ${chordTag} insertado`);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const handleAddCustomChord = () => {
+    const clean = customChordInput.trim();
+    if (clean) {
+      handleInsertChordAtCursor(clean);
+      setCustomChordInput('');
     }
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(t => t !== tagToRemove));
+  // Section Header Insertion
+  const handleInsertSection = (sectionName: string) => {
+    const block = `\n\n## ${sectionName}\n`;
+    setLyrics(prev => prev.trimEnd() + block);
+    showFeedback(`Sección ${sectionName} añadida`);
+    setTimeout(() => {
+      if (lyricsTextareaRef.current) {
+        lyricsTextareaRef.current.focus();
+        lyricsTextareaRef.current.scrollTop = lyricsTextareaRef.current.scrollHeight;
+      }
+    }, 50);
   };
 
+  // Transpose Lyrics
+  const handleTransposeLyrics = (delta: number) => {
+    const nextKey = transposeChord(key || 'Am', delta, accidentalPreference);
+    setKey(nextKey);
+    const transposed = transposeLyrics(lyrics, delta, accidentalPreference);
+    setLyrics(transposed);
+    showFeedback(`Tono transmutado a ${nextKey} (${delta > 0 ? `+${delta}` : delta} semitono)`);
+  };
+
+  const handleToggleAccidentals = () => {
+    const nextPref: AccidentalPreference = accidentalPreference === 'sharps' ? 'flats' : 'sharps';
+    setAccidentalPreference(nextPref);
+    setLyrics(respellLyrics(lyrics, nextPref));
+    setKey(respellChord(key || 'Am', nextPref));
+    showFeedback(`Notación cambiada a ${nextPref === 'sharps' ? 'Sostenidos (#)' : 'Bemoles (b)'}`);
+  };
+
+  const handleStripChords = () => {
+    if (!lyrics.trim()) return;
+    const stripped = stripChordsFromText(lyrics);
+    setLyrics(stripped);
+    showFeedback('Acordes entre corchetes eliminados');
+  };
+
+  // Audio Upload & Google Drive Handler
+  const handleAudioFileChosen = async (file: File) => {
+    setActiveAudioFile(file);
+    const localUrl = URL.createObjectURL(file);
+    setAudioUrl(localUrl);
+
+    // If title is empty, deduce default from file name
+    if (!title.trim()) {
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      setTitle(cleanName);
+    }
+
+    if (isGoogleDriveConnected) {
+      setIsUploadingToDrive(true);
+      setDriveFeedback({
+        type: 'info',
+        message: `Guardando "${file.name}" en tu Google Drive seguro...`
+      });
+
+      try {
+        const songId = song?.id || id || `cancion-${Date.now()}`;
+        const cleanTitle = (title || file.name.replace(/\.[^/.]+$/, '')).trim();
+        const driveName = `Maqueta_${cleanTitle}_${file.name}`;
+        const uploaded = await GoogleDriveService.uploadAudioFile(file, driveName, {
+          songId,
+          title: cleanTitle
+        });
+
+        setDriveFileId(uploaded.id);
+        setDriveFileName(uploaded.name);
+        setDriveFeedback({
+          type: 'success',
+          message: `Maqueta almacenada con éxito en Google Drive (${uploaded.name}).`
+        });
+      } catch (err: any) {
+        setDriveFeedback({
+          type: 'error',
+          message: `Error al subir a Google Drive: ${err.message || 'Comprueba tu conexión.'}`
+        });
+      } finally {
+        setIsUploadingToDrive(false);
+      }
+    } else {
+      setDriveFeedback({
+        type: 'info',
+        message: 'Audio cargado en memoria listo para reproducir y detectar tono y tempo.'
+      });
+    }
+  };
+
+  // Detection applied callback from AudioAnalyzer
   const handleApplyAudioDetection = (data: {
     tempo: number;
     key: string;
@@ -243,16 +426,14 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setDetectedChords(data.chords);
     }
     if (data.chordProgression && !notes) {
-      const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
-        ? ` (offset beat 1: ${data.tempoOffset.toFixed(3)}s)`
-        : '';
-      setNotes(`Progresión armónica detectada: ${data.chordProgression}${offsetNote}`);
+      setNotes(`Progresión armónica detectada: ${data.chordProgression}`);
     }
-    if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe aquí el primer verso') || lyrics.includes('Escribe el primer verso aquí'))) {
+    if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe aquí el primer verso'))) {
       setLyrics(data.suggestedLyricsChords);
     }
 
-    setAudioAnalysisNotice(`Detección aplicada: ${data.key} · ${data.tempo} BPM · ${data.timeSignature}${data.chords ? ` · ${data.chords.length} acordes detectados` : ''}`);
+    setAudioAnalysisNotice(`¡Detección acústica aplicada! Tono: ${data.key} · Tempo: ${data.tempo} BPM · Compás: ${data.timeSignature}`);
+    showFeedback(`Tono ${data.key} y ${data.tempo} BPM aplicados a la canción`);
     setTimeout(() => setAudioAnalysisNotice(null), 5000);
   };
 
@@ -262,70 +443,38 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
     const updated = insertChordsIntoLyrics(lyrics, list);
     setLyrics(updated);
-    setInsertedChordsFeedback(true);
-    setTimeout(() => setInsertedChordsFeedback(false), 3000);
+    showFeedback('Acordes detectados intercalados en la letra');
   };
 
-  const handleTransposeStudioLyrics = (delta: number) => {
-    const nextOffset = transposeOffset + delta;
-    setTransposeOffset(nextOffset);
-    const transposed = transposeLyrics(lyrics, delta, accidentalPreference);
-    setLyrics(transposed);
-    const transposedKey = transposeChord(key || 'Am', delta, accidentalPreference);
-    setKey(transposedKey);
-    setTransposeFeedback(`Tono transmutado a ${transposedKey} (${nextOffset > 0 ? `+${nextOffset}` : nextOffset} st)`);
-    setTimeout(() => setTransposeFeedback(null), 3000);
-  };
-
-  const handleToggleAccidentals = () => {
-    const nextPref: AccidentalPreference = accidentalPreference === 'sharps' ? 'flats' : 'sharps';
-    setAccidentalPreference(nextPref);
-    setLyrics(respellLyrics(lyrics, nextPref));
-    setKey(respellChord(key || 'Am', nextPref));
-  };
-
-  const handleInsertSectionHeader = (headerName: string) => {
-    const sectionText = `\n\n## ${headerName}\n`;
-    setLyrics(prev => prev.trimEnd() + sectionText);
-  };
-
-  // Transcription Handlers
-  const handleTranscriptionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0] || null;
-    setTranscriptionFile(selected);
-    setTranscriptionError(null);
-    setTranscriptionNotice(null);
-  };
-
+  // Voice-to-Text Transcription Handler
   const handleRunTranscription = async () => {
-    if (!transcriptionFile) {
-      setTranscriptionError('Selecciona primero un archivo de audio (.mp3, .wav, .m4a, .ogg) para transcribir.');
+    if (!activeAudioFile) {
+      setTranscriptionError('Selecciona o arrastra primero un archivo de audio para transcribir.');
       return;
     }
 
     setIsTranscribing(true);
     setTranscriptionError(null);
-    setTranscriptionNotice(null);
-    setTranscriptionProgress('Iniciando procesamiento de audio...');
+    setTranscriptionProgress('Iniciando procesamiento de voz...');
 
     try {
       let result: LyricsTranscriptionResult;
 
       if (transcriptionEngine === 'backend_gemini') {
         if (!backendConsent) {
-          throw new Error('Debes autorizar el envío de audio para la transcripción inteligente.');
+          throw new Error('Debes autorizar el procesamiento de audio para transcribir con Gemini AI.');
         }
         setTranscriptionProgress('Analizando voz cantada con Gemini AI...');
         result = await LyricsTranscriptionService.transcribeWithBackendFromFile(
-          transcriptionFile,
+          activeAudioFile,
           backendConsent
         );
       } else {
         setTranscriptionProgress('Ejecutando modelo Whisper local en el navegador...');
         result = await LyricsTranscriptionService.transcribeLocalFromFile(
-          transcriptionFile,
+          activeAudioFile,
           {
-            allowWasmFallback,
+            allowWasmFallback: true,
             language: 'spanish'
           },
           (message, status) => {
@@ -335,9 +484,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       }
 
       setLastTranscriptionResult(result);
-      setTranscriptionNotice(`Transcripción completada con éxito (${result.lines.length} versos detectados).`);
+      showFeedback(`Transcripción completada: ${result.lines.length} versos detectados`);
     } catch (err: any) {
-      setTranscriptionError(err.message || 'Error al procesar la transcripción.');
+      setTranscriptionError(err.message || 'Error al procesar la transcripción de voz.');
     } finally {
       setIsTranscribing(false);
       setTranscriptionProgress(null);
@@ -358,207 +507,55 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (lastTranscriptionResult.lines.length > 0 && !lrc) {
       const generatedLrc = serializeToLrc(lastTranscriptionResult.lines, {
         title: title || 'Sin título',
-        artist: 'Autor'
+        artist: user?.name || user?.login || 'Autor'
       });
       setLrc(generatedLrc);
-      setShowLrcEditor(true);
     }
 
-    setInsertedChordsFeedback(true);
-    setTimeout(() => setInsertedChordsFeedback(false), 3000);
+    showFeedback('Letra transcrita importada al editor');
+    setActiveStage('lyrics');
   };
 
-  const handleCombineTranscriptionWithDetectedChords = () => {
-    if (!lastTranscriptionResult?.text) return;
-    const chordsToUse = detectedChords.length > 0 ? detectedChords : ['Am', 'G', 'F', 'E7'];
-    const merged = insertChordsIntoLyrics(lastTranscriptionResult.text, chordsToUse);
-    setLyrics(merged);
-
-    setInsertedChordsFeedback(true);
-    setTimeout(() => setInsertedChordsFeedback(false), 3000);
-  };
-
-  // Cross-copying and cleaning between Lyrics with Chords and Synced LRC
+  // LRC Sync Copy Helpers
   const handleCopyLyricsToLrc = () => {
     if (!lyrics.trim()) {
-      setSyncFeedback('La letra con acordes está vacía.');
-      setTimeout(() => setSyncFeedback(null), 3000);
+      showFeedback('La letra está vacía');
       return;
     }
     const convertedLrc = copyLyricsToLrcFormat(lyrics, {
       existingLrc: lrc,
       title: title || 'Sin título',
-      artist: 'Tony'
+      artist: user?.name || 'Autor'
     });
     setLrc(convertedLrc);
-    setShowLrcEditor(true);
-    setSyncFeedback('Letra copiada a LRC limpiando todos los acordes (marcas de tiempo listas).');
-    setTimeout(() => setSyncFeedback(null), 4000);
+    showFeedback('Letra transferida a LRC limpiando todos los acordes');
   };
 
   const handleCopyLrcToLyrics = () => {
     if (!lrc.trim()) {
-      setSyncFeedback('El texto LRC sincronizado está vacío.');
-      setTimeout(() => setSyncFeedback(null), 3000);
+      showFeedback('El contenido LRC está vacío');
       return;
     }
     const cleanLyrics = copyLrcToLyricsFormat(lrc);
     if (!cleanLyrics.trim()) {
-      setSyncFeedback('No se encontraron líneas de texto lírico en el contenido LRC.');
-      setTimeout(() => setSyncFeedback(null), 3000);
+      showFeedback('No se encontraron líneas líricas en LRC');
       return;
     }
-
-    if (lyrics.trim() && !window.confirm('¿Deseas reemplazar la letra con acordes actual por la letra de LRC (limpiando todas las marcas de tiempo)?')) {
+    if (lyrics.trim() && !window.confirm('¿Deseas reemplazar la letra actual por la letra limpia de LRC (sin marcas de tiempo)?')) {
       return;
     }
-
     setLyrics(cleanLyrics);
-    setSyncFeedback('Letra importada desde LRC limpiando marcas de tiempo y metadatos.');
-    setTimeout(() => setSyncFeedback(null), 4000);
+    showFeedback('Letra importada desde LRC sin marcas de tiempo');
   };
 
-  const handleStripChordsFromLyrics = () => {
-    if (!lyrics.trim()) return;
-    const stripped = stripChordsFromText(lyrics);
-    setLyrics(stripped);
-    setSyncFeedback('Acordes eliminados de la letra.');
-    setTimeout(() => setSyncFeedback(null), 3000);
-  };
-
-  const handleStripTimestampsFromLrc = () => {
-    if (!lrc.trim()) return;
-    const stripped = stripLrcTimestamps(lrc);
-    setLrc(stripped);
-    setSyncFeedback('Marcas de tiempo eliminadas del texto LRC.');
-    setTimeout(() => setSyncFeedback(null), 3000);
-  };
-
-  // Audio & Google Drive Handlers
-  const handleAudioFileChosen = async (file: File) => {
-    setActiveAudioFile(file);
-
-    // Auto-create local object URL for immediate browser playback / waveforms
-    const localUrl = URL.createObjectURL(file);
-    setAudioUrl(localUrl);
-
-    // If connected to Google Drive, upload automatically so user never has to upload twice
-    if (isGoogleDriveConnected) {
-      setIsUploadingToDrive(true);
-      setDriveFeedback({
-        type: 'info',
-        message: `Guardando "${file.name}" en tu Google Drive de forma segura...`
-      });
-
-      try {
-        const songId = song?.id || id || `cancion-${Date.now()}`;
-        const cleanTitle = (title || file.name.replace(/\.[^/.]+$/, '')).trim();
-        const driveName = `Maqueta_${cleanTitle}_${file.name}`;
-        const uploaded = await GoogleDriveService.uploadAudioFile(file, driveName, {
-          songId,
-          title: cleanTitle
-        });
-
-        setDriveFileId(uploaded.id);
-        setDriveFileName(uploaded.name);
-        setDriveFeedback({
-          type: 'success',
-          message: `Maqueta almacenada con éxito en Google Drive (${uploaded.name}). ¡Análisis acústico activado!`
-        });
-      } catch (err: any) {
-        console.error('Error subiendo a Google Drive:', err);
-        setDriveFeedback({
-          type: 'error',
-          message: `Error al subir a Google Drive: ${err.message || 'Comprueba tu conexión o permisos.'}`
-        });
-      } finally {
-        setIsUploadingToDrive(false);
-      }
-    } else {
-      setDriveFeedback({
-        type: 'info',
-        message: `Audio cargado en memoria para análisis. Conecta tu cuenta de Google Drive para guardarlo sin consumir espacio en GitHub.`
-      });
-    }
-  };
-
-  const handleReanalyzeFromDrive = async () => {
-    if (!driveFileId) return;
-
-    setIsReanalyzingDrive(true);
-    setDriveFeedback({
-      type: 'info',
-      message: 'Descargando maqueta directamente desde tu Google Drive...'
-    });
-
-    try {
-      const blob = await GoogleDriveService.downloadFileBlob(driveFileId);
-      const fileName = driveFileName || 'maqueta.mp3';
-      const file = new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
-
-      setActiveAudioFile(file);
-      const localUrl = URL.createObjectURL(blob);
-      setAudioUrl(localUrl);
-
-      // Open analyzer sub-tab automatically
-      setShowAudioStudio(true);
-      setActiveStudioTab('analyzer');
-
-      setDriveFeedback({
-        type: 'success',
-        message: 'Maqueta descargada desde Google Drive. Ejecutando análisis automático...'
-      });
-    } catch (err: any) {
-      console.error('Error downloading from Drive:', err);
-      setDriveFeedback({
-        type: 'error',
-        message: `Error al descargar desde Google Drive: ${err.message}`
-      });
-    } finally {
-      setIsReanalyzingDrive(false);
-    }
-  };
-
-  const handleDeleteDriveMaqueta = async () => {
-    if (!driveFileId) return;
-
-    const confirmed = window.confirm(
-      `¿Deseas eliminar definitivamente el archivo "${driveFileName || 'esta maqueta'}" de tu Google Drive?\n\nEsta acción no se puede deshacer.`
-    );
-    if (!confirmed) return;
-
-    setIsUploadingToDrive(true);
-    try {
-      await GoogleDriveService.deleteFile(driveFileId);
-      setDriveFileId('');
-      setDriveFileName('');
-      setActiveAudioFile(null);
-      if (audioUrl.includes('drive.google.com') || audioUrl.startsWith('blob:')) {
-        setAudioUrl('');
-      }
-      setDriveFeedback({
-        type: 'success',
-        message: 'La maqueta ha sido eliminada de tu Google Drive.'
-      });
-    } catch (err: any) {
-      console.error('Error deleting from Drive:', err);
-      setDriveFeedback({
-        type: 'error',
-        message: `Error al eliminar de Google Drive: ${err.message}`
-      });
-    } finally {
-      setIsUploadingToDrive(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Save / Submit
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setValidationError(null);
-    setPushError(null);
 
     let songToSave: Song;
 
-    if (mode === 'raw_markdown') {
+    if (editorMode === 'markdown') {
       try {
         const parsed = markdownToSong(rawMarkdown, id || `cancion-${Date.now()}`);
         if (!parsed.title.trim()) {
@@ -581,6 +578,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     } else {
       if (!title.trim()) {
         setValidationError('Por favor ingresa un título para la canción.');
+        setActiveStage('meta');
         return;
       }
 
@@ -618,7 +616,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       };
     }
 
-    // Git Push to GitHub if configured
+    // Git push if author is connected
     let pushResult: PushResult | undefined = undefined;
     if (pushToGitHub && token) {
       setIsPushing(true);
@@ -641,46 +639,128 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     navigate({ name: 'song-detail', songId: songToSave.id });
   };
 
-  const cleanChordList = getCleanChordSequence(detectedChords);
+  // Render stand-preview chords over text
+  const renderLyricsStandPreview = () => {
+    const lines = lyrics.split('\n');
+    return lines.map((line, idx) => {
+      if (line.startsWith('##') || line.startsWith('#')) {
+        const heading = line.replace(/^#+\s*/, '');
+        return (
+          <h4 key={idx} className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-bold mt-5 mb-1.5 border-b border-[var(--border-subtle)] pb-0.5">
+            {heading}
+          </h4>
+        );
+      }
+      if (!line.trim()) return <div key={idx} className="h-3" />;
+
+      if (/\[([A-G][#b]?[^\]]*)\]/.test(line)) {
+        const segments = parseLyricLine(line);
+        return (
+          <div key={idx} className="flex flex-wrap items-end my-0.5 font-mono leading-none">
+            {segments.map((segment, sIdx) => (
+              <span key={sIdx} className="inline-flex flex-col mr-1">
+                <span className="text-[11px] font-bold text-[var(--accent-primary)] select-none h-3.5">
+                  {segment.chord || '\u00A0'}
+                </span>
+                <span className="font-serif text-sm text-[var(--text-primary)] leading-normal">
+                  {segment.text || '\u00A0'}
+                </span>
+              </span>
+            ))}
+          </div>
+        );
+      }
+
+      return (
+        <p key={idx} className="font-serif text-sm text-[var(--text-secondary)] leading-relaxed my-0.5">
+          {line.replace(/\[[^\]]+\]/g, '')}
+        </p>
+      );
+    });
+  };
 
   return (
-    <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-      {/* Top Header / Navigation Actions */}
-      <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--border-subtle)]">
-        <button
-          type="button"
-          onClick={() => (song ? navigate({ name: 'song-detail', songId: song.id }) : goBack({ name: 'catalog' }))}
-          className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors cursor-pointer group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          <span>Volver</span>
-        </button>
+    <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in text-[var(--text-primary)]">
+      {/* Sticky Top Bar: Breadcrumb + Title + Completeness + Primary Save */}
+      <div className="sticky top-18 z-30 bg-[var(--bg-canvas)]/95 backdrop-blur-md pb-4 pt-1 mb-6 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => (song ? navigate({ name: 'song-detail', songId: song.id }) : goBack({ name: 'catalog' }))}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors cursor-pointer group shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span>Volver</span>
+          </button>
 
-        <div className="flex items-center gap-2">
-          {/* Form vs Raw Markdown mode toggle */}
-          <div className="flex items-center bg-[var(--bg-surface)] p-1 rounded-lg border border-[var(--border-subtle)]">
+          <div className="h-4 w-px bg-[var(--border-subtle)]" />
+
+          {/* Inline Title Field for immediate editing */}
+          <div className="min-w-0 flex-1 max-w-md">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Título de la canción..."
+              className="w-full font-serif font-bold text-base sm:text-lg bg-transparent border-b border-transparent hover:border-[var(--border-medium)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] truncate px-1 py-0.5"
+            />
+          </div>
+        </div>
+
+        {/* Right side: Completeness progress + View mode + Primary CTA */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Completeness Pill */}
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs">
+            <div className="flex items-center gap-1.5 font-medium">
+              <span className={`w-2 h-2 rounded-full ${completeness.percent >= 80 ? 'bg-emerald-500' : completeness.percent >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`} />
+              <span className="font-mono tabular-nums font-bold text-[var(--text-primary)]">
+                {completeness.percent}%
+              </span>
+              <span className="text-[var(--text-muted)]">
+                · {completeness.statusLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Status Segmented Pill */}
+          <div className="flex items-center bg-[var(--bg-surface)] p-0.5 rounded-lg border border-[var(--border-subtle)] text-xs">
             <button
               type="button"
-              onClick={() => {
-                if (mode === 'raw_markdown') {
-                  try {
-                    const parsed = markdownToSong(rawMarkdown, id);
-                    setTitle(parsed.title);
-                    setLyrics(parsed.lyrics);
-                    setStatus(parsed.status);
-                  } catch {}
-                }
-                setMode('form');
-              }}
-              className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
-                mode === 'form' ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold' : 'text-[var(--text-secondary)]'
+              onClick={() => setStatus('draft')}
+              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                status === 'draft' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 font-semibold shadow-2xs' : 'text-[var(--text-muted)]'
               }`}
+              title="Solo visible para el autor"
             >
-              Formulario
+              Borrador
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={() => setStatus('published')}
+              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                status === 'published' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold shadow-2xs' : 'text-[var(--text-muted)]'
+              }`}
+              title="Visible en el catálogo público"
+            >
+              Publicada
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('private')}
+              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                status === 'private' ? 'bg-stone-500/15 text-stone-700 dark:text-stone-300 font-semibold shadow-2xs' : 'text-[var(--text-muted)]'
+              }`}
+              title="Inédita y protegida"
+            >
+              Inédita
+            </button>
+          </div>
+
+          {/* Mode Switcher */}
+          <button
+            type="button"
+            onClick={() => {
+              if (editorMode === 'guided') {
                 setRawMarkdown(songToMarkdown({
                   id: id || 'nueva-cancion',
                   title: title || 'Sin título',
@@ -690,25 +770,42 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   genre,
                   key,
                   tempo: tempo ? parseInt(tempo, 10) : undefined,
+                  timeSignature,
+                  tuning,
                   lyrics,
+                  lrc,
                   notes,
                   tags,
+                  audioUrl: audioUrl || undefined,
+                  driveFileId: driveFileId || undefined,
+                  driveFileName: driveFileName || undefined,
+                  isPrivateDemo: isPrivateDemo,
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString()
                 }));
-                setMode('raw_markdown');
-              }}
-              className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
-                mode === 'raw_markdown' ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold' : 'text-[var(--text-secondary)]'
-              }`}
-            >
-              Markdown Crudo
-            </button>
-          </div>
+                setEditorMode('markdown');
+              } else {
+                try {
+                  const parsed = markdownToSong(rawMarkdown, id);
+                  setTitle(parsed.title);
+                  setLyrics(parsed.lyrics);
+                  setStatus(parsed.status);
+                  if (parsed.key) setKey(parsed.key);
+                  if (parsed.tempo) setTempo(parsed.tempo.toString());
+                } catch {}
+                setEditorMode('guided');
+              }
+            }}
+            className="px-2.5 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+            title="Alternar entre Taller Guiado y Markdown"
+          >
+            {editorMode === 'guided' ? 'MD' : 'Taller'}
+          </button>
 
+          {/* Main Save Action */}
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={isPushing}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer shadow-sm disabled:opacity-50"
           >
@@ -718,268 +815,523 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         </div>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="text-xs font-mono uppercase tracking-widest text-[var(--accent-primary)] font-semibold mb-1 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{song ? 'Taller de Autor' : 'Nueva Creación'}</span>
-          </div>
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[var(--text-primary)]">
-            {song ? `Editar: ${song.title}` : 'Nueva Canción'}
-          </h1>
-        </div>
-
-        {/* Quick Shortcut Button to Audio Studio */}
-        <button
-          type="button"
-          onClick={() => setShowAudioStudio(prev => !prev)}
-          className={`inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer shadow-xs ${
-            showAudioStudio
-              ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--accent-border)]'
-              : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border-[var(--border-subtle)]'
-          }`}
-        >
-          <Wand2 className="w-4 h-4" />
-          <span>{showAudioStudio ? 'Ocultar Analizador & Transcriptor' : 'Abrir Analizador & Transcriptor de Audio'}</span>
-          {showAudioStudio ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
-      </div>
-
+      {/* Validation Error Banner */}
       {validationError && (
-        <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2.5">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{validationError}</span>
+        <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{validationError}</span>
+          </div>
+          <button onClick={() => setValidationError(null)} className="text-xs hover:underline cursor-pointer">
+            Entendido
+          </button>
         </div>
       )}
 
+      {/* Audio Detection Applied Notice */}
       {audioAnalysisNotice && (
-        <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{audioAnalysisNotice}</span>
+        <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{audioAnalysisNotice}</span>
+          </div>
+          <button onClick={() => setAudioAnalysisNotice(null)} className="text-xs opacity-70 hover:opacity-100 cursor-pointer">
+            ✕
+          </button>
         </div>
       )}
 
-      {mode === 'form' ? (
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* AUDIO STUDIO: ANALYZER & TRANSCRIPTION (Interactive Workspace) */}
-          {showAudioStudio && (
-            <div className="bg-[var(--bg-surface)] border-2 border-[var(--accent-border)] rounded-2xl p-5 sm:p-6 shadow-md space-y-5 animate-fadeIn">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
-                    <Wand2 className="w-5 h-5" />
+      {/* Quick feedback toast */}
+      {feedbackToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-3 px-4 rounded-xl bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+          <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
+
+      {/* MAIN GUIDED WORKSHOP VIEW */}
+      {editorMode === 'guided' ? (
+        <div className="space-y-6">
+          {/* Stage Progression Navigation Tabs */}
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Tab 1: Letra & Acordes */}
+              <button
+                type="button"
+                onClick={() => setActiveStage('lyrics')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeStage === 'lyrics'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <PenTool className="w-4 h-4" />
+                <span>1. Letra & Acordes</span>
+                {lyrics.trim().length > 20 && (
+                  <Check className={`w-3.5 h-3.5 ${activeStage === 'lyrics' ? 'text-white' : 'text-emerald-500'}`} />
+                )}
+              </button>
+
+              {/* Tab 2: Audio & Maqueta */}
+              <button
+                type="button"
+                onClick={() => setActiveStage('audio')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeStage === 'audio'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <Mic className="w-4 h-4" />
+                <span>2. Audio & Maqueta</span>
+                {(audioUrl || driveFileId) && (
+                  <Check className={`w-3.5 h-3.5 ${activeStage === 'audio' ? 'text-white' : 'text-emerald-500'}`} />
+                )}
+              </button>
+
+              {/* Tab 3: Sincronización LRC */}
+              <button
+                type="button"
+                onClick={() => setActiveStage('sync')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeStage === 'sync'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>3. Sincronización LRC</span>
+                {lrc.trim().length > 10 && (
+                  <Check className={`w-3.5 h-3.5 ${activeStage === 'sync' ? 'text-white' : 'text-emerald-500'}`} />
+                )}
+              </button>
+
+              {/* Tab 4: Ficha & Publicación */}
+              <button
+                type="button"
+                onClick={() => setActiveStage('meta')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeStage === 'meta'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span>4. Ficha & Publicación</span>
+                {title.trim().length > 0 && (
+                  <Check className={`w-3.5 h-3.5 ${activeStage === 'meta' ? 'text-white' : 'text-emerald-500'}`} />
+                )}
+              </button>
+            </div>
+
+            {/* Quick helper tip */}
+            <div className="hidden md:flex items-center gap-2 pr-3 text-xs text-[var(--text-muted)]">
+              <span className="font-serif italic">{completeness.nextSuggestion}</span>
+            </div>
+          </div>
+
+          {/* =========================================================================
+              STAGE 1: LETRA & ACORDES (The Lyricist & Chord Workshop)
+             ========================================================================= */}
+          {activeStage === 'lyrics' && (
+            <div className="space-y-6">
+              {/* Quick Actions & Chord Inserter Bar */}
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+                {/* Row 1: Key selection + Transposition + Stand preview toggle */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border-subtle)]">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="font-semibold text-[var(--text-primary)]">Tonalidad:</span>
+                      <input
+                        type="text"
+                        value={key}
+                        onChange={(e) => setKey(e.target.value)}
+                        className="w-14 px-2 py-1 font-mono font-bold text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--accent-primary)] text-center focus:outline-none focus:border-[var(--accent-primary)]"
+                        placeholder="Am"
+                      />
+                    </div>
+
+                    {/* Transpose buttons */}
+                    <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)] text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleTransposeLyrics(-1)}
+                        className="px-2 py-1 rounded hover:bg-[var(--bg-surface)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        title="Bajar medio tono (-1 semitono)"
+                      >
+                        -1 Tono
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTransposeLyrics(1)}
+                        className="px-2 py-1 rounded hover:bg-[var(--bg-surface)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        title="Subir medio tono (+1 semitono)"
+                      >
+                        +1 Tono
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleToggleAccidentals}
+                        className="px-2 py-1 font-mono font-bold rounded hover:bg-[var(--bg-surface)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        title="Alternar sostenidos (#) o bemoles (b)"
+                      >
+                        {accidentalPreference === 'sharps' ? '#' : 'b'}
+                      </button>
+                    </div>
+
+                    <div className="h-4 w-px bg-[var(--border-subtle)] hidden sm:block" />
+
+                    {/* Tempo (BPM) display / input */}
+                    <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                      <span>Tempo:</span>
+                      <input
+                        type="number"
+                        value={tempo}
+                        onChange={(e) => setTempo(e.target.value)}
+                        className="w-14 px-2 py-1 font-mono text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-center focus:outline-none focus:border-[var(--accent-primary)]"
+                        placeholder="96"
+                      />
+                      <span className="text-[11px] text-[var(--text-muted)] font-mono">BPM</span>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-base font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
-                      <span>Estudio Acústico: Analizador y Transcripción</span>
-                      {cleanChordList.length > 0 && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-                          {cleanChordList.length} acordes detectados
-                        </span>
-                      )}
-                    </h2>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Analiza archivos de audio para detectar BPM, tonalidad, compás y transcribe la voz cantada a letra y acordes.
-                    </p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowStandPreview(!showStandPreview)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                        showStandPreview
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
+                          : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      title="Ver vista previa de atril con acordes sobre la letra"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{showStandPreview ? 'Ocultar Atril' : 'Vista Previa Atril'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleStripChords}
+                      className="p-1.5 text-xs rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                      title="Eliminar todos los acordes entre corchetes [C] para dejar solo la poesía"
+                    >
+                      <Eraser className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                {/* Tab switchers: Analizador vs Transcriptor */}
-                <div className="flex items-center bg-[var(--bg-surface-subtle)] p-1 rounded-xl border border-[var(--border-subtle)] text-xs font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setActiveStudioTab('analyzer')}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                      activeStudioTab === 'analyzer'
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    <span>Detección Musical DSP</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveStudioTab('transcription')}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                      activeStudioTab === 'transcription'
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <Mic className="w-3.5 h-3.5" />
-                    <span>Transcripción de Voz (Letra)</span>
-                  </button>
+                {/* Row 2: Interactive Quick-Chord Palette for the active Key */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                      <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Paleta de Acordes para [{key}]:</span>
+                    </span>
+                    <span className="text-[11px] text-[var(--text-muted)]">
+                      Haz clic en un acorde para insertarlo en la posición actual del cursor
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {availableChords.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => handleInsertChordAtCursor(c)}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer shadow-2xs active:scale-95"
+                        title={`Insertar [${c}] en el cursor`}
+                      >
+                        [{c}]
+                      </button>
+                    ))}
+
+                    {/* Custom Chord adder input */}
+                    <div className="flex items-center gap-1 ml-1 pl-2 border-l border-[var(--border-subtle)]">
+                      <input
+                        type="text"
+                        value={customChordInput}
+                        onChange={(e) => setCustomChordInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomChord();
+                          }
+                        }}
+                        placeholder="ej. B7, D/F#"
+                        className="w-20 px-2 py-0.5 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomChord}
+                        disabled={!customChordInput.trim()}
+                        className="px-2 py-0.5 text-xs font-semibold rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--accent-primary)] cursor-pointer disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 3: Section Headers Generators */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border-subtle)] text-xs">
+                  <span className="text-[11px] text-[var(--text-muted)] font-medium mr-1">Añadir sección:</span>
+                  {(['Intro', 'Estrofa 1', 'Estrofa 2', 'Estribillo', 'Puente', 'Solo', 'Outro'] as const).map(sec => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => handleInsertSection(sec)}
+                      className="px-2.5 py-0.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)] text-[11px] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                    >
+                      + {sec}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Sub-tab 1: Audio Analyzer Section */}
-              {activeStudioTab === 'analyzer' && (
-                <div className="space-y-4">
-                  {driveFeedback && (
-                    <div
-                      className={`p-3 rounded-xl text-xs flex items-center justify-between gap-3 ${
-                        driveFeedback.type === 'success'
-                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                          : driveFeedback.type === 'error'
-                          ? 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300'
-                          : 'bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-primary)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {driveFeedback.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />}
-                        {driveFeedback.type === 'error' && <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />}
-                        {driveFeedback.type === 'info' && <Cloud className="w-4 h-4 shrink-0 text-[var(--accent-primary)]" />}
-                        <span className="font-medium">{driveFeedback.message}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setDriveFeedback(null)}
-                        className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
+              {/* Main Lyrics Textarea + Optional Split Stand Preview */}
+              <div className={`grid gap-6 ${showStandPreview ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+                {/* Left: Lyrics Textarea */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+                    <span className="font-mono">
+                      {lyrics.split('\n').filter(l => l.trim().length > 0).length} versos anotados
+                    </span>
+                    <span>Usa corchetes para los acordes: <code>[Am] verso cantado...</code></span>
+                  </div>
 
-                  <AudioAnalyzerSection
-                    onApplyDetection={handleApplyAudioDetection}
-                    onInsertChordsIntoLyrics={handleInsertDetectedChords}
-                    currentKey={key}
-                    currentTempo={tempo}
-                    currentAudioUrl={audioUrl}
-                    driveFileId={driveFileId}
-                    driveFileName={driveFileName}
-                    onAudioFileSelected={handleAudioFileChosen}
-                    onReanalyzeDriveAudio={handleReanalyzeFromDrive}
-                    isDriveLoading={isUploadingToDrive || isReanalyzingDrive}
-                    externalAudioFile={activeAudioFile}
+                  <textarea
+                    ref={lyricsTextareaRef}
+                    rows={16}
+                    value={lyrics}
+                    onChange={(e) => setLyrics(e.target.value)}
+                    placeholder="Escribe aquí la letra. Inserta los acordes sobre las sílabas con la paleta superior..."
+                    className="w-full px-4 py-3 font-mono text-xs sm:text-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] leading-relaxed resize-y shadow-xs"
                   />
-
-                  {cleanChordList.length > 0 && (
-                    <div className="p-4 rounded-xl bg-[var(--accent-subtle)]/40 border border-[var(--accent-border)] flex flex-wrap items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <span className="text-xs font-semibold text-[var(--accent-primary)] uppercase tracking-wider block">
-                          Progresión de Acordes Detectada
-                        </span>
-                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-[var(--text-primary)] font-bold">
-                          {cleanChordList.slice(0, 12).map((c, idx) => (
-                            <span key={idx} className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                              [{c}]
-                            </span>
-                          ))}
-                          {cleanChordList.length > 12 && (
-                            <span className="text-xs text-[var(--text-muted)]">
-                              +{cleanChordList.length - 12} más
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleInsertDetectedChords()}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
-                      >
-                        <Music className="w-3.5 h-3.5" />
-                        <span>Insertar en la Letra Ahora</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
-              )}
 
-              {/* Sub-tab 2: Lyrics Voice-to-Text Transcription */}
-              {activeStudioTab === 'transcription' && (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Audio File Selection */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--text-primary)] block">
-                        Archivo de audio a transcribir
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          ref={transcriptionFileInputRef}
-                          onChange={handleTranscriptionFileSelect}
-                          accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
-                          className="hidden"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => transcriptionFileInputRef.current?.click()}
-                          className="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] text-left flex items-center justify-between cursor-pointer"
-                        >
-                          <span className="truncate">
-                            {transcriptionFile ? transcriptionFile.name : 'Seleccionar audio (.mp3, .wav, .m4a)...'}
-                          </span>
-                          <FileAudio className="w-4 h-4 text-[var(--accent-primary)] shrink-0 ml-2" />
-                        </button>
-                        {transcriptionFile && (
-                          <button
-                            type="button"
-                            onClick={() => setTranscriptionFile(null)}
-                            className="px-2 py-2 text-xs text-[var(--text-muted)] hover:text-rose-500 cursor-pointer"
-                            title="Quitar archivo"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                      {transcriptionFile && (
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          {(transcriptionFile.size / (1024 * 1024)).toFixed(2)} MB · {transcriptionFile.type || 'audio'}
-                        </p>
-                      )}
+                {/* Right: Stand Preview (when toggled) */}
+                {showStandPreview && (
+                  <div className="p-5 rounded-2xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] shadow-inner space-y-2 flex flex-col">
+                    <div className="flex items-center justify-between text-xs pb-2 border-b border-[var(--border-subtle)]">
+                      <span className="font-serif font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        <span>Vista de Atril en Tiempo Real</span>
+                      </span>
+                      <span className="font-mono text-[11px] text-[var(--accent-primary)] font-bold">
+                        Tono: {key}
+                      </span>
                     </div>
+                    <div className="flex-1 overflow-y-auto max-h-[420px] pr-2 space-y-1">
+                      {renderLyricsStandPreview()}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                    {/* Engine selection */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--text-primary)] block">
-                        Motor de Transcripción
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTranscriptionEngine('backend_gemini')}
-                          className={`p-2.5 text-xs text-left rounded-lg border transition-colors cursor-pointer ${
-                            transcriptionEngine === 'backend_gemini'
-                              ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
-                              : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <div className="font-bold flex items-center gap-1 mb-0.5">
-                            <Sparkles className="w-3 h-3" />
-                            <span>Gemini AI (Recomendado)</span>
-                          </div>
-                          <p className="text-[10px] text-[var(--text-muted)] leading-tight">
-                            Rápido, alta fidelidad para canciones en español con guitarra o piano.
-                          </p>
-                        </button>
+              {/* Bottom Navigation for Stage 1 */}
+              <div className="flex items-center justify-between pt-4 border-t border-[var(--border-subtle)]">
+                <span className="text-xs text-[var(--text-muted)]">
+                  Paso 1 de 4: Letra y Acordes
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveStage('audio')}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                >
+                  <span>Siguiente: Audio & Maqueta</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
-                        <button
-                          type="button"
-                          onClick={() => setTranscriptionEngine('local_whisper')}
-                          className={`p-2.5 text-xs text-left rounded-lg border transition-colors cursor-pointer ${
-                            transcriptionEngine === 'local_whisper'
-                              ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
-                              : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <div className="font-bold flex items-center gap-1 mb-0.5">
-                            <Radio className="w-3 h-3" />
-                            <span>Whisper Local</span>
-                          </div>
-                          <p className="text-[10px] text-[var(--text-muted)] leading-tight">
-                            Ejecutado localmente en el navegador (WebGPU / WASM).
-                          </p>
-                        </button>
-                      </div>
+          {/* =========================================================================
+              STAGE 2: AUDIO & MAQUETA (Audio Dropzone, Detection & Transcription)
+             ========================================================================= */}
+          {activeStage === 'audio' && (
+            <div className="space-y-6">
+              {/* Audio Dropzone and Player Card */}
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                      <Mic className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-[var(--text-primary)]">
+                        Maqueta de Audio & Análisis Acústico
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Sube una nota de voz o maqueta acústica para detectar automáticamente tempo, escala y transcribir la letra cantada.
+                      </p>
                     </div>
                   </div>
 
-                  {transcriptionEngine === 'backend_gemini' && (
+                  <input
+                    ref={audioFileInputRef}
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAudioFileChosen(file);
+                    }}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => audioFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                  >
+                    <UploadCloud className="w-4 h-4" />
+                    <span>{audioUrl ? 'Cambiar archivo de audio' : 'Subir Nota de Voz / Audio (.mp3, .wav)'}</span>
+                  </button>
+                </div>
+
+                {/* If audio is assigned, show integrated player */}
+                {audioUrl ? (
+                  <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileAudio className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-[var(--text-primary)] truncate block font-mono">
+                            {activeAudioFile?.name || driveFileName || 'Audio de la canción asignado'}
+                          </span>
+                          <span className="text-[11px] text-[var(--text-muted)]">
+                            {activeAudioFile ? `${(activeAudioFile.size / (1024 * 1024)).toFixed(2)} MB` : 'Listo para reproducir y analizar'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {driveFileId && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            <Cloud className="w-3 h-3" />
+                            <span>En Google Drive</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <audio
+                      ref={localAudioRef}
+                      src={audioUrl}
+                      onTimeUpdate={() => {
+                        if (localAudioRef.current) setAudioCurrentTime(localAudioRef.current.currentTime);
+                      }}
+                      onLoadedMetadata={() => {
+                        if (localAudioRef.current) setAudioDuration(localAudioRef.current.duration);
+                      }}
+                      onEnded={() => setIsPlayingLocalAudio(false)}
+                    />
+
+                    {/* Simple Playback Bar */}
+                    <div className="flex items-center gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!localAudioRef.current) return;
+                          if (isPlayingLocalAudio) {
+                            localAudioRef.current.pause();
+                            setIsPlayingLocalAudio(false);
+                          } else {
+                            localAudioRef.current.play();
+                            setIsPlayingLocalAudio(true);
+                          }
+                        }}
+                        className="w-9 h-9 rounded-full bg-[var(--accent-primary)] text-[var(--accent-text)] flex items-center justify-center cursor-pointer shadow-xs"
+                      >
+                        {isPlayingLocalAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                      </button>
+
+                      <div className="flex-1 space-y-1">
+                        <input
+                          type="range"
+                          min="0"
+                          max={audioDuration || 100}
+                          value={audioCurrentTime}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setAudioCurrentTime(val);
+                            if (localAudioRef.current) localAudioRef.current.currentTime = val;
+                          }}
+                          className="w-full accent-[var(--accent-primary)] cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] font-mono tabular-nums text-[var(--text-muted)]">
+                          <span>{Math.floor(audioCurrentTime / 60)}:{(Math.floor(audioCurrentTime % 60)).toString().padStart(2, '0')}</span>
+                          <span>{Math.floor(audioDuration / 60)}:{(Math.floor(audioDuration % 60)).toString().padStart(2, '0')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Audio Empty Dropzone */
+                  <div
+                    onClick={() => audioFileInputRef.current?.click()}
+                    className="p-8 text-center rounded-2xl border-2 border-dashed border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--accent-subtle)]/10 transition-colors cursor-pointer space-y-2"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--accent-primary)] mx-auto flex items-center justify-center">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                      Arrastra tu nota de voz o archivo de audio aquí
+                    </h4>
+                    <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+                      Formatos compatibles: .mp3, .wav, .m4a, .ogg. Podrás detectar el tono y tempo o transcribir la letra en un clic.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* The Two Main AI/DSP Powers: 1. Auto-Detect Key & BPM, 2. Transcribe voice */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* DSP Key & Tempo Detector Card */}
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                      <Wand2 className="w-4 h-4" />
+                    </div>
+                    <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                      Detección Musical DSP
+                    </h4>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Analiza el audio con algoritmos DSP para extraer el tempo exacto (BPM), la tonalidad y los acordes.
+                  </p>
+
+                  <div className="pt-2">
+                    <AudioAnalyzerSection
+                      onApplyDetection={handleApplyAudioDetection}
+                      onInsertChordsIntoLyrics={handleInsertDetectedChords}
+                      currentKey={key}
+                      currentTempo={tempo}
+                      currentAudioUrl={audioUrl}
+                      driveFileId={driveFileId}
+                      driveFileName={driveFileName}
+                      onAudioFileSelected={handleAudioFileChosen}
+                      externalAudioFile={activeAudioFile}
+                    />
+                  </div>
+                </div>
+
+                {/* Voice-to-Text Transcription Card */}
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                        <Mic className="w-4 h-4" />
+                      </div>
+                      <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                        Transcripción de Voz Cantada
+                      </h4>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Convierte la voz cantada de tu audio a versos de texto con Gemini AI o Whisper local.
+                    </p>
+
+                    {/* Consent checkbox */}
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                       <input
                         type="checkbox"
@@ -987,831 +1339,440 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                         onChange={(e) => setBackendConsent(e.target.checked)}
                         className="rounded accent-[var(--accent-primary)]"
                       />
-                      <span>Autorizo enviar fragmentos del audio para transcribir la letra con Gemini AI</span>
+                      <span>Autorizo analizar audio cantado con Gemini AI</span>
                     </label>
-                  )}
 
-                  {transcriptionProgress && (
-                    <div className="p-3 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-xs flex items-center gap-2 animate-pulse">
-                      <div className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-ping" />
-                      <span>{transcriptionProgress}</span>
-                    </div>
-                  )}
+                    {transcriptionProgress && (
+                      <div className="p-3 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-xs flex items-center gap-2 animate-pulse">
+                        <div className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-ping" />
+                        <span>{transcriptionProgress}</span>
+                      </div>
+                    )}
 
-                  {transcriptionNotice && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>{transcriptionNotice}</span>
-                    </div>
-                  )}
+                    {transcriptionError && (
+                      <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs">
+                        {transcriptionError}
+                      </div>
+                    )}
 
-                  {transcriptionError && (
-                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{transcriptionError}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleRunTranscription}
-                      disabled={isTranscribing || !transcriptionFile}
-                      className="px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <Mic className="w-3.5 h-3.5" />
-                      <span>{isTranscribing ? 'Transcribiendo...' : 'Iniciar Transcripción de Voz'}</span>
-                    </button>
+                    {/* Results Box */}
+                    {lastTranscriptionResult && (
+                      <div className="p-3 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
+                        <span className="text-[11px] font-mono text-[var(--text-primary)] font-semibold block">
+                          Resultado ({lastTranscriptionResult.lines.length} versos):
+                        </span>
+                        <div className="p-2.5 rounded bg-[var(--bg-surface)] text-xs font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                          {lastTranscriptionResult.text}
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleApplyTranscribedLyrics(true)}
+                            className="px-3 py-1 text-xs font-semibold rounded bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] cursor-pointer"
+                          >
+                            Reemplazar letra
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyTranscribedLyrics(false)}
+                            className="px-3 py-1 text-xs rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                          >
+                            Añadir al final
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Transcription Output Actions */}
-                  {lastTranscriptionResult && (
-                    <div className="p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-[var(--text-primary)]">
-                          Resultado de la Transcripción ({lastTranscriptionResult.lines.length} versos)
-                        </span>
-                        <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                          Motor: {lastTranscriptionResult.engine}
-                        </span>
-                      </div>
-
-                      <div className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-mono max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                        {lastTranscriptionResult.text}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleApplyTranscribedLyrics(true)}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
-                        >
-                          Reemplazar letra actual
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleApplyTranscribedLyrics(false)}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors cursor-pointer"
-                        >
-                          Añadir al final de la letra
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCombineTranscriptionWithDetectedChords}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer flex items-center gap-1.5"
-                          title="Intercala los acordes detectados [Am] con las líneas transcritas"
-                        >
-                          <Music className="w-3 h-3" />
-                          <span>Combinar con acordes detectados</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleRunTranscription}
+                    disabled={isTranscribing || !activeAudioFile}
+                    className="w-full py-2.5 px-4 text-xs font-semibold rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>{isTranscribing ? 'Transcribiendo...' : 'Iniciar Transcripción de Voz'}</span>
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {/* Bottom Navigation for Stage 2 */}
+              <div className="flex items-center justify-between pt-4 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setActiveStage('lyrics')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Volver a Letra</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveStage('sync')}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                >
+                  <span>Siguiente: Sincronización LRC</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Metadata Block */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-sm">
-            <h2 className="text-sm font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
-              <FileEdit className="w-4 h-4 text-[var(--accent-primary)]" />
-              <span>Metadatos y Clasificación</span>
-            </h2>
+          {/* =========================================================================
+              STAGE 3: SINCRONIZACIÓN LRC (Atril & Teleprompter Timing)
+             ========================================================================= */}
+          {activeStage === 'sync' && (
+            <div className="space-y-6">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-[var(--text-primary)]">
+                        Sincronización LRC (Modo Atril & Karaoke)
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Permite que los versos se iluminen y deslicen automáticamente mientras tocas o cantas la canción en vivo.
+                      </p>
+                    </div>
+                  </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {/* Title */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1.5">
-                  Título de la Canción <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="ej. Agua que no se puede evitar"
-                  required
-                  className="w-full px-3.5 py-2 text-sm rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)]"
-                />
-              </div>
+                  {/* Actions for LRC */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyLyricsToLrc}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                      title="Copiar texto de letra limpiando automáticamente los acordes entre corchetes"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                      <span>Importar desde Letra (sin acordes)</span>
+                    </button>
 
-              {/* Status */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Estado
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as SongStatus)}
-                  className="w-full px-3.5 py-2 text-sm rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                >
-                  <option value="published">Publicada (Visible para todos)</option>
-                  <option value="draft">Borrador (Solo autor)</option>
-                  <option value="private">Inédita / Privada (Solo autor)</option>
-                </select>
-              </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyLrcToLyrics}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] transition-colors cursor-pointer"
+                      title="Transferir este texto a la letra eliminando marcas temporales"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                      <span>Copiar a Letra (sin tiempos)</span>
+                    </button>
+                  </div>
+                </div>
 
-              {/* Album Selection (Agrupación) */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5 flex items-center gap-1.5">
-                  <Disc className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  <span>Álbum al que pertenece</span>
-                </label>
-                <select
-                  value={selectedAlbumId}
-                  onChange={(e) => setSelectedAlbumId(e.target.value)}
-                  className="w-full px-3.5 py-2 text-sm rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                >
-                  <option value="">-- Sin álbum asignado (Sencillo) --</option>
-                  {albums.map((alb) => (
-                    <option key={alb.id} value={alb.id}>
-                      {alb.title} {alb.year ? `(${alb.year})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                {/* Hero Tap-to-Sync Assistant Launcher */}
+                <div className="p-5 rounded-2xl bg-[var(--accent-subtle)]/30 border border-[var(--accent-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-[var(--accent-primary)] uppercase tracking-wider block">
+                      Asistente en Vivo (Espacio para estampar versos)
+                    </span>
+                    <p className="text-xs text-[var(--text-primary)]">
+                      Sincroniza tus versos en tiempo real: reproduce el audio y presiona la tecla <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-[11px] font-bold">Espacio</kbd> al inicio de cada frase.
+                    </p>
+                  </div>
 
-              {/* Track number in album */}
-              {selectedAlbumId && (
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                    N° de Pista en el Álbum
+                  <button
+                    type="button"
+                    onClick={() => setIsSyncAssistantOpen(true)}
+                    disabled={!audioUrl}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>{audioUrl ? 'Abrir Asistente en Vivo (Tap-to-Sync)' : 'Sube un audio primero'}</span>
+                  </button>
+                </div>
+
+                {/* LRC Raw Content Textarea */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-[var(--text-primary)]">
+                    Contenido LRC [mm:ss.xx]
                   </label>
-                  <input
-                    type="number"
-                    value={trackNumber}
-                    onChange={(e) => setTrackNumber(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                    placeholder="1, 2, 3..."
-                    min="1"
-                    className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                  />
-                </div>
-              )}
-
-              {/* Year */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Año de Composición
-                </label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(parseInt(e.target.value, 10) || new Date().getFullYear())}
-                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Key */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Tonalidad Principal
-                </label>
-                <input
-                  type="text"
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  placeholder="Am, G, Dm..."
-                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Tempo */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Tempo (BPM)
-                </label>
-                <input
-                  type="number"
-                  value={tempo}
-                  onChange={(e) => setTempo(e.target.value)}
-                  placeholder="96"
-                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Time Signature */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Compás
-                </label>
-                <input
-                  type="text"
-                  value={timeSignature}
-                  onChange={(e) => setTimeSignature(e.target.value)}
-                  placeholder="4/4, 3/4, 6/8..."
-                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Duration */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Duración
-                </label>
-                <input
-                  type="text"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="3:45"
-                  className="w-full px-3.5 py-2 text-sm font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Tuning */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Afinación
-                </label>
-                <input
-                  type="text"
-                  value={tuning}
-                  onChange={(e) => setTuning(e.target.value)}
-                  placeholder="Estándar (EADGBE)"
-                  className="w-full px-3.5 py-2 text-sm rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-
-              {/* Genre */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Género
-                </label>
-                <input
-                  type="text"
-                  value={genre}
-                  onChange={(e) => setGenre(e.target.value)}
-                  placeholder="Canción de Autor, Bolero, Acústico..."
-                  className="w-full px-3.5 py-2 text-sm rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Tags */}
-            <div>
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                Etiquetas Temáticas
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] text-xs font-mono"
-                  >
-                    #{tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="hover:text-rose-500 cursor-pointer ml-1"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  placeholder="Añadir etiqueta (ej. guitarra, acústico)..."
-                  className="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none flex-1 max-w-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddTag}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--border-medium)] cursor-pointer"
-                >
-                  Añadir
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* External Links and Audio URL */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-sm">
-            <div>
-              <h2 className="text-sm font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Cloud className="w-4 h-4 text-[var(--accent-primary)]" />
-                <span>Maqueta de Audio (Google Drive) y Enlaces de Reproducción</span>
-              </h2>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Las maquetas de audio se almacenan de forma segura en tu Google Drive sin ocupar espacio en GitHub Pages ni exponerse públicamente si las marcas como privadas.
-              </p>
-            </div>
-
-            {/* Google Drive Maqueta Card */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
-                    <Cloud className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-[var(--text-primary)] block">
-                      Almacenamiento en Google Drive
-                    </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">
-                      {isGoogleDriveConnected
-                        ? `Conectado como ${googleUser?.email || 'Autor'}`
-                        : 'No conectado a Google Drive'}
-                    </span>
-                  </div>
-                </div>
-
-                {!isGoogleDriveConnected ? (
-                  <button
-                    type="button"
-                    onClick={loginWithGoogle}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Cloud className="w-3.5 h-3.5" />
-                    <span>Conectar Google Drive</span>
-                  </button>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>Google Drive Activo</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Maqueta details & controls */}
-              {driveFileId ? (
-                <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <FileAudio className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
-                        <span className="text-xs font-semibold text-[var(--text-primary)] truncate font-mono">
-                          {driveFileName || 'Maqueta alojada en Drive'}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-[var(--text-muted)] block mt-0.5">
-                        ID: {driveFileId}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleReanalyzeFromDrive}
-                        disabled={isReanalyzingDrive || isUploadingToDrive}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer disabled:opacity-50"
-                        title="Descargar la maqueta directamente de Google Drive y ejecutar el análisis sin volver a subirla"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isReanalyzingDrive ? 'animate-spin' : ''}`} />
-                        <span>{isReanalyzingDrive ? 'Descargando...' : 'Volver a Analizar'}</span>
-                      </button>
-
-                      <a
-                        href={`https://drive.google.com/file/d/${driveFileId}/view`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
-                        title="Ver archivo en Google Drive"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={handleDeleteDriveMaqueta}
-                        disabled={isUploadingToDrive}
-                        className="p-1.5 text-xs text-red-500 hover:text-red-700 rounded-lg hover:bg-red-500/10 cursor-pointer"
-                        title="Eliminar maqueta de Google Drive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Privacy Toggle */}
-                  <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      {isPrivateDemo ? (
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>Maqueta Privada (solo audible por el autor)</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                          <Unlock className="w-3.5 h-3.5" />
-                          <span>Maqueta Pública (audible para cualquier visitante)</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isPrivateDemo}
-                        onChange={(e) => setIsPrivateDemo(e.target.checked)}
-                        className="rounded accent-[var(--accent-primary)] cursor-pointer"
-                      />
-                      <span>Ocultar reproducción a visitantes</span>
-                    </label>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <input
-                    type="file"
-                    ref={maquetaFileInputRef}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleAudioFileChosen(file);
-                    }}
-                    accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
-                    className="hidden"
-                  />
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => maquetaFileInputRef.current?.click()}
-                      disabled={isUploadingToDrive}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                    >
-                      <UploadCloud className={`w-4 h-4 ${isUploadingToDrive ? 'animate-bounce' : ''}`} />
-                      <span>{isUploadingToDrive ? 'Subiendo a Google Drive...' : 'Subir Maqueta a Google Drive (.mp3, .wav)'}</span>
-                    </button>
-
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isPrivateDemo}
-                        onChange={(e) => setIsPrivateDemo(e.target.checked)}
-                        className="rounded accent-[var(--accent-primary)] cursor-pointer"
-                      />
-                      <span>Privada (solo visible/audible para ti como autor)</span>
-                    </label>
-                  </div>
-
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    Al seleccionar un archivo de maqueta, se almacenará en tu Google Drive y se analizará automáticamente su tempo, tono y acordes sin necesidad de volver a subirlo.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Standard URLs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1 flex items-center justify-between">
-                  <span>URL de Audio Directo / Enlace Externo (Opcional)</span>
-                  {audioUrl && (
-                    <span className="text-[10px] font-mono text-[var(--accent-primary)] font-bold">
-                      Audio asignado
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={audioUrl}
-                  onChange={(e) => setAudioUrl(e.target.value)}
-                  placeholder="blob:... o https://ejemplo.com/audio.mp3"
-                  className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Enlace a Spotify
-                </label>
-                <input
-                  type="url"
-                  value={spotifyUrl}
-                  onChange={(e) => setSpotifyUrl(e.target.value)}
-                  placeholder="https://open.spotify.com/track/..."
-                  className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Enlace a Apple Music
-                </label>
-                <input
-                  type="url"
-                  value={appleMusicUrl}
-                  onChange={(e) => setAppleMusicUrl(e.target.value)}
-                  placeholder="https://music.apple.com/..."
-                  className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Enlace a YouTube
-                </label>
-                <input
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="https://youtube.com/..."
-                  className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Enlace a SoundCloud
-                </label>
-                <input
-                  type="url"
-                  value={soundcloudUrl}
-                  onChange={(e) => setSoundcloudUrl(e.target.value)}
-                  placeholder="https://soundcloud.com/..."
-                  className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Lyrics and Chords Studio Editor */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-serif font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Music className="w-4 h-4 text-[var(--accent-primary)]" />
-                <span>Letra con Acordes Anotados</span>
-              </h2>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Copy to LRC button */}
-                <button
-                  type="button"
-                  onClick={handleCopyLyricsToLrc}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer shadow-2xs"
-                  title="Copiar texto a letra sincronizada (LRC) eliminando automáticamente todos los acordes entre corchetes"
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                  <span>Copiar a LRC (sin acordes)</span>
-                </button>
-
-                {/* Import from LRC if LRC exists */}
-                {lrc.trim().length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleCopyLrcToLyrics}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] transition-colors cursor-pointer"
-                    title="Importar letra desde LRC eliminando marcas de tiempo [mm:ss.xx] y metadatos"
-                  >
-                    <ArrowUp className="w-3.5 h-3.5" />
-                    <span>Traer desde LRC (sin tiempos)</span>
-                  </button>
-                )}
-
-                {/* Transposition buttons */}
-                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-[var(--border-subtle)]">
-                  <button
-                    type="button"
-                    onClick={() => handleTransposeStudioLyrics(-1)}
-                    className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                    title="Bajar medio tono"
-                  >
-                    -1 Tono
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTransposeStudioLyrics(1)}
-                    className="px-2 py-1 text-xs rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                    title="Subir medio tono"
-                  >
-                    +1 Tono
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleAccidentals}
-                    className="px-2 py-1 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
-                    title="Alternar ortografía de acordes (# / b)"
-                  >
-                    {accidentalPreference === 'sharps' ? '#' : 'b'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Section Headers, Chord Cleaning, and Insert Chords Banner */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-[11px] text-[var(--text-muted)] mr-1">Secciones:</span>
-                {(['Intro', 'Estrofa 1', 'Estrofa 2', 'Estribillo', 'Puente', 'Solo', 'Outro'] as const).map(sec => (
-                  <button
-                    key={sec}
-                    type="button"
-                    onClick={() => handleInsertSectionHeader(sec)}
-                    className="px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                  >
-                    + {sec}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleStripChordsFromLyrics}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
-                  title="Eliminar todos los acordes entre corchetes [Am] de la letra actual"
-                >
-                  <Eraser className="w-3.5 h-3.5" />
-                  <span>Limpiar acordes</span>
-                </button>
-
-                {cleanChordList.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleInsertDetectedChords()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
-                  >
-                    <Music className="w-3.5 h-3.5" />
-                    <span>Insertar acordes detectados ({cleanChordList.length})</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {transposeFeedback && (
-              <div className="p-2 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-xs font-medium">
-                {transposeFeedback}
-              </div>
-            )}
-
-            {insertedChordsFeedback && (
-              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium flex items-center gap-2">
-                <Check className="w-3.5 h-3.5" />
-                <span>Acordes o letra integrados correctamente en el editor</span>
-              </div>
-            )}
-
-            {syncFeedback && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-                  <span>{syncFeedback}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSyncFeedback(null)}
-                  className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            <textarea
-              rows={14}
-              value={lyrics}
-              onChange={(e) => setLyrics(e.target.value)}
-              placeholder="Escribe la letra anotando los acordes entre corchetes, ej: [Am] Primer verso..."
-              className="w-full px-4 py-3 font-mono text-xs sm:text-sm rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] leading-relaxed resize-y"
-            />
-
-            {/* Toggle LRC synchronized lyrics editor */}
-            <div className="pt-2 border-t border-[var(--border-subtle)]">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLrcEditor(!showLrcEditor)}
-                  className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  <span>{showLrcEditor ? 'Ocultar Letra Sincronizada (LRC)' : 'Ver / Editar Letra Sincronizada (LRC)'}</span>
-                  {showLrcEditor ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-
-                {!showLrcEditor && lyrics.trim().length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleCopyLyricsToLrc}
-                    className="inline-flex items-center gap-1.5 text-xs text-[var(--accent-primary)] hover:underline cursor-pointer font-medium"
-                  >
-                    <ArrowDown className="w-3 h-3" />
-                    <span>Copiar a LRC sin acordes</span>
-                  </button>
-                )}
-              </div>
-
-              {showLrcEditor && (
-                <div className="mt-3 space-y-3 p-4 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] animate-fadeIn">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
-                      <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                      <span>Marcas de tiempo LRC [mm:ss.xx] (Modo Atril y Karaoke)</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCopyLyricsToLrc}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
-                        title="Reemplazar LRC con la letra de arriba limpiando todos los acordes"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                        <span>Sincronizar desde Letra (sin acordes)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleCopyLrcToLyrics}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                        title="Transferir este texto a la letra de arriba eliminando marcas de tiempo y metadatos"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                        <span>Copiar a Letra con Acordes (sin tiempos)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleStripTimestampsFromLrc}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] border border-transparent hover:border-[var(--border-subtle)] transition-colors cursor-pointer"
-                        title="Quitar marcas de tiempo [mm:ss.xx] y metadatos de este cuadro"
-                      >
-                        <Eraser className="w-3 h-3" />
-                        <span>Limpiar tiempos</span>
-                      </button>
-                    </div>
-                  </div>
-
                   <textarea
-                    rows={7}
+                    rows={12}
                     value={lrc}
                     onChange={(e) => setLrc(e.target.value)}
-                    placeholder="[00:12.30] Primer verso cantado..."
-                    className="w-full px-3 py-2 font-mono text-xs rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] resize-y leading-relaxed"
+                    placeholder="[00:14.20] Primer verso de la canción..."
+                    className="w-full px-4 py-3 font-mono text-xs sm:text-sm rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)] leading-relaxed resize-y"
                   />
-
-                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                    💡 <strong>Intercambio bidireccional</strong>: Puedes transferir contenido entre ambas secciones con un clic. Al copiar hacia LRC se limpian automáticamente los acordes manteniendo las marcas temporales, y al copiar hacia la letra con acordes se eliminan los tiempos y metadatos para que puedas trabajar en tu cifrado musical o arreglos.
-                  </p>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Notes */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
-            <h2 className="text-sm font-serif font-bold text-[var(--text-primary)]">
-              Notas de Composición y Arreglos
-            </h2>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Historia, anécdota, técnica de mano derecha..."
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-[var(--text-primary)]"
-            />
-          </div>
-
-          {/* Git Commit & Push Section */}
-          {token && (
-            <div className="p-4 rounded-xl bg-[var(--accent-subtle)]/30 border border-[var(--accent-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-[var(--text-primary)]">
-                <input
-                  type="checkbox"
-                  checked={pushToGitHub}
-                  onChange={(e) => setPushToGitHub(e.target.checked)}
-                  className="rounded text-[var(--accent-primary)] accent-[var(--accent-primary)]"
-                />
-                <span>Hacer push automático a GitHub tras guardar</span>
-              </label>
-
-              {pushToGitHub && (
-                <input
-                  type="text"
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  placeholder="Mensaje de commit..."
-                  className="px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none flex-1 max-w-md"
-                />
-              )}
+              {/* Bottom Navigation for Stage 3 */}
+              <div className="flex items-center justify-between pt-4 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setActiveStage('audio')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Volver a Audio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveStage('meta')}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer shadow-xs"
+                >
+                  <span>Siguiente: Ficha & Publicación</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Bottom Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border-subtle)]">
-            <button
-              type="button"
-              onClick={() => (song ? navigate({ name: 'song-detail', songId: song.id }) : goBack({ name: 'catalog' }))}
-              className="px-4 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isPushing}
-              className="px-5 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer shadow-sm flex items-center gap-2 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              <span>{isPushing ? 'Subiendo...' : 'Guardar Canción'}</span>
-            </button>
-          </div>
-        </form>
+          {/* =========================================================================
+              STAGE 4: FICHA & PUBLICACIÓN (Album, Metadata, Notes & Launch)
+             ========================================================================= */}
+          {activeStage === 'meta' && (
+            <div className="space-y-6">
+              {/* Completeness Summary Banner */}
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border-subtle)]">
+                  <div>
+                    <h3 className="font-serif font-bold text-base text-[var(--text-primary)]">
+                      Estado de la Canción: {completeness.percent}% Completa
+                    </h3>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Revisa los elementos de tu composición antes de publicarla en el cancionero.
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    completeness.percent >= 80 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {completeness.statusLabel}
+                  </span>
+                </div>
+
+                {/* Steps checklist */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {completeness.steps.map(step => (
+                    <div
+                      key={step.id}
+                      className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
+                        step.isComplete
+                          ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                      }`}
+                    >
+                      <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${step.isComplete ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'}`} />
+                      <div>
+                        <span className="font-semibold block text-[var(--text-primary)]">
+                          {step.title}
+                        </span>
+                        <span className="text-[11px] opacity-80">
+                          {step.hint}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Album & Metadata Form */}
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+                <h4 className="font-serif font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
+                  <FileEdit className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Ficha Técnica y Clasificación</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Album assignment */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1 flex items-center gap-1.5">
+                      <Disc className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Álbum de la Discografía</span>
+                    </label>
+                    <select
+                      value={selectedAlbumId}
+                      onChange={(e) => setSelectedAlbumId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    >
+                      <option value="">-- Sin álbum (Sencillo suelto) --</option>
+                      {albums.map((alb) => (
+                        <option key={alb.id} value={alb.id}>
+                          {alb.title} {alb.year ? `(${alb.year})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Track number in album */}
+                  {selectedAlbumId && (
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                        Pista N° en el Álbum
+                      </label>
+                      <input
+                        type="number"
+                        value={trackNumber}
+                        onChange={(e) => setTrackNumber(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                        placeholder="1, 2, 3..."
+                        min="1"
+                        className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                      />
+                    </div>
+                  )}
+
+                  {/* Year */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Año de Composición
+                    </label>
+                    <input
+                      type="number"
+                      value={year}
+                      onChange={(e) => setYear(parseInt(e.target.value, 10) || new Date().getFullYear())}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </div>
+
+                  {/* Genre */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Género / Estilo
+                    </label>
+                    <input
+                      type="text"
+                      value={genre}
+                      onChange={(e) => setGenre(e.target.value)}
+                      placeholder="Canción de Autor, Bolero, Acústico..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </div>
+
+                  {/* Tuning */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Afinación del Instrumento
+                    </label>
+                    <input
+                      type="text"
+                      value={tuning}
+                      onChange={(e) => setTuning(e.target.value)}
+                      placeholder="Estándar (EADGBE)"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </div>
+
+                  {/* Compás */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Compás Musical
+                    </label>
+                    <input
+                      type="text"
+                      value={timeSignature}
+                      onChange={(e) => setTimeSignature(e.target.value)}
+                      placeholder="4/4, 3/4, 6/8..."
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Thematic Tags */}
+                <div className="space-y-1.5 pt-2 border-t border-[var(--border-subtle)]">
+                  <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                    Etiquetas Temáticas
+                  </label>
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] text-xs font-mono"
+                      >
+                        #{tag}
+                        <button
+                          type="button"
+                          onClick={() => setTags(tags.filter(t => t !== tag))}
+                          className="hover:text-rose-500 cursor-pointer ml-1"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const trimmed = tagInput.trim().toLowerCase();
+                          if (trimmed && !tags.includes(trimmed)) {
+                            setTags([...tags, trimmed]);
+                            setTagInput('');
+                          }
+                        }
+                      }}
+                      placeholder="Añadir etiqueta (ej. guitarra, memoria, viaje)..."
+                      className="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] max-w-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = tagInput.trim().toLowerCase();
+                        if (trimmed && !tags.includes(trimmed)) {
+                          setTags([...tags, trimmed]);
+                          setTagInput('');
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] cursor-pointer"
+                    >
+                      Añadir
+                    </button>
+                  </div>
+                </div>
+
+                {/* Songwriting Notes */}
+                <div className="space-y-1.5 pt-2 border-t border-[var(--border-subtle)]">
+                  <label className="block text-xs font-semibold text-[var(--text-primary)]">
+                    Historia, Anécdota o Notas de Arreglo
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="El contexto en que nació la canción, anécdota de grabación o técnica de mano derecha..."
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:outline-none focus:border-[var(--accent-primary)] text-[var(--text-primary)]"
+                  />
+                </div>
+              </div>
+
+              {/* Final Launch Action Bar */}
+              <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border-2 border-[var(--accent-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                <div>
+                  <h4 className="font-serif font-bold text-base text-[var(--text-primary)]">
+                    ¿Canción completa y lista para compartir?
+                  </h4>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Al marcarla como <strong>Publicada</strong>, estará inmediatamente disponible en el catálogo y lista para exportar en el Cancionero de Atril en PDF.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatus('published');
+                      handleSubmit();
+                    }}
+                    disabled={isPushing}
+                    className="inline-flex items-center gap-2 px-6 py-3 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Publicar Canción Completa</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
-        /* Raw Markdown Editor */
+        /* RAW MARKDOWN VIEW */
         <div className="space-y-4">
           <textarea
             rows={24}
@@ -1822,20 +1783,52 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => (song ? navigate({ name: 'song-detail', songId: song.id }) : goBack({ name: 'catalog' }))}
+              onClick={() => setEditorMode('guided')}
               className="px-4 py-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
             >
-              Cancelar
+              Volver al Taller Guiado
             </button>
             <button
               type="button"
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               className="px-5 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors cursor-pointer"
             >
               Guardar Markdown
             </button>
           </div>
         </div>
+      )}
+
+      {/* Tap-to-Sync Assistant Modal */}
+      {isSyncAssistantOpen && (
+        <LrcSyncAssistant
+          isOpen={isSyncAssistantOpen}
+          onClose={() => setIsSyncAssistantOpen(false)}
+          rawLyrics={lyrics}
+          currentTime={audioCurrentTime}
+          duration={audioDuration}
+          isPlaying={isPlayingLocalAudio}
+          onSeek={(time) => {
+            if (localAudioRef.current) localAudioRef.current.currentTime = time;
+            setAudioCurrentTime(time);
+          }}
+          onTogglePlay={() => {
+            if (!localAudioRef.current) return;
+            if (isPlayingLocalAudio) {
+              localAudioRef.current.pause();
+              setIsPlayingLocalAudio(false);
+            } else {
+              localAudioRef.current.play();
+              setIsPlayingLocalAudio(true);
+            }
+          }}
+          songTitle={title || 'Sin título'}
+          onSaveSyncedLyrics={(lines, rawLrc) => {
+            setLrc(rawLrc);
+            showFeedback(`Letra sincronizada guardada (${lines.length} versos marcados)`);
+            setIsSyncAssistantOpen(false);
+          }}
+        />
       )}
     </div>
   );

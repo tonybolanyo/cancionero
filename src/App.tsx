@@ -20,6 +20,8 @@ import { RenameFileModal } from './components/RenameFileModal';
 import { DeleteSongModal } from './components/DeleteSongModal';
 import { VersionHistory } from './components/VersionHistory';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { SongwritingQuickStartModal } from './components/SongwritingQuickStartModal';
+import { SONGWRITING_TEMPLATES } from './utils/songwriterHelper';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -83,6 +85,8 @@ function CancioneroApp() {
 
   // Dedicated dialog states (only for confirmations / auth)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState<boolean>(false);
+  const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState<boolean>(false);
   const [historySong, setHistorySong] = useState<Song | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
@@ -101,6 +105,43 @@ function CancioneroApp() {
   useEffect(() => {
     checkGitStatus();
   }, []);
+
+  const handleStartWithLyrics = () => {
+    setPendingAudioFile(null);
+    setIsQuickStartOpen(false);
+    navigate({ name: 'song-new' });
+  };
+
+  const handleStartWithAudioFile = (file: File) => {
+    setPendingAudioFile(file);
+    setIsQuickStartOpen(false);
+    navigate({ name: 'song-new' });
+  };
+
+  const handleStartWithTemplate = (template: typeof SONGWRITING_TEMPLATES[0]) => {
+    setPendingAudioFile(null);
+    const newId = `cancion-${Date.now()}`;
+    const newSong: Song = {
+      id: newId,
+      title: template.title,
+      status: 'draft',
+      year: new Date().getFullYear(),
+      genre: 'Canción de Autor',
+      key: template.key,
+      tempo: template.tempo,
+      timeSignature: template.timeSignature,
+      tuning: 'Estándar (EADGBE)',
+      tags: ['acústico', 'composición'],
+      lyrics: template.lyrics,
+      notes: template.description,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const updated = StorageService.upsertSong(newSong);
+    setSongs(updated);
+    setIsQuickStartOpen(false);
+    navigate({ name: 'song-edit', songId: newSong.id });
+  };
 
   // Update document title dynamically based on route
   useEffect(() => {
@@ -135,7 +176,7 @@ function CancioneroApp() {
       ...GLOBAL_SHORTCUTS.newSong,
       callback: () => {
         if (isAuthor) {
-          navigate({ name: 'song-new' });
+          setIsQuickStartOpen(true);
         } else {
           setIsAuthModalOpen(true);
         }
@@ -617,7 +658,7 @@ function CancioneroApp() {
       <Header
         onOpenNewSong={() => {
           if (isAuthor) {
-            navigate({ name: 'song-new' });
+            setIsQuickStartOpen(true);
           } else {
             setIsAuthModalOpen(true);
           }
@@ -733,6 +774,7 @@ function CancioneroApp() {
             song={activeEditSong}
             albums={albums}
             initialAlbumId={currentRoute.name === 'song-new' ? currentRoute.initialAlbumId : undefined}
+            initialAudioFile={pendingAudioFile || undefined}
             onSave={handleSaveSong}
             onDelete={handleOpenDelete}
           />
@@ -791,6 +833,10 @@ function CancioneroApp() {
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
               onExploreAlbums={() => navigate({ name: 'albums' })}
+              onOpenNewSong={() => {
+                if (isAuthor) setIsQuickStartOpen(true);
+                else setIsAuthModalOpen(true);
+              }}
               isAuthor={isAuthor}
               onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
@@ -1070,6 +1116,14 @@ function CancioneroApp() {
       <KeyboardShortcutsModal
         isOpen={isKeyboardShortcutsOpen}
         onClose={() => setIsKeyboardShortcutsOpen(false)}
+      />
+
+      <SongwritingQuickStartModal
+        isOpen={isQuickStartOpen}
+        onClose={() => setIsQuickStartOpen(false)}
+        onStartWithLyrics={handleStartWithLyrics}
+        onStartWithAudioFile={handleStartWithAudioFile}
+        onStartWithTemplate={handleStartWithTemplate}
       />
 
       <GitNotificationToast

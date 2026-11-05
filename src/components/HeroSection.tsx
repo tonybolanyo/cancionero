@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FolderGit2, Lock, Disc } from 'lucide-react';
+import { Play, FolderGit2, Lock, Disc, Plus } from 'lucide-react';
 import { Song } from '../types/song';
 import { siteMetadata } from '../utils/siteConfig';
 import bannerImage from '../assets/images/songwriter_studio_banner_1792313088629.jpg';
@@ -11,6 +11,7 @@ interface HeroSectionProps {
   onOpenGitModal: () => void;
   onExploreCatalog: () => void;
   onExploreAlbums?: () => void;
+  onOpenNewSong?: () => void;
   isAuthor: boolean;
   onOpenAuthModal: () => void;
 }
@@ -22,6 +23,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onOpenGitModal,
   onExploreCatalog,
   onExploreAlbums,
+  onOpenNewSong,
   isAuthor,
   onOpenAuthModal
 }) => {
@@ -62,9 +64,23 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Functional action triggers */}
             <div className="flex flex-wrap items-center gap-4">
+              {isAuthor && onOpenNewSong ? (
+                <button
+                  onClick={onOpenNewSong}
+                  className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm cursor-pointer whitespace-nowrap active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crear Canción</span>
+                </button>
+              ) : null}
+
               <button
                 onClick={onExploreCatalog}
-                className="px-5 py-3 text-sm font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+                className={`px-5 py-3 text-sm font-semibold rounded-lg transition-colors shadow-sm cursor-pointer whitespace-nowrap ${
+                  isAuthor
+                    ? 'text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
+                    : 'text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]'
+                }`}
               >
                 Explorar Canciones
               </button>
