@@ -1,0 +1,59 @@
+name: Generate Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number for changelog (e.g., 1.2.3)'
+        required: true
+        type: string
+      update_file:
+        description: 'Update CHANGELOG.md file'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          node scripts/generate-changelog.js ${{ inputs.version }}
+
+      - name: Commit changes
+        if: ${{ inputs.update_file == true }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if git diff --quiet CHANGELOG.md; then
+            echo "No changes to commit"
+          else
+            git add CHANGELOG.md
+            git commit -m "chore: update changelog for v${{ inputs.version }}"
+            git push
+            echo "✓ CHANGELOG.md updated and pushed"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Changelog Generated"
+          echo ""
+          echo "Version: ${{ inputs.version }}"
+          echo "File Updated: ${{ inputs.update_file }}"
+          echo ""
+          echo "To use the generated changelog:"
+          echo "1. Manual Release: Copy output and create a GitHub Release manually"
+          echo "2. Auto Release: Use the Release workflow to create release automatically"

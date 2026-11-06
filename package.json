@@ -7,6 +7,7 @@
     "dev": "npm run generate-catalog && tsx server.ts",
     "start": "npm run generate-catalog && tsx server.ts",
     "generate-version": "node scripts/generate-version.js",
+    "generate-changelog": "node scripts/generate-changelog.js",
     "generate-catalog": "node scripts/generate-catalog.mjs",
     "build": "npm run generate-version && npm run generate-catalog && vite build",
     "preview": "vite preview",
