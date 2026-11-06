@@ -609,6 +609,10 @@ function CancioneroApp() {
     }
 
     if (tab === 'dashboard') {
+      if (!isAuthor) {
+        setIsAuthModalOpen(true);
+        return;
+      }
       const el = document.getElementById('dashboard-section');
       el?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -906,14 +910,18 @@ function CancioneroApp() {
                 <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
                   <span className="font-mono tabular-nums font-semibold text-[var(--text-primary)]">{filteredSongs.length}</span>
                   <span>de {isAuthor ? songs.length : counts.published} temas visibles</span>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    onClick={() => handleNavSelect('dashboard')}
-                    className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer font-medium"
-                  >
-                    <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                    <span>Ver gráficos</span>
-                  </button>
+                  {isAuthor && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <button
+                        onClick={() => handleNavSelect('dashboard')}
+                        className="hover:text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer font-medium"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        <span>Ver gráficos</span>
+                      </button>
+                    </>
+                  )}
                   <span aria-hidden="true">·</span>
                   <button
                     onClick={() => navigate({ name: 'songbook' })}
@@ -1046,11 +1054,13 @@ function CancioneroApp() {
               )}
             </section>
 
-            {/* Recharts Data Visualization Dashboard Section */}
-            <SongDashboard
-              songs={isAuthor ? songs : songs.filter(s => s.status === 'published')}
-              isAuthor={isAuthor}
-            />
+            {/* Recharts Data Visualization Dashboard Section (Exclusively for Author) */}
+            {isAuthor && (
+              <SongDashboard
+                songs={songs}
+                isAuthor={isAuthor}
+              />
+            )}
           </>
         )}
       </main>

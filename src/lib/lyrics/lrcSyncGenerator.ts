@@ -8,7 +8,6 @@ import { ChordSegment } from '../audio/chords';
 import {
   syllabifyLine,
   mapChordsToSyllables,
-  reconstructLineWithChords,
   SyllableizedLine,
   Syllable
 } from './syllableAnalysis';

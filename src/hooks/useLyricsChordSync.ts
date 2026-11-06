@@ -83,10 +83,10 @@ export function useLyricsChordSync(
     try {
       const sync = generateSyncedLrcFromPlainLyrics(
         lyrics,
-        prev.detectedChords,
-        prev.metadata,
+        state.detectedChords,
+        state.metadata,
         {
-          timingStrategy: prev.timingStrategy,
+          timingStrategy: state.timingStrategy,
           linesPerMinute: options.linesPerMinute
         }
       );

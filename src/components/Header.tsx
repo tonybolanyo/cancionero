@@ -131,17 +131,19 @@ export const Header: React.FC<HeaderProps> = ({
             </>
           )}
 
-          {/* Dashboard Nav link */}
-          <button
-            onClick={() => onSelectTab('dashboard')}
-            className={`whitespace-nowrap transition-colors hover:text-[var(--text-primary)] py-1 cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)] font-semibold'
-                : 'text-[var(--text-secondary)]'
-            }`}
-          >
-            Dashboard
-          </button>
+          {/* Author-only Dashboard & Backup Links */}
+          {isAuthor && (
+            <button
+              onClick={() => onSelectTab('dashboard')}
+              className={`whitespace-nowrap transition-colors hover:text-[var(--text-primary)] py-1 cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)] font-semibold'
+                  : 'text-[var(--text-secondary)]'
+              }`}
+            >
+              Dashboard
+            </button>
+          )}
 
           <button
             onClick={onOpenAbout}

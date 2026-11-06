@@ -35,14 +35,16 @@ export function Footer({
           </div>
 
           <div className="flex items-center gap-6">
-            <button
-              onClick={onDashboardClick}
-              className="flex items-center gap-1.5 hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
-              aria-label="Dashboard & Estadísticas"
-            >
-              <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-              <span>Dashboard & Estadísticas</span>
-            </button>
+            {isAuthor && (
+              <button
+                onClick={onDashboardClick}
+                className="flex items-center gap-1.5 hover:text-[var(--accent-primary)] transition-colors cursor-pointer"
+                aria-label="Dashboard & Estadísticas de Autor"
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span>Dashboard de Autor</span>
+              </button>
+            )}
 
             {isAuthor ? (
               <button
