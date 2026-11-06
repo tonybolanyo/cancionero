@@ -13,7 +13,8 @@ export type AppRoute =
   | { name: 'audio-analyzer' }
   | { name: 'about' }
   | { name: 'git-sync' }
-  | { name: 'spotify-import' };
+  | { name: 'spotify-import' }
+  | { name: 'video-visualizer'; songId?: string };
 
 interface NavigationContextType {
   currentRoute: AppRoute;
@@ -89,6 +90,12 @@ export function parseHashToRoute(rawHash: string): AppRoute {
     return { name: 'spotify-import' };
   }
 
+  if (path === 'visualizador' || path === 'video-youtube' || path === 'video') {
+    const params = new URLSearchParams(queryPart || '');
+    const songId = params.get('song') || undefined;
+    return { name: 'video-visualizer', songId };
+  }
+
   // Fallback to catalog
   return { name: 'catalog' };
 }
@@ -121,6 +128,8 @@ export function routeToHash(route: AppRoute): string {
       return '#/git-sync';
     case 'spotify-import':
       return '#/importar-spotify';
+    case 'video-visualizer':
+      return route.songId ? `#/visualizador?song=${encodeURIComponent(route.songId)}` : '#/visualizador';
   }
 }
 

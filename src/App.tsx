@@ -21,6 +21,7 @@ import { DeleteSongModal } from './components/DeleteSongModal';
 import { VersionHistory } from './components/VersionHistory';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { SongwritingQuickStartModal } from './components/SongwritingQuickStartModal';
+import { SongVideoVisualizerModal } from './components/SongVideoVisualizerModal';
 import { SONGWRITING_TEMPLATES } from './utils/songwriterHelper';
 import { GitHubSyncService, PushResult } from './services/githubSyncService';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -94,6 +95,16 @@ function CancioneroApp() {
   const [isRenameModalOpen, setIsRenameModalOpen] = useState<boolean>(false);
   const [deletingSong, setDeletingSong] = useState<Song | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [visualizerSong, setVisualizerSong] = useState<Song | null>(null);
+  const [isVisualizerModalOpen, setIsVisualizerModalOpen] = useState<boolean>(false);
+
+  const handleOpenVisualizer = (targetSong?: Song) => {
+    const s = targetSong || (currentRoute.name === 'song-detail' ? songs.find(item => item.id === currentRoute.songId) : null) || songs[0] || null;
+    if (s) {
+      setVisualizerSong(s);
+      setIsVisualizerModalOpen(true);
+    }
+  };
 
   // Status of Git repository
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
@@ -166,9 +177,23 @@ function CancioneroApp() {
     } else if (currentRoute.name === 'album-new') {
       document.title = `Nuevo Álbum - Cancionero de versos perdidos`;
       return;
+    } else if (currentRoute.name === 'video-visualizer') {
+      document.title = `Generador de Vídeo para YouTube - Cancionero de versos perdidos`;
+      return;
     }
     document.title = `Cancionero de versos perdidos`;
   }, [currentRoute, songs, albums]);
+
+  // Auto-open visualizer when navigating to video-visualizer route
+  useEffect(() => {
+    if (currentRoute.name === 'video-visualizer') {
+      const targetSong = (currentRoute.songId ? songs.find(s => s.id === currentRoute.songId) : null) || songs[0] || null;
+      if (targetSong) {
+        setVisualizerSong(targetSong);
+        setIsVisualizerModalOpen(true);
+      }
+    }
+  }, [currentRoute, songs]);
 
   // Setup keyboard shortcuts
   useEffect(() => {
@@ -697,6 +722,7 @@ function CancioneroApp() {
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenAudioAnalyzer={() => navigate({ name: 'audio-analyzer' })}
         onOpenSongbook={() => navigate({ name: 'songbook' })}
+        onOpenVideoVisualizer={() => handleOpenVisualizer()}
       />
 
       {/* Main Page Content Router */}
@@ -979,6 +1005,7 @@ function CancioneroApp() {
                           onSelectTag={setTagFilter}
                           onRenameFile={handleOpenRename}
                           onDelete={handleOpenDelete}
+                          onOpenVisualizer={handleOpenVisualizer}
                         />
                       ))}
                     </div>
@@ -998,6 +1025,7 @@ function CancioneroApp() {
                           onSelectTag={setTagFilter}
                           onRenameFile={handleOpenRename}
                           onDelete={handleOpenDelete}
+                          onOpenVisualizer={handleOpenVisualizer}
                         />
                       ))}
                     </div>
@@ -1140,6 +1168,18 @@ function CancioneroApp() {
         toast={gitToast}
         onDismiss={() => setGitToast(null)}
       />
+
+      {isVisualizerModalOpen && visualizerSong && (
+        <SongVideoVisualizerModal
+          song={visualizerSong}
+          allSongs={songs}
+          onSelectOtherSong={(newSong) => setVisualizerSong(newSong)}
+          onClose={() => {
+            setIsVisualizerModalOpen(false);
+            setVisualizerSong(null);
+          }}
+        />
+      )}
     </div>
   );
 }

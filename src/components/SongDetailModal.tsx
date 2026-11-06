@@ -19,8 +19,10 @@ import {
   Clock,
   Trash2,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Youtube
 } from 'lucide-react';
+import { SongVideoVisualizerModal } from './SongVideoVisualizerModal';
 import { Song } from '../types/song';
 import {
   songToMarkdown,
@@ -94,6 +96,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   const [syncedLines, setSyncedLines] = useState<SyncedLyricLine[]>([]);
   const [lrcMetadata, setLrcMetadata] = useState<LrcMetadata>({});
   const [, setCustomLrcText] = useState<string>('');
+  const [isVisualizerOpen, setIsVisualizerOpen] = useState<boolean>(false);
 
   const toggleMaximized = () => {
     setIsMaximized(prev => {
@@ -572,6 +575,14 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 )}
               </>
             )}
+            <button
+              onClick={() => setIsVisualizerOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+              title="Generar vídeo para YouTube con letra sincronizada y efectos"
+            >
+              <Youtube className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Vídeo YouTube</span>
+            </button>
             <button
               onClick={handleExportPdf}
               className="p-2 text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer flex items-center gap-1"
@@ -1187,6 +1198,14 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Visualizer Modal */}
+      {isVisualizerOpen && (
+        <SongVideoVisualizerModal
+          song={song}
+          onClose={() => setIsVisualizerOpen(false)}
+        />
       )}
     </div>
   );

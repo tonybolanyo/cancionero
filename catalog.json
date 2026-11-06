@@ -1,5 +1,29 @@
 [
   {
+    "id": "cancion-para-los-cuerdos",
+    "title": "Canción para los cuerdos",
+    "status": "published",
+    "year": 2024,
+    "genre": "Canción de Autor",
+    "key": "Am",
+    "albumId": "cartas-sin-sello",
+    "albumTitle": "Cartas sin sello",
+    "trackNumber": "5",
+    "timeSignature": "4/4",
+    "tuning": "Estándar (EADGBE)",
+    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
+    "isPrivateDemo": "true",
+    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño",
+    "lrc": "En la sala de los espejos\\ndonde el tiempo se hace eco,\\nbaila Marta con su sombra\\ny un vestido de remiendos.\\nDice que el mundo es un sueño\\ny que el sueño es verdadero,\\nque la luna es un pañuelo\\ndonde esconde su deseo.\\nPero nadie la comprende,\\nni los sabios ni los necios,\\ny le dicen que está loca\\npor amar sin presupuesto.\\n\\nY yo pregunto, amor,\\n¿quién decide la frontera\\nentre el verso y el error,\\nentre el alma y la madera?\\nSi en este manicomio\\nla cordura es la bandera,\\n¿no será que en la calle\\nla locura es la que impera?\\n\\nDon Ernesto fue poeta\\nantes de perder la calma,\\nescribía en servilletas\\nlas heridas de su alma.\\nAhora mira las paredes\\ny conversa con las plantas,\\nle recita a las enfermeras\\ny a las sillas desbocadas.\\nPero afuera nadie escucha\\nlos poemas que regala,\\ny le dicen que está loco\\npor hablar con la esperanza.\\n\\nY yo pregunto, amor,\\n¿quién decide la frontera\\nentre el verso y el error,\\nentre el alma y la madera?\\nSi en este manicomio\\nla cordura es la bandera,\\n¿no será que en la calle\\nla locura es la que impera?\\n\\nHay un niño en la ventana\\ndibujando mariposas,\\nle han prohibido los colores\\npor temor a que las cosas\\nse conviertan en canciones\\no en verdades peligrosas.\\nY la enfermera Susana\\ncanta a escondidas su rosa,\\nporque amar en estos muros\\nes delito y es derrota.\\n\\nY yo, que escribo en la noche\\nesta carta clandestina,\\nme pregunto si algún día\\nseré libre de mi rima.\\nSi el amor es un delirio\\nque se paga en medicina,\\no si afuera están los locos\\ny aquí dentro la rutina.\\n\\nPor eso, amor, te escribo\\ndesde el centro del abismo,\\ndonde todos somos cuerdos\\ny soñamos con lo mismo:\\nque el amor no sea un crimen\\nni la vida un espejismo,\\ny que un día los poetas\\nsean dueños de su ritmo.",
+    "tags": [
+      "cartas-sin-sello",
+      "acústico"
+    ],
+    "createdAt": "2026-11-01T00:17:35.091Z",
+    "updatedAt": "2026-11-04T22:03:08.468Z",
+    "lyrics": "En la sala de los espejos\ndonde el tiempo se hace eco,\nbaila Marta con su sombra\ny un vestido de remiendos.\nDice que el mundo es un sueño\ny que el sueño es verdadero,\nque la luna es un pañuelo\ndonde esconde su deseo.\nPero nadie la comprende,\nni los sabios ni los necios,\ny le dicen que está loca\npor amar sin presupuesto.\n\nY yo pregunto, amor,\n¿quién decide la frontera\nentre el verso y el error,\nentre el alma y la madera?\nSi en este manicomio\nla cordura es la bandera,\n¿no será que en la calle\nla locura es la que impera?\n\nDon Ernesto fue poeta\nantes de perder la calma,\nescribía en servilletas\nlas heridas de su alma.\nAhora mira las paredes\ny conversa con las plantas,\nle recita a las enfermeras\ny a las sillas desbocadas.\nPero afuera nadie escucha\nlos poemas que regala,\ny le dicen que está loco\npor hablar con la esperanza.\n\nY yo pregunto, amor,\n¿quién decide la frontera\nentre el verso y el error,\nentre el alma y la madera?\nSi en este manicomio\nla cordura es la bandera,\n¿no será que en la calle\nla locura es la que impera?\n\nHay un niño en la ventana\ndibujando mariposas,\nle han prohibido los colores\npor temor a que las cosas\nse conviertan en canciones\no en verdades peligrosas.\nY la enfermera Susana\ncanta a escondidas su rosa,\nporque amar en estos muros\nes delito y es derrota.\n\nY yo, que escribo en la noche\nesta carta clandestina,\nme pregunto si algún día\nseré libre de mi rima.\nSi el amor es un delirio\nque se paga en medicina,\no si afuera están los locos\ny aquí dentro la rutina.\n\nPor eso, amor, te escribo\ndesde el centro del abismo,\ndonde todos somos cuerdos\ny soñamos con lo mismo:\nque el amor no sea un crimen\nni la vida un espejismo,\ny que un día los poetas\nsean dueños de su ritmo."
+  },
+  {
     "id": "algo-quiere-salir",
     "title": "Algo quiere salir",
     "status": "published",
@@ -711,27 +735,6 @@
   {
     "id": "boleros-y-verdades",
     "title": "Boleros y verdades",
-    "status": "draft",
-    "year": 2024,
-    "genre": "Canción de Autor",
-    "key": "",
-    "tempo": 0,
-    "timeSignature": "",
-    "tuning": "",
-    "duration": "",
-    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
-    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño",
-    "tags": [
-      "cartas-sin-sello",
-      "acústico"
-    ],
-    "createdAt": "2026-11-01T00:17:35.091Z",
-    "updatedAt": "2026-11-01T00:17:35.091Z",
-    "lyrics": "## Estrofa 1\n\n\n## Estribillo"
-  },
-  {
-    "id": "cancion-para-los-cuerdos",
-    "title": "Canción para los cuerdos",
     "status": "draft",
     "year": 2024,
     "genre": "Canción de Autor",

@@ -187,6 +187,75 @@ export class GoogleDriveService {
   }
 
   /**
+   * Uploads a video file or blob directly to Google Drive via multipart upload
+   */
+  static async uploadVideo(
+    blobOrFile: Blob | File,
+    fileName: string,
+    options?: { songTitle?: string; description?: string; mimeType?: string }
+  ): Promise<GoogleDriveUploadResult> {
+    const token = cachedAccessToken;
+    if (!token) {
+      throw new Error('No has iniciado sesión con Google Drive. Inicia sesión para guardar tu vídeo.');
+    }
+
+    const boundary = '-------CancioneroDriveBoundary' + Date.now();
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelim = `\r\n--${boundary}--`;
+    const mimeType = options?.mimeType || blobOrFile.type || 'video/webm';
+
+    const metadata = {
+      name: fileName,
+      mimeType: mimeType,
+      description: options?.description || `Vídeo musical para YouTube con letra sincronizada de "${options?.songTitle || 'cancionero'}"`,
+      properties: {
+        app: 'cancionero',
+        type: 'youtube-visualizer',
+        songTitle: options?.songTitle || '',
+        uploadedAt: new Date().toISOString()
+      }
+    };
+
+    const multipartRequestBody = new Blob([
+      delimiter,
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+      JSON.stringify(metadata),
+      delimiter,
+      `Content-Type: ${mimeType}\r\n\r\n`,
+      blobOrFile,
+      closeDelim
+    ], { type: `multipart/related; boundary=${boundary}` });
+
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body: multipartRequestBody
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      if (response.status === 401) {
+        cachedAccessToken = null;
+        throw new Error('Tu sesión de Google Drive ha caducado. Vuelve a iniciar sesión.');
+      }
+      throw new Error(`Error al subir vídeo a Google Drive (${response.status}): ${errText}`);
+    }
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      name: data.name || fileName,
+      fileId: data.id,
+      fileName: data.name || fileName,
+      mimeType: data.mimeType || mimeType,
+      size: blobOrFile.size
+    };
+  }
+
+  /**
    * Alias for uploadAudio with file parameter
    */
   static async uploadAudioFile(

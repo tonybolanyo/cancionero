@@ -23,8 +23,11 @@ import {
   Lock,
   Cloud,
   Sparkles,
-  ScrollText
+  ScrollText,
+  Youtube,
+  Film
 } from 'lucide-react';
+import { SongVideoVisualizerModal } from '../components/SongVideoVisualizerModal';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
 import { GoogleDriveService } from '../services/googleDriveService';
@@ -102,6 +105,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
   const [scrollSpeed] = useState<number>(1);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [isVisualizerOpen, setIsVisualizerOpen] = useState<boolean>(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollIntervalRef = useRef<number | null>(null);
 
@@ -476,6 +480,15 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               </button>
             </>
           )}
+
+          <button
+            onClick={() => setIsVisualizerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+            title="Generar vídeo para YouTube con letra sincronizada (1080p / 720p / 360p)"
+          >
+            <Youtube className="w-3.5 h-3.5" />
+            <span>Vídeo YouTube</span>
+          </button>
 
           <button
             onClick={() => onDownloadMd(song)}
@@ -1014,6 +1027,14 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Video Visualizer for YouTube Modal */}
+      {isVisualizerOpen && (
+        <SongVideoVisualizerModal
+          song={song}
+          onClose={() => setIsVisualizerOpen(false)}
+        />
+      )}
     </div>
   );
 };

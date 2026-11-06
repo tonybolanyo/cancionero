@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2, Music, BookOpen } from 'lucide-react';
+import { Music2, Plus, GitBranch, Sun, Moon, Lock, ShieldCheck, Wand2, Music, BookOpen, Youtube } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { siteMetadata } from '../utils/siteConfig';
@@ -18,6 +18,7 @@ interface HeaderProps {
   onOpenAbout: () => void;
   onOpenAuthModal: () => void;
   onOpenSongbook?: () => void;
+  onOpenVideoVisualizer?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,7 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
   hasUncommittedChanges,
   onOpenAbout,
   onOpenAuthModal,
-  onOpenSongbook
+  onOpenSongbook,
+  onOpenVideoVisualizer
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { isAuthor, user } = useAuth();
@@ -164,6 +166,19 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
               <span>Cancionero PDF</span>
+            </button>
+          )}
+
+          {/* Vídeo YouTube Visualizer Button */}
+          {onOpenVideoVisualizer && (
+            <button
+              type="button"
+              onClick={onOpenVideoVisualizer}
+              className="hidden md:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              title="Generar vídeo para YouTube con letra sincronizada (1080p / 720p / 360p)"
+            >
+              <Youtube className="w-3.5 h-3.5" />
+              <span>Vídeo YouTube</span>
             </button>
           )}
 

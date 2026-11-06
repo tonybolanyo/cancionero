@@ -1,12 +1,12 @@
 // Auto-generated version file - DO NOT EDIT
-// Generated at 2026-11-04T21:06:04.295Z
+// Generated at 2026-11-06T15:52:45.566Z
 // Managed by release-please with conventional commits analysis
 
-export const APP_VERSION = '0.4.1';
-export const BUILD_NUMBER = 1;
-export const COMMIT_HASH = '2943f90';
-export const BUILD_BRANCH = 'effective-system';
-export const BUILD_TIMESTAMP = '2026-11-04T21:06:04.295Z';
+export const APP_VERSION = '0.0.1';
+export const BUILD_NUMBER = 0;
+export const COMMIT_HASH = 'unknown';
+export const BUILD_BRANCH = 'unknown';
+export const BUILD_TIMESTAMP = '2026-11-06T15:52:45.566Z';
 
 /**
  * Version string including build metadata

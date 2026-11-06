@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode, Trash2 } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode, Trash2, Youtube } from 'lucide-react';
 import { Song } from '../types/song';
 
 interface SongExpandedRowProps {
@@ -12,6 +12,7 @@ interface SongExpandedRowProps {
   onSelectTag?: (tag: string) => void;
   onRenameFile?: (song: Song) => void;
   onDelete?: (song: Song) => void;
+  onOpenVisualizer?: (song: Song) => void;
 }
 
 export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
@@ -23,7 +24,8 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
   onViewHistory,
   onSelectTag,
   onRenameFile,
-  onDelete
+  onDelete,
+  onOpenVisualizer
 }) => {
   // Extract up to 3 lines of lyrics for expanded preview
   const lyricLines = song.lyrics
@@ -213,6 +215,16 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
         </button>
 
         <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
+          {onOpenVisualizer && (
+            <button
+              onClick={() => onOpenVisualizer(song)}
+              className="p-2 hover:text-red-500 rounded-lg hover:bg-red-500/10 border border-[var(--border-subtle)] hover:border-red-500/30 transition-colors cursor-pointer"
+              title="Generar vídeo para YouTube (1080p / 720p / 360p)"
+            >
+              <Youtube className="w-4 h-4 text-red-500" />
+            </button>
+          )}
+
           <button
             onClick={() => onDownloadMd(song)}
             className="p-2 hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
