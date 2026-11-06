@@ -1,12 +1,12 @@
 // Auto-generated version file - DO NOT EDIT
-// Generated at 2026-11-06T21:50:56.531Z
+// Generated at 2026-11-06T21:54:33.367Z
 // Managed by release-please with conventional commits analysis
 
 export const APP_VERSION = '0.1.0';
-export const BUILD_NUMBER = 1;
-export const COMMIT_HASH = '0f4dff5';
+export const BUILD_NUMBER = 3;
+export const COMMIT_HASH = '31aa9e5';
 export const BUILD_BRANCH = 'expert-goggles';
-export const BUILD_TIMESTAMP = '2026-11-06T21:50:56.531Z';
+export const BUILD_TIMESTAMP = '2026-11-06T21:54:33.367Z';
 
 /**
  * Version string including build metadata
