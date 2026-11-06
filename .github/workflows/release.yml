@@ -97,26 +97,7 @@ jobs:
         if: ${{ steps.version.outputs.should_release == 'true' }}
         id: changelog
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
-          if [ -z "$LAST_TAG" ]; then
-            COMMIT_RANGE="HEAD"
-          else
-            COMMIT_RANGE="$LAST_TAG..HEAD"
-          fi
-          
-          # Generate changelog entries
-          CHANGELOG=$(git log $COMMIT_RANGE --pretty=format:"%h - %s (%an)")
-          
-          # Save to file for later use
-          echo "$CHANGELOG" > /tmp/changelog.txt
-          
-          # Use EOF delimiter for multi-line output with special characters
-          {
-            echo "changelog<<EOF"
-            cat /tmp/changelog.txt | head -20
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+          node scripts/generate-changelog.js ${{ steps.version.outputs.version }}
 
       - name: Commit and tag
         if: ${{ steps.version.outputs.should_release == 'true' }}
@@ -129,7 +110,7 @@ jobs:
             exit 0
           fi
           
-          git add package.json package-lock.json
+          git add package.json package-lock.json CHANGELOG.md
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin $(git rev-parse --abbrev-ref HEAD)
