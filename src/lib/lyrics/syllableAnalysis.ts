@@ -19,43 +19,64 @@ export interface SyllableizedLine {
 /**
  * Spanish syllabification rules using common patterns
  * Conservative approach: uses vowel groups and common consonant clusters
+ * Improved with better handling of Spanish-specific patterns
  */
 function syllabifySpanish(word: string): string[] {
   if (!word || word.length === 0) return [];
 
   const syllables: string[] = [];
-  let current = '';
   const vowels = /[aeiouáéíóúü]/i;
   const consonants = /[bcdfghjklmnñprstvwxyz]/i;
+  
+  // Spanish consonant clusters that stay with the following vowel
+  const inseparableClusterStarts = new Set([
+    'bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'tr',
+    'ch', 'll', 'rr', 'ñ', // Already single char (ñ)
+  ]);
 
-  for (let i = 0; i < word.length; i++) {
+  let current = '';
+  let i = 0;
+
+  while (i < word.length) {
     const char = word[i];
     const nextChar = word[i + 1];
     const nextnextChar = word[i + 2];
 
     current += char;
 
-    // Check if we're at a vowel
-    if (vowels.test(char)) {
-      // Look ahead for syllable break patterns
-      if (nextChar) {
-        const isNextConsonant = consonants.test(nextChar);
-        const isNextVowel = vowels.test(nextChar);
-        const isNextnextConsonant = nextnextChar ? consonants.test(nextnextChar) : false;
+    // Syllable break detection at vowel boundaries
+    if (vowels.test(char) && nextChar) {
+      const isNextConsonant = consonants.test(nextChar);
+      const isNextVowel = vowels.test(nextChar);
 
-        // Break after vowel if:
-        // 1. Next char is a consonant followed by a vowel (CV pattern)
-        if (isNextConsonant && isNextnextConsonant === false) {
-          // But not for certain consonant clusters
-          const cluster = nextChar + (nextnextChar || '');
-          const singleConsonantClusters = ['bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'tr', 'ch', 'll', 'rr', 'ñ'];
-          if (!singleConsonantClusters.includes(cluster.toLowerCase())) {
+      if (isNextConsonant) {
+        // Check for inseparable clusters (should stay with next vowel)
+        const cluster = (nextChar + (nextnextChar || '')).toLowerCase();
+        const isInseparable = inseparableClusterStarts.has(cluster.slice(0, 2));
+
+        if (!isInseparable) {
+          // Break after single consonant
+          if (word[i + 2] && !vowels.test(word[i + 2])) {
+            // Next position is also consonant, so current consonant closes this syllable
+            current += word[i + 1];
+            syllables.push(current);
+            current = '';
+            i += 2;
+            continue;
+          } else {
+            // Single consonant before vowel - break here
             syllables.push(current);
             current = '';
           }
         }
+      } else if (isNextVowel && word[i + 2] && consonants.test(word[i + 2])) {
+        // Vowel + vowel + consonant pattern: break between vowels
+        syllables.push(current);
+        current = '';
       }
     }
+
+    i++;
   }
 
   if (current) {
@@ -67,37 +88,57 @@ function syllabifySpanish(word: string): string[] {
 
 /**
  * English syllabification using vowel group detection
- * Simpler heuristic: primarily counts vowel groups
+ * Improved algorithm that handles common English syllable patterns
+ * Based on consonant-vowel transitions and common syllable endings
  */
 function syllabifyEnglish(word: string): string[] {
   if (!word || word.length === 0) return [];
 
   const vowels = /[aeiouy]/i;
+  const consonants = /[bcdfghjklmnpqrstvwxz]/i;
   const syllables: string[] = [];
   let current = '';
-  let inVowelGroup = false;
 
-  for (let i = 0; i < word.length; i++) {
+  let i = 0;
+  while (i < word.length) {
     const char = word[i];
-    const isVowel = vowels.test(char);
     const nextChar = word[i + 1];
-    const nextIsVowel = nextChar ? vowels.test(nextChar) : false;
+    const nextnextChar = word[i + 2];
+    const nextthirdChar = word[i + 3];
 
     current += char;
 
-    // Transition from vowel to consonant: possible break point
-    if (inVowelGroup && !isVowel) {
-      // Unless next char is a vowel (would continue in a consonant cluster)
-      if (!nextIsVowel && current.length > 1) {
-        syllables.push(current);
-        current = '';
-        inVowelGroup = false;
+    // When we encounter a consonant after a vowel (potential break point)
+    if (i > 0 && vowels.test(word[i - 1]) && consonants.test(char)) {
+      // Look ahead to decide if we break here
+      if (nextChar) {
+        const nextIsVowel = vowels.test(nextChar);
+        const nextIsConsonant = consonants.test(nextChar);
+
+        if (nextIsVowel) {
+          // CV pattern: if double consonant, keep both with next syllable
+          if (consonants.test(nextChar)) {
+            // Single consonant before vowel - might break here
+            syllables.push(current);
+            current = '';
+          } else if (
+            nextthirdChar &&
+            consonants.test(nextnextChar) &&
+            vowels.test(nextthirdChar)
+          ) {
+            // CCV pattern: break before the cluster
+            syllables.push(current);
+            current = '';
+          }
+        } else if (nextIsConsonant && !nextChar) {
+          // End of word with consonant cluster
+          current += nextChar;
+          i++;
+        }
       }
     }
 
-    if (isVowel) {
-      inVowelGroup = true;
-    }
+    i++;
   }
 
   if (current) {
@@ -108,27 +149,43 @@ function syllabifyEnglish(word: string): string[] {
 }
 
 /**
- * Detects language (Spanish/English) from word patterns
- * Uses common Spanish patterns (á, é, í, ó, ú, ñ) and common letter distributions
+ * Detects language (Spanish/English) from text patterns
+ * Uses multiple heuristics:
+ * 1. Direct character indicators (accents, special letters)
+ * 2. Common word patterns
+ * 3. Phonetic patterns
  */
 function detectLanguage(text: string): 'es' | 'en' {
-  const spanishIndicators = /[áéíóúñü]/i;
-  if (spanishIndicators.test(text)) {
+  const lowerText = text.toLowerCase();
+
+  // Definitive Spanish indicators
+  const spanishIndicators = /[áéíóúñü]/;
+  if (spanishIndicators.test(lowerText)) {
     return 'es';
   }
 
-  // Count common Spanish/English patterns
-  const spanishWords = /\b(el|la|un|una|de|que|y|o|está|son|como|si|bien)\b/gi;
-  const englishWords = /\b(the|is|are|a|and|or|is|was|been|have|that|this)\b/gi;
+  // Common word patterns weighted
+  const spanishPattern = /\b(el|la|un|una|de|que|y|o|está|son|como|si|bien|es|en|no|me|te|se|le|nos|os|con|para|por|más|muy|pero|también|ese|ese|eso|este|esto|ese|aquel|aquello)\b/gi;
+  const englishPattern = /\b(the|a|an|and|or|is|are|was|were|been|be|have|has|had|do|does|did|will|would|could|should|can|may|might|must|shall|if|but|what|which|who|where|when|why|how|as|at|by|for|from|in|of|on|to|with|without|about|above|after|before|between|during|through|until|under|over|some|any|all|each|every|both|either|neither|few|many|much|several|such|same|other|more|most|less|least|same|other|another)\b/gi;
 
-  const spanishMatches = (text.match(spanishWords) || []).length;
-  const englishMatches = (text.match(englishWords) || []).length;
+  const spanishMatches = (lowerText.match(spanishPattern) || []).length;
+  const englishMatches = (lowerText.match(englishPattern) || []).length;
 
-  return englishMatches > spanishMatches ? 'en' : 'es';
+  // If we have significant matches, use ratio
+  if (spanishMatches > 0 || englishMatches > 0) {
+    return englishMatches >= spanishMatches ? 'en' : 'es';
+  }
+
+  // Fallback: check for 'u' before consonant (Spanish tendency) vs other patterns
+  const spanishUPattern = /u[bcdfghjklmnpqrstvwxz]/gi;
+  const spanishUMatches = (lowerText.match(spanishUPattern) || []).length;
+
+  return spanishUMatches > 2 ? 'es' : 'en';
 }
 
 /**
  * Syllabifies a single word using language-specific rules
+ * Handles mixed case, accents, and special characters
  */
 export function syllabifyWord(word: string): string[] {
   const cleanWord = word.toLowerCase().replace(/[^a-záéíóúñü]/gi, '');

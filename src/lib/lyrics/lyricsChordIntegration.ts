@@ -1,6 +1,7 @@
 /**
  * Lyrics and Chord Integration Service
  * Coordinates syllable-level synchronization with chord positioning
+ * Includes comprehensive validation and error handling
  */
 
 import { ChordSegment, getCleanChordSequence } from '../audio/chords';
@@ -21,6 +22,54 @@ export interface LyricsAndChordsSync {
   metadata: LrcMetadata;
   detectedChords: ChordSegment[];
   timingStrategy: TimingDistributionStrategy;
+  warnings?: string[];
+}
+
+/**
+ * Validates lyrics input and throws descriptive errors
+ */
+function validateLyricsInput(lyrics: string | null | undefined): string {
+  if (!lyrics) {
+    throw new Error('Lyrics input is empty or null');
+  }
+
+  const trimmed = lyrics.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Lyrics contain only whitespace');
+  }
+
+  return trimmed;
+}
+
+/**
+ * Validates chord segments and cleans invalid ones
+ */
+function validateChordSegments(chords: ChordSegment[]): ChordSegment[] {
+  if (!Array.isArray(chords)) {
+    return [];
+  }
+
+  return chords.filter(chord => {
+    // Validate chord segment has required properties
+    if (typeof chord.startTime !== 'number' || typeof chord.endTime !== 'number') {
+      console.warn('Skipping chord with invalid timing', chord);
+      return false;
+    }
+
+    // Validate timing is logical
+    if (chord.startTime >= chord.endTime) {
+      console.warn('Skipping chord with invalid duration', chord);
+      return false;
+    }
+
+    // Validate chord name is not empty
+    if (!chord.chord || typeof chord.chord !== 'string' || chord.chord.trim().length === 0) {
+      console.warn('Skipping chord with empty name', chord);
+      return false;
+    }
+
+    return true;
+  });
 }
 
 /**
@@ -28,52 +77,82 @@ export interface LyricsAndChordsSync {
  * with syllable-level timing and chord positioning
  *
  * Steps:
- * 1. Strip any existing chord notation from lyrics
- * 2. Estimate line timings if not provided
- * 3. Generate syllable-level LRC with positioned chords
- * 4. Return both the LRC format and the text with chords
+ * 1. Validate inputs
+ * 2. Strip any existing chord notation from lyrics
+ * 3. Estimate line timings if not provided
+ * 4. Generate syllable-level LRC with positioned chords
+ * 5. Return both the LRC format and the text with chords
  */
 export function generateSyncedLrcFromPlainLyrics(
   plainLyrics: string,
-  detectedChords: ChordSegment[],
+  detectedChords: ChordSegment[] = [],
   metadata?: LrcMetadata,
   options?: {
     timingStrategy?: TimingDistributionStrategy;
     linesPerMinute?: number;
   }
 ): LyricsAndChordsSync {
-  // Strip any existing chords to get clean lyrics
-  const cleanLyrics = stripChordsFromText(plainLyrics);
+  const warnings: string[] = [];
 
-  // Generate LRC with syllable timing
-  const lrc = generateLrcFromPlainLyricsWithChords(
-    cleanLyrics,
-    detectedChords,
-    metadata,
-    {
-      linesPerMinute: options?.linesPerMinute ?? 3,
-      timingStrategy: options?.timingStrategy ?? 'uniform'
+  try {
+    // Validate inputs
+    const validatedLyrics = validateLyricsInput(plainLyrics);
+    const validatedChords = validateChordSegments(detectedChords);
+
+    // Warn if chords were filtered
+    if (validatedChords.length < detectedChords.length) {
+      warnings.push(
+        `Filtered ${detectedChords.length - validatedChords.length} invalid chord segments`
+      );
     }
-  );
 
-  // Parse the generated LRC to get structured data
-  const parsed = parseLrc(lrc);
+    // Strip any existing chords to get clean lyrics
+    const cleanLyrics = stripChordsFromText(validatedLyrics);
 
-  // Generate text with chords positioned at syllables
-  const lyricsWithChords = generateLyricsWithPositionedChords(
-    cleanLyrics,
-    parsed.lines,
-    detectedChords
-  );
+    if (!cleanLyrics || cleanLyrics.trim().length === 0) {
+      warnings.push('Lyrics became empty after removing chords');
+    }
 
-  return {
-    lrc,
-    plainLyrics: cleanLyrics,
-    lyricsWithChords,
-    metadata: parsed.metadata,
-    detectedChords,
-    timingStrategy: options?.timingStrategy ?? 'uniform'
-  };
+    // Generate LRC with syllable timing
+    const lrc = generateLrcFromPlainLyricsWithChords(
+      cleanLyrics,
+      validatedChords,
+      metadata,
+      {
+        linesPerMinute: options?.linesPerMinute ?? 3,
+        timingStrategy: options?.timingStrategy ?? 'uniform'
+      }
+    );
+
+    // Parse the generated LRC to get structured data
+    const parsed = parseLrc(lrc);
+
+    // Add any parser warnings to our warnings
+    if (parsed.warnings && parsed.warnings.length > 0) {
+      warnings.push(...parsed.warnings);
+    }
+
+    // Generate text with chords positioned at syllables
+    const lyricsWithChords = generateLyricsWithPositionedChords(
+      cleanLyrics,
+      parsed.lines,
+      validatedChords
+    );
+
+    return {
+      lrc,
+      plainLyrics: cleanLyrics,
+      lyricsWithChords,
+      metadata: parsed.metadata,
+      detectedChords: validatedChords,
+      timingStrategy: options?.timingStrategy ?? 'uniform',
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to generate synced LRC: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /**
@@ -85,37 +164,60 @@ export function upgradeExistingLrcWithChords(
   detectedChords: ChordSegment[],
   timingStrategy: TimingDistributionStrategy = 'uniform'
 ): LyricsAndChordsSync {
-  // Parse existing LRC
-  const parsed = parseLrc(lrcContent);
+  const warnings: string[] = [];
 
-  // Upgrade to syllable level
-  const upgradedLines = upgradeLrcToSyllableLevel(
-    parsed.lines,
-    detectedChords,
-    timingStrategy
-  );
+  try {
+    // Validate inputs
+    const validatedLyrics = validateLyricsInput(lrcContent);
+    const validatedChords = validateChordSegments(detectedChords);
 
-  // Serialize back to LRC format
-  const upgradedLrc = serializeUpgradedLrc(upgradedLines, parsed.metadata);
+    if (validatedChords.length < detectedChords.length) {
+      warnings.push(
+        `Filtered ${detectedChords.length - validatedChords.length} invalid chord segments`
+      );
+    }
 
-  // Get plain lyrics
-  const plainLyrics = stripLrcTimestamps(lrcContent);
+    // Parse existing LRC
+    const parsed = parseLrc(validatedLyrics);
 
-  // Generate lyrics with chords
-  const lyricsWithChords = generateLyricsWithPositionedChords(
-    plainLyrics,
-    upgradedLines,
-    detectedChords
-  );
+    if (parsed.warnings && parsed.warnings.length > 0) {
+      warnings.push(...parsed.warnings);
+    }
 
-  return {
-    lrc: upgradedLrc,
-    plainLyrics,
-    lyricsWithChords,
-    metadata: parsed.metadata,
-    detectedChords,
-    timingStrategy
-  };
+    // Upgrade to syllable level
+    const upgradedLines = upgradeLrcToSyllableLevel(
+      parsed.lines,
+      validatedChords,
+      timingStrategy
+    );
+
+    // Serialize back to LRC format
+    const upgradedLrc = serializeUpgradedLrc(upgradedLines, parsed.metadata);
+
+    // Get plain lyrics
+    const plainLyrics = stripLrcTimestamps(validatedLyrics);
+
+    // Generate lyrics with chords
+    const lyricsWithChords = generateLyricsWithPositionedChords(
+      plainLyrics,
+      upgradedLines,
+      validatedChords
+    );
+
+    return {
+      lrc: upgradedLrc,
+      plainLyrics,
+      lyricsWithChords,
+      metadata: parsed.metadata,
+      detectedChords: validatedChords,
+      timingStrategy,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to upgrade existing LRC: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /**
@@ -128,37 +230,61 @@ export function mergeDetectedChordsWithExisting(
   metadata?: LrcMetadata,
   timingStrategy: TimingDistributionStrategy = 'uniform'
 ): LyricsAndChordsSync {
-  // Extract clean lyrics
-  const cleanLyrics = stripChordsFromText(lyricsWithExistingChords);
+  const warnings: string[] = [];
 
-  // Combine detected chords (they override any existing)
-  const allChords = [...newDetectedChords];
+  try {
+    // Validate inputs
+    const validatedLyrics = validateLyricsInput(lyricsWithExistingChords);
+    const validatedChords = validateChordSegments(newDetectedChords);
 
-  // Generate new LRC with merged chords
-  const lrc = generateLrcFromPlainLyricsWithChords(
-    cleanLyrics,
-    allChords,
-    metadata,
-    {
-      timingStrategy
+    if (validatedChords.length < newDetectedChords.length) {
+      warnings.push(
+        `Filtered ${newDetectedChords.length - validatedChords.length} invalid chord segments`
+      );
     }
-  );
 
-  const parsed = parseLrc(lrc);
-  const lyricsWithChords = generateLyricsWithPositionedChords(
-    cleanLyrics,
-    parsed.lines,
-    allChords
-  );
+    // Extract clean lyrics
+    const cleanLyrics = stripChordsFromText(validatedLyrics);
 
-  return {
-    lrc,
-    plainLyrics: cleanLyrics,
-    lyricsWithChords,
-    metadata: parsed.metadata,
-    detectedChords: allChords,
-    timingStrategy
-  };
+    // Combine detected chords (they override any existing)
+    const allChords = [...validatedChords];
+
+    // Generate new LRC with merged chords
+    const lrc = generateLrcFromPlainLyricsWithChords(
+      cleanLyrics,
+      allChords,
+      metadata,
+      {
+        timingStrategy
+      }
+    );
+
+    const parsed = parseLrc(lrc);
+
+    if (parsed.warnings && parsed.warnings.length > 0) {
+      warnings.push(...parsed.warnings);
+    }
+
+    const lyricsWithChords = generateLyricsWithPositionedChords(
+      cleanLyrics,
+      parsed.lines,
+      allChords
+    );
+
+    return {
+      lrc,
+      plainLyrics: cleanLyrics,
+      lyricsWithChords,
+      metadata: parsed.metadata,
+      detectedChords: allChords,
+      timingStrategy,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to merge chords: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /**
@@ -236,20 +362,26 @@ export function analyzeLyricsStructure(lyrics: string): Array<{
   syllables: SyllableizedLine;
   syllableCount: number;
 }> {
-  const lines = lyrics
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0 && !l.startsWith('#'));
+  try {
+    const validated = validateLyricsInput(lyrics);
+    const lines = validated
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('#'));
 
-  return lines.map((text, idx) => {
-    const syllabized = syllabifyLine(stripChordsFromText(text));
-    return {
-      lineNumber: idx + 1,
-      text: stripChordsFromText(text),
-      syllables: syllabized,
-      syllableCount: syllabized.syllableCount
-    };
-  });
+    return lines.map((text, idx) => {
+      const syllabized = syllabifyLine(stripChordsFromText(text));
+      return {
+        lineNumber: idx + 1,
+        text: stripChordsFromText(text),
+        syllables: syllabized,
+        syllableCount: syllabized.syllableCount
+      };
+    });
+  } catch (error) {
+    console.error('Error analyzing lyrics structure:', error);
+    return [];
+  }
 }
 
 /**
@@ -263,16 +395,22 @@ export function estimateLyricsTimings(
     tempoBeats?: number[];
   }
 ): Array<{ text: string; startTime: number; endTime: number }> {
-  const lines = lyrics
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0 && !l.startsWith('#'));
+  try {
+    const validated = validateLyricsInput(lyrics);
+    const lines = validated
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('#'));
 
-  const secondsPerLine = 60 / (options?.linesPerMinute ?? 3);
+    const secondsPerLine = 60 / (options?.linesPerMinute ?? 3);
 
-  return lines.map((text, idx) => ({
-    text,
-    startTime: idx * secondsPerLine,
-    endTime: (idx + 1) * secondsPerLine
-  }));
+    return lines.map((text, idx) => ({
+      text,
+      startTime: idx * secondsPerLine,
+      endTime: (idx + 1) * secondsPerLine
+    }));
+  } catch (error) {
+    console.error('Error estimating lyrics timings:', error);
+    return [];
+  }
 }
