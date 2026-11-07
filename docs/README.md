@@ -1,53 +1,58 @@
-# 📚 Documentación de Cancionero
+# Cancionero Documentation
 
-Bienvenido a la documentación completa de **Cancionero de Versos Perdidos**. Aquí encontrarás guías, referencias técnicas y mejores prácticas.
+Welcome to the complete documentation for **Cancionero de Versos Perdidos**. Here you will find user guides, technical references, and best practices.
 
 ---
 
-## 🎯 Encuentra lo que Necesitas
+## Documentation for Different Roles
 
-### 👤 Por Rol
+Find documentation based on your role or need:
 
-| Rol | Comienza Con | Documentación |
-|-----|--------------|---------------|
-| **Usuario** | [Inicio Rápido](getting-started/QUICKSTART.md) | [Getting Started](getting-started/) |
-| **Desarrollador** | [Configuración](development/README.md) | [Development](development/) |
-| **Diseñador** | [Variables CSS](styling/CSS_VARIABLES_QUICK_START.md) | [Styling](styling/) |
+---
+
+## Documentation Maintenance
+
+Documentation is kept synchronized with code changes. These guides help maintain consistency:
+
+### For Different Tools and Roles
+
+| Role/Tool | Guide | Purpose |
+|-----------|-------|---------|
+| **Copilot Sessions** | [COPILOT_INSTRUCTIONS.md](COPILOT_INSTRUCTIONS.md) | Step-by-step workflow for maintaining docs during GitHub Copilot sessions |
+| **Google AI Studio** | [GOOGLE_AI_STUDIO_INSTRUCTIONS.md](GOOGLE_AI_STUDIO_INSTRUCTIONS.md) | Prompts and workflows for generating/updating documentation with AI Studio |
+| **General Maintenance** | [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) | When to update docs and how to handle common scenarios |
+| **Writing Standards** | [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md) | Markdown formatting, naming conventions, style guidelines |
+| **Structure Overview** | [ORGANIZATION_SUMMARY.md](ORGANIZATION_SUMMARY.md) | Complete overview of documentation organization and structure |
+| **Visual Assets** | [assets/SCREENSHOTS_AND_VIDEOS_GUIDE.md](assets/SCREENSHOTS_AND_VIDEOS_GUIDE.md) | How to create screenshots and videos for user documentation |
+
+### Key Principles
+
+1. Update documentation simultaneously with code changes - never defer
+2. All documentation in `/docs` organized by category
+3. Markdown format only, no emojis in text
+4. Include functional descriptions AND developer technical details
+5. Keep documentation synchronized with actual features
+6. Use automated tools (Playwright) for screenshots and videos
+
+---
+
+## By Role
+
+### 👤 For Users
+
+| Role | Get Started | Documentation |
+|------|-------------|----------------|
+| **User** | [Quick Start](getting-started/QUICKSTART.md) | [Getting Started](getting-started/) |
+| **Developer** | [Development Setup](development/README.md) | [Development](development/) |
+| **Designer** | [CSS Variables](styling/CSS_VARIABLES_QUICK_START.md) | [Styling](styling/) |
 | **DevOps** | [GitHub Pages](deployment/README_DEPLOYMENT.md) | [Deployment](deployment/) |
-| **Contribuidor** | [Guía de Commits](development/COMMIT_GUIDE.md) | Todo lo anterior |
+| **Contributor** | [Commit Guide](development/COMMIT_GUIDE.md) | [Development](development/) |
 
-### 📖 Por Categoría
+---
 
-#### 🚀 [Getting Started](getting-started/)
-Comienza aquí. Guías rápidas, atajos de teclado y referencias.
-* [QUICKSTART.md](getting-started/QUICKSTART.md) - Setup inicial
-* [KEYBOARD_SHORTCUTS_GUIDE.md](getting-started/KEYBOARD_SHORTCUTS_GUIDE.md) - Atajos disponibles
-* [CHEATSHEET.md](getting-started/CHEATSHEET.md) - Referencia rápida
+## By Category
 
-#### 🎛️ [Features](features/)
-Características detalladas y casos de uso.
-* [FOOTER_PREVIEW.md](features/FOOTER_PREVIEW.md) - Componentes específicos
-
-#### 👨‍💻 [Development](development/)
-Para desarrolladores y contribuidores.
-* [README.md](development/README.md) - Introducción al desarrollo
-* [SECRETS_CONFIGURATION.md](development/SECRETS_CONFIGURATION.md) - Variables de entorno
-* [COMMIT_GUIDE.md](development/COMMIT_GUIDE.md) - Convenciones de commits
-* [IMPLEMENTATION_SUMMARY.md](development/IMPLEMENTATION_SUMMARY.md) - Arquitectura
-* [IMPLEMENTATION_REPORT.md](development/IMPLEMENTATION_REPORT.md) - Análisis técnico
-* [IMPLEMENTATION_SUMMARY_VERSIONING.md](development/IMPLEMENTATION_SUMMARY_VERSIONING.md) - Versionado
-
-#### 🚀 [Deployment](deployment/)
-Despliegue en GitHub Pages, Cloudflare y optimización SEO.
-* [README_DEPLOYMENT.md](deployment/README_DEPLOYMENT.md) - Despliegue paso a paso
-* [GITHUB_PAGES_CLOUDFLARE_SETUP.md](deployment/GITHUB_PAGES_CLOUDFLARE_SETUP.md) - Configuración Cloudflare
-* [SEO_QUICKSTART.md](deployment/SEO_QUICKSTART.md) - SEO básico
-* [SEO_IMPLEMENTATION.md](deployment/SEO_IMPLEMENTATION.md) - SEO detallado
-* [SEO_INDEX.md](deployment/SEO_INDEX.md) - Índice de prácticas SEO
-
-#### 🎨 [Styling](styling/)
-Sistema CSS, variables y arquitectura visual.
-* [CSS_DESIGN_SYSTEM.md](styling/CSS_DESIGN_SYSTEM.md) - Sistema de diseño
+### Getting Started
 * [CSS_VARIABLES_QUICK_START.md](styling/CSS_VARIABLES_QUICK_START.md) - Primeros pasos
 * [CSS_BEST_PRACTICES.md](styling/CSS_BEST_PRACTICES.md) - Mejores prácticas
 * [CSS_ARCHITECTURE.md](styling/CSS_ARCHITECTURE.md) - Organización
@@ -101,17 +106,27 @@ Gestión de contenido, metadatos y estructura de canciones.
 
 ---
 
-## ✍️ Escribir Documentación
+## Documentation Maintenance
 
-Si necesitas crear o actualizar documentación, consulta:
+Documentation is kept synchronized with code changes. These guides help maintain consistency:
 
-**→ [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md)**
+### For Different Tools and Roles
 
-Esta guía explica:
-* Estructura estándar de documentos
-* Emojis y convenciones
-* Cómo enlazar correctamente
-* Instrucciones para asistentes de IA (Copilot, Google AI Studio)
+| Role/Tool | Guide | Purpose |
+|-----------|-------|---------|
+| **Copilot Sessions** | [COPILOT_INSTRUCTIONS.md](COPILOT_INSTRUCTIONS.md) | Step-by-step workflow for maintaining docs during GitHub Copilot sessions |
+| **Google AI Studio** | [GOOGLE_AI_STUDIO_INSTRUCTIONS.md](GOOGLE_AI_STUDIO_INSTRUCTIONS.md) | Prompts and workflows for generating/updating documentation with AI Studio |
+| **General Maintenance** | [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) | When to update docs and how to handle common scenarios |
+| **Writing Standards** | [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md) | Markdown formatting, naming conventions, style guidelines |
+
+### Key Principles
+
+1. Update documentation simultaneously with code changes - never defer
+2. All documentation in `/docs` organized by category
+3. Markdown format only, no emojis in text
+4. Include functional descriptions AND developer technical details
+5. Keep documentation synchronized with actual features
+6. Use automated tools (Playwright) for screenshots and videos
 
 ---
 
