@@ -103,12 +103,39 @@ El servidor estará en `http://localhost:3000`.
 
 ---
 
-## 📝 Escribir Documentación
+## 📝 Documentation Maintenance
 
-¿Necesitas crear o actualizar documentación? Consulta la [Guía de Generación de Documentación](docs/DOCUMENTATION_GUIDE.md) para mantener coherencia con la estructura.
+Documentation is maintained synchronized with code changes. All documentation files are in the `/docs` directory.
+
+### For AI Assistants and Contributors
+
+- **Copilot Users:** [Copilot Documentation Guide](docs/COPILOT_INSTRUCTIONS.md) - Step-by-step instructions for maintaining docs during Copilot sessions
+- **Google AI Studio Users:** [Google AI Studio Instructions](docs/GOOGLE_AI_STUDIO_INSTRUCTIONS.md) - Detailed prompts and workflow for documentation generation
+- **General Maintenance:** [Documentation Maintenance Guide](docs/DOCUMENTATION_MAINTENANCE.md) - When and how to update documentation
+- **Style Guide:** [Documentation Style Guide](docs/DOCUMENTATION_GUIDE.md) - Formatting, conventions, and best practices
+
+### Key Rules for Documentation
+
+1. All documentation files go in `/docs` organized by category
+2. Markdown format (.md) with no emojis in text content
+3. Include both functional descriptions and developer technical details
+4. Update documentation simultaneously with code changes
+5. Include screenshots/videos for user-facing features using Playwright
+6. Maintain cross-references between related documentation
+
+### Quick Links for Specific Roles
+
+| Role | Start Here |
+|------|-----------|
+| New User | [Getting Started](docs/getting-started/QUICKSTART.md) |
+| Developer | [Development Setup](docs/development/README.md) |
+| Contributor | [Commit Guide](docs/development/COMMIT_GUIDE.md) |
+| DevOps | [Deployment Guide](docs/deployment/README.md) |
+| Designer | [CSS System](docs/styling/CSS_DESIGN_SYSTEM.md) |
+| Maintaining Docs | [Maintenance Guide](docs/DOCUMENTATION_MAINTENANCE.md) |
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Contenido de canciones y letras © por el autor. Código de la aplicación disponible bajo licencia MIT.
+Song content and lyrics © by the author. Application code available under MIT license.
