@@ -31,6 +31,15 @@ import { GoogleDriveService } from '../services/googleDriveService';
 import { parseLrc, cleanRawText, CHORD_BRACKET_REGEX, stripChordsFromText } from '../lib/lyrics/parseLrc';
 import { SyncedLyricLine } from '../types/lyrics';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
+import { getDiatonicChordsForKey } from '../utils/songwriterHelper';
+
+export function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export type VideoResolution = '1080p' | '720p' | '360p';
 
@@ -177,7 +186,23 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   // Playback & Audio Analyzer States
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(180);
+
+  // Derive song initial duration from metadata or defaults
+  const parsedSongDuration = useMemo<number>(() => {
+    if (song.duration) {
+      const parts = song.duration.split(':');
+      if (parts.length === 2) {
+        const m = parseInt(parts[0], 10);
+        const s = parseInt(parts[1], 10);
+        if (!isNaN(m) && !isNaN(s) && (m * 60 + s) > 0) {
+          return m * 60 + s;
+        }
+      }
+    }
+    return 180;
+  }, [song.duration]);
+
+  const [duration, setDuration] = useState<number>(parsedSongDuration);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string>('');
   const [audioSourceType, setAudioSourceType] = useState<'url' | 'drive' | 'custom' | 'synthetic'>('url');
@@ -202,12 +227,37 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const mediaStreamDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const monitorGainNodeRef = useRef<GainNode | null>(null);
+  const keepAliveSourceRef = useRef<ConstantSourceNode | AudioBufferSourceNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const animationFrameRef = useRef<number | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const peakCapsRef = useRef<number[]>([]);
   const customImgElementRef = useRef<HTMLImageElement | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
+  const durationRef = useRef<number>(parsedSongDuration);
+  const currentTimeRef = useRef<number>(0);
+  const beatIndexRef = useRef<number>(-1);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  // Sync duration with song metadata if no custom audio has overridden it
+  useEffect(() => {
+    if (!audioRef.current?.duration) {
+      setDuration(parsedSongDuration);
+    }
+  }, [parsedSongDuration]);
 
   // Parse lyrics into synchronized timestamps
   const syncedLyrics = useMemo<SyncedLyricLine[]>(() => {
@@ -370,41 +420,223 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   // Web Audio Context & Analyser Node Setup
   const setupAudioGraph = useCallback(() => {
-    if (audioContextRef.current && analyserRef.current) return;
-
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const ctx = new AudioCtx();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.82;
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioCtx();
+      }
+      const ctx = audioContextRef.current;
 
-      const mediaStreamDest = ctx.createMediaStreamDestination();
+      if (!analyserRef.current) {
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.82;
+        analyserRef.current = analyser;
+      }
 
-      if (audioRef.current) {
-        // Prevent reconnecting the same audio element twice
-        if (!sourceNodeRef.current) {
-          const source = ctx.createMediaElementSource(audioRef.current);
-          source.connect(analyser);
-          analyser.connect(ctx.destination);
-          analyser.connect(mediaStreamDest);
-          sourceNodeRef.current = source;
+      if (!mediaStreamDestRef.current) {
+        const mediaStreamDest = ctx.createMediaStreamDestination();
+        mediaStreamDestRef.current = mediaStreamDest;
+
+        // Keep-alive constant source so audio track is never starved in MediaRecorder
+        try {
+          if (typeof ctx.createConstantSource === 'function') {
+            const keepAlive = ctx.createConstantSource();
+            keepAlive.offset.value = 0.0;
+            keepAlive.connect(mediaStreamDest);
+            keepAlive.start();
+            keepAliveSourceRef.current = keepAlive;
+          } else {
+            const silentBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+            const silentSource = ctx.createBufferSource();
+            silentSource.buffer = silentBuffer;
+            silentSource.loop = true;
+            silentSource.connect(mediaStreamDest);
+            silentSource.start();
+            keepAliveSourceRef.current = silentSource;
+          }
+        } catch (e) {
+          console.warn('Keep-alive audio source initialization failed:', e);
         }
       }
 
-      audioContextRef.current = ctx;
-      analyserRef.current = analyser;
-      mediaStreamDestRef.current = mediaStreamDest;
+      // Connect master monitor gain to destination for speaker muting control
+      if (!monitorGainNodeRef.current && analyserRef.current) {
+        const monitorGain = ctx.createGain();
+        monitorGain.gain.value = isMuted ? 0 : 1;
+        analyserRef.current.connect(monitorGain);
+        monitorGain.connect(ctx.destination);
+        monitorGainNodeRef.current = monitorGain;
+      }
+
+      // Ensure analyser feeds into recording destination
+      if (analyserRef.current && mediaStreamDestRef.current) {
+        try {
+          analyserRef.current.connect(mediaStreamDestRef.current);
+        } catch {
+          // already connected
+        }
+      }
+
+      // Connect audio element if present and not yet connected
+      if (audioRef.current && !sourceNodeRef.current && analyserRef.current) {
+        try {
+          const source = ctx.createMediaElementSource(audioRef.current);
+          source.connect(analyserRef.current);
+          sourceNodeRef.current = source;
+        } catch (mediaElemErr) {
+          console.warn('Could not connect media element to Web Audio:', mediaElemErr);
+        }
+      }
     } catch (err) {
       console.warn('AudioContext setup error (user interaction may be required):', err);
+    }
+  }, [isMuted]);
+
+  // Keep speaker monitor gain synced with isMuted state
+  useEffect(() => {
+    if (monitorGainNodeRef.current && audioContextRef.current) {
+      try {
+        monitorGainNodeRef.current.gain.setValueAtTime(
+          isMuted ? 0 : 1,
+          audioContextRef.current.currentTime
+        );
+      } catch {}
+    }
+  }, [isMuted]);
+
+  // Connect audio element whenever it becomes available
+  useEffect(() => {
+    if (resolvedAudioUrl && audioRef.current) {
+      setupAudioGraph();
+    }
+  }, [resolvedAudioUrl, setupAudioGraph]);
+
+  const getChordFrequencies = useCallback((chordName: string): number[] => {
+    const noteFreqs: Record<string, number> = {
+      'C': 130.81, 'C#': 138.59, 'Db': 138.59, 'D': 146.83, 'D#': 155.56, 'Eb': 155.56,
+      'E': 164.81, 'F': 174.61, 'F#': 185.00, 'Gb': 185.00, 'G': 196.00, 'G#': 207.65,
+      'Ab': 207.65, 'A': 220.00, 'A#': 233.08, 'Bb': 233.08, 'B': 246.94
+    };
+
+    const match = chordName.match(/^([A-G][#b]?)(.*)$/);
+    if (!match) return [110, 164.81, 220, 329.63];
+
+    const root = match[1];
+    const modifier = match[2] || '';
+    const rootFreq = noteFreqs[root] || 130.81;
+
+    const isMinor = modifier.includes('m') && !modifier.includes('maj');
+    const is7th = modifier.includes('7');
+
+    const thirdMult = isMinor ? 1.1892 : 1.2599;
+    const fifthMult = 1.4983;
+    const seventhMult = is7th ? 1.7818 : 2.0;
+
+    return [
+      rootFreq * 0.5,
+      rootFreq,
+      rootFreq * thirdMult,
+      rootFreq * fifthMult,
+      rootFreq * seventhMult
+    ];
+  }, []);
+
+  const playProceduralAcousticBeat = useCallback((timeSeconds: number) => {
+    const ctx = audioContextRef.current;
+    if (!ctx || ctx.state !== 'running') return;
+
+    const tempo = song.tempo || 96;
+    const secondsPerBeat = 60 / tempo;
+    const currentBeat = Math.floor(timeSeconds / secondsPerBeat);
+
+    if (currentBeat === beatIndexRef.current) return;
+    beatIndexRef.current = currentBeat;
+
+    const diatonic = getDiatonicChordsForKey(song.key);
+    const progression = diatonic.length >= 4
+      ? [diatonic[0], diatonic[4] || diatonic[1], diatonic[5] || diatonic[2], diatonic[3] || diatonic[1]]
+      : ['Am', 'F', 'C', 'G'];
+
+    const chordIndex = Math.floor(currentBeat / 4) % progression.length;
+    const currentChord = progression[chordIndex];
+    const freqs = getChordFrequencies(currentChord);
+
+    const stepInBar = currentBeat % 4;
+    const noteFreq = freqs[stepInBar % freqs.length];
+
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = stepInBar === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(noteFreq, ctx.currentTime);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1400, ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(350, ctx.currentTime + 0.45);
+
+      const now = ctx.currentTime;
+      const noteGain = stepInBar === 0 ? 0.16 : 0.10;
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(noteGain, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+      osc.connect(filter);
+      filter.connect(gain);
+
+      if (analyserRef.current) {
+        gain.connect(analyserRef.current);
+      }
+      if (mediaStreamDestRef.current) {
+        gain.connect(mediaStreamDestRef.current);
+      }
+      if (monitorGainNodeRef.current) {
+        gain.connect(monitorGainNodeRef.current);
+      }
+
+      osc.start(now);
+      osc.stop(now + 0.5);
+    } catch {
+      // Audio scheduling guard
+    }
+  }, [song.tempo, song.key, getChordFrequencies]);
+
+  const stopRecording = useCallback(() => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setIsPlaying(false);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        if (mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.requestData();
+        }
+      } catch (err) {
+        console.warn('requestData error:', err);
+      }
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.warn('MediaRecorder stop error:', err);
+      }
     }
   }, []);
 
   // Handle Play/Pause
-  const togglePlay = () => {
+  const togglePlay = async () => {
     setupAudioGraph();
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      void audioContextRef.current.resume();
+      try {
+        await audioContextRef.current.resume();
+      } catch (e) {
+        console.warn('Could not resume AudioContext:', e);
+      }
     }
 
     if (audioRef.current && resolvedAudioUrl) {
@@ -412,11 +644,13 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         audioRef.current.pause();
         setIsPlaying(false);
       } else {
-        audioRef.current.play().then(() => {
+        try {
+          await audioRef.current.play();
           setIsPlaying(true);
-        }).catch(err => {
+        } catch (err) {
           console.warn('Playback error:', err);
-        });
+          setIsPlaying(true);
+        }
       }
     } else {
       // Synthetic simulation playback if no external audio element
@@ -424,29 +658,63 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
     }
   };
 
-  // Synthetic timer ticker when no audio file is attached
+  // Synchronous Timer & Progress Ticker (Handles progress and auto-stop for both synthetic and real audio)
   useEffect(() => {
-    let timer: number;
-    if (isPlaying && (!audioRef.current || !resolvedAudioUrl)) {
-      timer = window.setInterval(() => {
-        setCurrentTime(t => {
-          const next = t + 0.1;
-          if (next >= duration) {
-            setIsPlaying(false);
-            return 0;
+    if (!isPlaying) return;
+
+    const intervalMs = 100;
+    const timer = window.setInterval(() => {
+      const dur = durationRef.current || 180;
+
+      if (!audioRef.current || !resolvedAudioUrl) {
+        // Synthetic mode: advance currentTime manually
+        setCurrentTime(prevTime => {
+          const nextTime = Math.round((prevTime + intervalMs / 1000) * 10) / 10;
+
+          // Play procedural acoustic notes
+          playProceduralAcousticBeat(nextTime);
+
+          if (isRecordingRef.current && dur > 0) {
+            const prog = Math.min(100, Math.max(0, Math.round((nextTime / dur) * 100)));
+            setRecordingProgress(prog);
           }
-          return next;
+
+          if (nextTime >= dur) {
+            if (isRecordingRef.current) {
+              stopRecording();
+            } else {
+              setIsPlaying(false);
+            }
+            return dur;
+          }
+
+          return nextTime;
         });
-      }, 100);
-    }
+      } else {
+        // Real audio mode: check if audio finished or reached duration
+        const cur = audioRef.current.currentTime;
+        if (isRecordingRef.current && dur > 0) {
+          const prog = Math.min(100, Math.max(0, Math.round((cur / dur) * 100)));
+          setRecordingProgress(prog);
+          if (cur >= dur - 0.25 || audioRef.current.ended) {
+            stopRecording();
+          }
+        }
+      }
+    }, intervalMs);
+
     return () => clearInterval(timer);
-  }, [isPlaying, resolvedAudioUrl, duration]);
+  }, [isPlaying, resolvedAudioUrl, playProceduralAcousticBeat, stopRecording]);
 
   // Handle Seeking
   const handleSeek = (newTime: number) => {
     setCurrentTime(newTime);
     if (audioRef.current && resolvedAudioUrl) {
       audioRef.current.currentTime = newTime;
+    }
+    const dur = durationRef.current || 180;
+    if (dur > 0) {
+      setRecordingProgress(Math.min(100, Math.max(0, Math.round((newTime / dur) * 100))));
     }
   };
 
@@ -985,24 +1253,30 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   // Audio Duration Listener
   const handleLoadedMetadata = () => {
-    if (audioRef.current && audioRef.current.duration) {
-      setDuration(audioRef.current.duration);
+    if (audioRef.current && audioRef.current.duration && !isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
+      setDuration(Math.round(audioRef.current.duration * 10) / 10);
     }
   };
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-      if (isRecording && duration > 0) {
-        setRecordingProgress(Math.min(100, Math.round((audioRef.current.currentTime / duration) * 100)));
+      const cur = audioRef.current.currentTime;
+      setCurrentTime(cur);
+      const dur = durationRef.current || 180;
+      if (isRecordingRef.current && dur > 0) {
+        setRecordingProgress(Math.min(100, Math.max(0, Math.round((cur / dur) * 100))));
+      }
+      if (isRecordingRef.current && dur > 0 && cur >= dur - 0.25) {
+        stopRecording();
       }
     }
   };
 
   const handleAudioEnded = () => {
-    setIsPlaying(false);
-    if (isRecording) {
+    if (isRecordingRef.current) {
       stopRecording();
+    } else {
+      setIsPlaying(false);
     }
   };
 
@@ -1012,6 +1286,14 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
     if (!canvas) return;
 
     setupAudioGraph();
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      try {
+        await audioContextRef.current.resume();
+      } catch (err) {
+        console.warn('AudioContext resume error:', err);
+      }
+    }
+
     setRecordedBlob(null);
     setRecordedVideoUrl(null);
     setDriveUploadSuccess(null);
@@ -1020,17 +1302,22 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
     // Ensure audio starts from beginning for clean render
     handleSeek(0);
+    setRecordingProgress(0);
 
     try {
+      // Paint first frame immediately so canvas has active content
+      renderFrame();
+
       // 30 FPS canvas video capture stream
       const canvasStream = canvas.captureStream(30);
 
       // Mix audio tracks into stream
       let combinedStream: MediaStream;
-      if (mediaStreamDestRef.current && mediaStreamDestRef.current.stream.getAudioTracks().length > 0) {
+      const audioTracks = mediaStreamDestRef.current?.stream.getAudioTracks() || [];
+      if (audioTracks.length > 0) {
         combinedStream = new MediaStream([
           ...canvasStream.getVideoTracks(),
-          ...mediaStreamDestRef.current.stream.getAudioTracks()
+          ...audioTracks
         ]);
       } else {
         combinedStream = canvasStream;
@@ -1040,10 +1327,12 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
       const mimeTypes = [
         'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=h264,opus',
         'video/webm',
+        'video/mp4;codecs=avc1,mp4a.40.2',
         'video/mp4'
       ];
-      let selectedMime = 'video/webm';
+      let selectedMime = '';
       for (const m of mimeTypes) {
         if (MediaRecorder.isTypeSupported(m)) {
           selectedMime = m;
@@ -1051,10 +1340,14 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         }
       }
 
-      const recorder = new MediaRecorder(combinedStream, {
-        mimeType: selectedMime,
+      const options: MediaRecorderOptions = {
         videoBitsPerSecond: RESOLUTION_PRESETS[resolution].bitrate
-      });
+      };
+      if (selectedMime) {
+        options.mimeType = selectedMime;
+      }
+
+      const recorder = new MediaRecorder(combinedStream, options);
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
@@ -1063,48 +1356,49 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
       };
 
       recorder.onstop = () => {
-        const finalBlob = new Blob(recordedChunksRef.current, { type: selectedMime });
+        const finalType = selectedMime || 'video/webm';
+        const finalBlob = new Blob(recordedChunksRef.current, { type: finalType });
         const videoUrl = URL.createObjectURL(finalBlob);
         setRecordedBlob(finalBlob);
         setRecordedVideoUrl(videoUrl);
         setIsRecording(false);
+        isRecordingRef.current = false;
         setActiveTab('export');
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start(1000); // 1-second chunks
+      recorder.start(500); // Deliver chunks every 500ms
+      isRecordingRef.current = true;
       setIsRecording(true);
-      setRecordingProgress(0);
 
       // Start playback
       if (audioRef.current && resolvedAudioUrl) {
-        void audioRef.current.play();
-        setIsPlaying(true);
-      } else {
-        setIsPlaying(true);
+        try {
+          await audioRef.current.play();
+        } catch (playErr) {
+          console.warn('Playback error during recording:', playErr);
+        }
       }
+      setIsPlaying(true);
     } catch (err: any) {
       console.error('Error starting video recording:', err);
       alert(`No se pudo iniciar la grabación del vídeo: ${err.message}`);
       setIsRecording(false);
+      isRecordingRef.current = false;
     }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    setIsPlaying(false);
   };
 
   // Download Recorded Video File
   const handleDownloadVideo = () => {
     if (!recordedBlob) return;
-    const cleanTitle = song.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const filename = `${cleanTitle}-visualizador-${resolution}.webm`;
+    const cleanTitle = song.title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    const filename = `${cleanTitle}-visualizador-${resolution}.${ext}`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(recordedBlob);
     a.download = filename;
@@ -1126,8 +1420,14 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         await GoogleDriveService.signInWithGoogle();
       }
 
-      const cleanTitle = song.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const filename = `${cleanTitle}-visualizador-${resolution}.webm`;
+      const cleanTitle = song.title
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `${cleanTitle}-visualizador-${resolution}.${ext}`;
 
       const result = await GoogleDriveService.uploadVideo(recordedBlob, filename, {
         songTitle: song.title,
@@ -1185,10 +1485,11 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
           <audio
             ref={audioRef}
             src={resolvedAudioUrl}
+            crossOrigin="anonymous"
+            playsInline
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleAudioEnded}
-            muted={isMuted}
           />
         )}
 
@@ -1664,7 +1965,7 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
                         ¡Vídeo renderizado con éxito!
                       </h3>
                       <p className="text-xs text-[var(--text-muted)]">
-                        Resolución: {selectedResConfig.width}x{selectedResConfig.height} ({resolution}) · Peso: {Math.round((recordedBlob?.size || 0) / 1024 / 1024 * 10) / 10} MB
+                        Resolución: {selectedResConfig.width}x{selectedResConfig.height} ({resolution}) · Peso: {formatFileSize(recordedBlob?.size || 0)}
                       </p>
                     </div>
                   </div>

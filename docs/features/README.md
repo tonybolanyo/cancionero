@@ -5,6 +5,7 @@ Características detalladas del proyecto y previsualizaciones.
 ## 📖 Contenidos
 
 - **[FOOTER_PREVIEW.md](FOOTER_PREVIEW.md)** - Previsualización y guía del footer
+- **[VIDEO_VISUALIZER.md](VIDEO_VISUALIZER.md)** - Generador de vídeo para YouTube y visualizador de audio Canvas
 
 ## 🎯 Características Principales
 

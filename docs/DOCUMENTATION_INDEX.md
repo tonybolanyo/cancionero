@@ -119,7 +119,8 @@ See [assets/SCREENSHOTS_AND_VIDEOS_GUIDE.md](assets/SCREENSHOTS_AND_VIDEOS_GUIDE
 | File | Purpose |
 |------|---------|
 | `README.md` | Features overview |
-| Feature-specific files | Individual feature documentation |
+| `FOOTER_PREVIEW.md` | Footer preview and usage guide |
+| `VIDEO_VISUALIZER.md` | YouTube video generator and Canvas audio visualizer |
 
 ### Development `/docs/development`
 
