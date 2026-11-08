@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { insertChordsIntoLyrics, getCleanChordSequence, ChordSegment } from '../src/lib/audio/chords';
-import { serializeToLrc, parseLrc } from '../src/lib/lyrics/parseLrc';
+import { serializeToLrc, parseLrc, stripChordsFromText } from '../src/lib/lyrics/parseLrc';
 import { SyncedLyricLine } from '../src/types/lyrics';
 import { songToMarkdown, markdownToSong } from '../src/utils/markdownParser';
 
@@ -20,10 +20,10 @@ Y el viento trae recuerdos de ayer`;
 
   const result = insertChordsIntoLyrics(transcribedText, detectedChords);
 
-  assert.ok(result.includes('[Am] Caminando por la calle vieja'));
-  assert.ok(result.includes('[G] Buscando una respuesta en el silencio'));
-  assert.ok(result.includes('[F] Las campanas suenan a lo lejos'));
-  assert.ok(result.includes('[E7] Y el viento trae recuerdos de ayer'));
+  assert.ok(result.includes('[Am] Caminando por la calle [G]vieja'));
+  assert.ok(result.includes('[G] Buscando una respuesta'));
+  assert.ok(result.includes('[F] Las campanas'));
+  assert.ok(result.includes('[E7] Y el viento'));
 });
 
 test('getCleanChordSequence removes consecutive duplicates and N.C. tokens', () => {

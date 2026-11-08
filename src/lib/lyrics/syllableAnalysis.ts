@@ -237,15 +237,18 @@ export function syllabifyLine(line: string): SyllableizedLine {
 
     // Syllabify the word
     const wordSyllables = syllabifyWord(token);
+    let tokenOffset = 0;
 
     for (const syl of wordSyllables) {
+      const originalCasedSyl = token.substring(tokenOffset, tokenOffset + syl.length) || syl;
       syllables.push({
-        text: syl,
+        text: originalCasedSyl,
         index: syllableIndex,
         startChar: charIndex,
-        endChar: charIndex + syl.length
+        endChar: charIndex + originalCasedSyl.length
       });
-      charIndex += syl.length;
+      charIndex += originalCasedSyl.length;
+      tokenOffset += originalCasedSyl.length;
       syllableIndex++;
     }
   }
@@ -367,7 +370,11 @@ export function reconstructLineWithChords(
     // Add chord if present
     const chord = chordMap.get(i);
     if (chord) {
-      result.push(`[${chord}]`);
+      if (i === 0 && lastEndChar === 0) {
+        result.push(`[${chord}] `);
+      } else {
+        result.push(`[${chord}]`);
+      }
     }
 
     // Add syllable text

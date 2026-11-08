@@ -19,9 +19,10 @@ import {
   Volume2,
   VolumeX,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Undo2
 } from 'lucide-react';
-import { Song, SongStatus } from '../types/song';
+import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
 import {
   songToMarkdown,
   markdownToSong,
@@ -36,6 +37,7 @@ import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
+import { insertChordsIntoSyllables } from '../lib/lyrics/lyricsChordIntegration';
 import { parseLrc } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { LrcSyncAssistant } from './LrcSyncAssistant';
@@ -83,6 +85,8 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>('');
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
+  const [savedAudioAnalysis, setSavedAudioAnalysis] = useState<SavedAudioAnalysis | null>(song?.audioAnalysis || null);
+  const [lyricsUndoHistory, setLyricsUndoHistory] = useState<string | null>(null);
   const [insertedChordsFeedback, setInsertedChordsFeedback] = useState<boolean>(false);
   const [transposeOffset, setTransposeOffset] = useState<number>(0);
   const [transposeFeedback, setTransposeFeedback] = useState<string | null>(null);
@@ -169,6 +173,11 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setRawMarkdown(songToMarkdown(song));
       setTransposeOffset(0);
       setTransposeFeedback(null);
+      setSavedAudioAnalysis(song.audioAnalysis || null);
+      setLyricsUndoHistory(null);
+      if (song.audioAnalysis?.chords && song.audioAnalysis.chords.length > 0) {
+        setDetectedChords(song.audioAnalysis.chords);
+      }
     } else {
       const newId = `cancion-${Date.now()}`;
       setId(newId);
@@ -190,6 +199,9 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       setLrc('');
       setShowLrcEditor(false);
       setTags(['acústico']);
+      setSavedAudioAnalysis(null);
+      setLyricsUndoHistory(null);
+      setDetectedChords([]);
       setLyrics(`## Estrofa 1\n[Am] Escribe el primer verso aquí\n[G] Segundo verso con acordes\n\n## Estribillo\n[F] Y aquí va el estribillo...`);
       
       const draftSong: Song = {
@@ -307,6 +319,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     suggestedLyricsChords?: string;
     tempoOffset?: number;
     chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => {
     if (data.tempo) setTempo(data.tempo.toString());
     if (data.key) setKey(data.key);
@@ -322,19 +335,37 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
     if (data.chords && data.chords.length > 0) {
       setDetectedChords(data.chords);
     }
+    if (data.audioAnalysis) {
+      setSavedAudioAnalysis(data.audioAnalysis);
+    }
     if (data.suggestedLyricsChords && (!lyrics || lyrics.includes('Escribe el primer verso aquí'))) {
       setLyrics(data.suggestedLyricsChords);
     }
   };
 
   const handleInsertDetectedChords = (chordsOverride?: ChordSegment[]) => {
-    const list = chordsOverride || detectedChords;
+    const list = chordsOverride || savedAudioAnalysis?.chords || detectedChords;
     if (!list || list.length === 0) return;
 
-    const updated = insertChordsIntoLyrics(lyrics, list);
+    // Save history for undo
+    setLyricsUndoHistory(lyrics);
+
+    const updated = insertChordsIntoSyllables(lyrics, list, {
+      lrcText: lrc || undefined,
+      audioDuration: savedAudioAnalysis?.durationSeconds,
+      tempo: tempo ? parseInt(tempo, 10) : savedAudioAnalysis?.tempo || 96
+    });
+
     setLyrics(updated);
     setInsertedChordsFeedback(true);
     setTimeout(() => setInsertedChordsFeedback(false), 2500);
+  };
+
+  const handleUndoChordInsertion = () => {
+    if (lyricsUndoHistory !== null) {
+      setLyrics(lyricsUndoHistory);
+      setLyricsUndoHistory(null);
+    }
   };
 
   const handleToggleAccidentalPreference = (newPref?: AccidentalPreference) => {
@@ -417,7 +448,11 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
 
     if (mode === 'raw_markdown') {
       try {
-        targetSong = markdownToSong(rawMarkdown, id);
+        const parsed = markdownToSong(rawMarkdown, id);
+        targetSong = {
+          ...parsed,
+          audioAnalysis: parsed.audioAnalysis || savedAudioAnalysis || undefined
+        };
       } catch (err: any) {
         setParseError('Error de sintaxis en el archivo Markdown. Corrige el frontmatter antes de guardar.');
         return;
@@ -464,6 +499,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         tags: tags.length > 0 ? tags : undefined,
         lyrics: lyrics.trim(),
         lrc: lrc.trim() || undefined,
+        audioAnalysis: savedAudioAnalysis || undefined,
         createdAt: song?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -697,6 +733,9 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
               <AudioAnalyzerSection
                 onApplyDetection={handleApplyAudioDetection}
                 onInsertChordsIntoLyrics={handleInsertDetectedChords}
+                canUndoInsertChords={lyricsUndoHistory !== null}
+                onUndoInsertChords={handleUndoChordInsertion}
+                savedAudioAnalysis={savedAudioAnalysis || undefined}
                 currentKey={key}
                 currentTempo={tempo}
                 currentAudioUrl={audioUrl}
@@ -1131,40 +1170,54 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                           {accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}
                         </button>
 
-                        {/* Botón: Insertar acordes detectados automáticamente */}
-                        <button
-                          type="button"
-                          onClick={() => handleInsertDetectedChords()}
-                          disabled={detectedChords.length === 0}
-                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
-                            insertedChordsFeedback
-                              ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-1 ring-emerald-400'
-                              : detectedChords.length > 0
-                              ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30 ring-1 ring-purple-400'
-                              : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)] opacity-55 cursor-not-allowed'
-                          }`}
-                          title={
-                            detectedChords.length > 0
-                              ? `Insertar ${detectedChords.length} acordes detectados (${getCleanChordSequence(detectedChords).join(' - ')}) sobre la letra`
-                              : 'Sube un audio en la sección de arriba para detectar los acordes de tu maqueta'
-                          }
-                        >
-                          {insertedChordsFeedback ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>¡Acordes insertados en la letra!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-3.5 h-3.5" />
-                              <span>
-                                {detectedChords.length > 0
-                                  ? `Insertar acordes detectados (${getCleanChordSequence(detectedChords).length})`
-                                  : 'Insertar acordes detectados automáticamente'}
-                              </span>
-                            </>
+                        {/* Botón: Insertar acordes detectados automáticamente en sílabas */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleInsertDetectedChords()}
+                            disabled={detectedChords.length === 0}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                              insertedChordsFeedback
+                                ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-1 ring-emerald-400'
+                                : detectedChords.length > 0
+                                ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30 ring-1 ring-purple-400'
+                                : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)] opacity-55 cursor-not-allowed'
+                            }`}
+                            title={
+                              detectedChords.length > 0
+                                ? `Insertar ${detectedChords.length} acordes detectados en las sílabas exactas de la letra (${getCleanChordSequence(detectedChords).join(' - ')})`
+                                : 'Sube un audio en la sección de arriba para detectar los acordes de tu maqueta'
+                            }
+                          >
+                            {insertedChordsFeedback ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>¡Acordes insertados en sílabas!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>
+                                  {detectedChords.length > 0
+                                    ? `Insertar en sílabas (${getCleanChordSequence(detectedChords).length})`
+                                    : 'Insertar acordes en sílabas'}
+                                </span>
+                              </>
+                            )}
+                          </button>
+
+                          {lyricsUndoHistory !== null && (
+                            <button
+                              type="button"
+                              onClick={handleUndoChordInsertion}
+                              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                              title="Deshacer la inserción de acordes y restaurar la letra anterior"
+                            >
+                              <Undo2 className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Deshacer</span>
+                            </button>
                           )}
-                        </button>
+                        </div>
                       </div>
                     </div>
 

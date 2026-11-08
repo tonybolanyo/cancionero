@@ -102,6 +102,8 @@ See [assets/SCREENSHOTS_AND_VIDEOS_GUIDE.md](assets/SCREENSHOTS_AND_VIDEOS_GUIDE
 | `COPILOT_INSTRUCTIONS.md` | For GitHub Copilot users |
 | `GOOGLE_AI_STUDIO_INSTRUCTIONS.md` | For Google AI Studio users |
 | `ORGANIZATION_SUMMARY.md` | Complete structure overview |
+| `LYRICS_SYNC_USER_GUIDE.md` | Syllable-level chord insertion & lyrics sync user guide |
+| `LYRICS_SYNC_TECHNICAL.md` | Technical architecture & SavedAudioAnalysis persistence |
 
 ### Getting Started `/docs/getting-started`
 

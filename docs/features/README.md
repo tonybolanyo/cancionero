@@ -40,25 +40,30 @@ Características detalladas del proyecto y previsualizaciones.
 - Migración automática en snapshots
 - Commit/push inmediato del renombrado
 
-### 🎙️ Detector de Audio
-- Análisis automático de tempo (BPM)
-- Detección de tonalidad
-- Identificación de escala musical
-- Detección de compás
-- Progresión de acordes
+### Detector de Audio y Armonia
+- Analisis automatico de tempo (BPM)
+- Deteccion de tonalidad y escala musical
+- Deteccion de compas metrico
+- Progresion de acordes segmentada en el tiempo
+- Insercion automatica de acordes en las silabas exactas de la letra
+- Persistencia del analisis acustico completo en el frontmatter Markdown de la cancion
+- Insercion disponible tanto en el analisis inicial como en cualquier edicion posterior
+- Funcion de deshacer (Undo) para revertir cambios en la letra
 - Uso de IA (Gemini) o DSP nativo (Web Audio API)
-- Seguro: sin keys en el código público
+- Seguro: sin credenciales en el codigo publico
 
-### 🔐 Seguridad
+### Seguridad
 - Acceso de autor autenticado
 - Personal Access Token (PAT) solo en navegador
-- Verificación directa contra API GitHub
-- Tokens en `sessionStorage` o `localStorage`
-- Repositorio 100% público y seguro
+- Verificacion directa contra API GitHub
+- Tokens en sessionStorage o localStorage
+- Repositorio 100% publico y seguro
 
-## 📄 Documentación Detallada
+## Documentacion Detallada
 
-Para más información sobre cada característica, consulta el directorio padre:
-- [../getting-started/](../getting-started/) - Guías de uso
-- [../styling/](../styling/) - Personalización visual
+Para mas informacion sobre cada caracteristica:
+- [LYRICS_SYNC_USER_GUIDE.md](../LYRICS_SYNC_USER_GUIDE.md) - Guia de usuario para insercion de acordes en silabas y sincronizacion
+- [LYRICS_SYNC_TECHNICAL.md](../LYRICS_SYNC_TECHNICAL.md) - Arquitectura tecnica y persistencia SavedAudioAnalysis
+- [../getting-started/](../getting-started/) - Guias de uso y atajos
+- [../styling/](../styling/) - Personalizacion visual
 - [../accessibility/](../accessibility/) - Accesibilidad

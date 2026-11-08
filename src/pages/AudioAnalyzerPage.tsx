@@ -3,6 +3,9 @@ import { ArrowLeft, Wand2 } from 'lucide-react';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { useAppNavigation } from '../context/NavigationContext';
 
+import { ChordSegment } from '../lib/audio/chords';
+import { SavedAudioAnalysis } from '../types/song';
+
 interface AudioAnalyzerPageProps {
   onCreateSongFromAudio?: (data: {
     tempo: number;
@@ -13,6 +16,8 @@ interface AudioAnalyzerPageProps {
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => void;
 }
 
@@ -30,6 +35,8 @@ export const AudioAnalyzerPage: React.FC<AudioAnalyzerPageProps> = ({
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => {
     if (onCreateSongFromAudio) {
       onCreateSongFromAudio(data);

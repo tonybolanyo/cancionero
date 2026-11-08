@@ -21,10 +21,12 @@ import {
   BarChart3,
   Cpu,
   Download,
-  Activity
+  Activity,
+  Undo2
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
+import { SavedAudioAnalysis } from '../types/song';
 import { TempoAnalysis, analyzeTempo, decodeAudioBuffer } from '../lib/audio/tempo';
 import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
 import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
@@ -48,8 +50,12 @@ interface AudioAnalyzerSectionProps {
     suggestedLyricsChords?: string;
     tempoOffset?: number;
     chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => void;
   onInsertChordsIntoLyrics?: (chords: ChordSegment[]) => void;
+  canUndoInsertChords?: boolean;
+  onUndoInsertChords?: () => void;
+  savedAudioAnalysis?: SavedAudioAnalysis;
   currentKey?: string;
   currentTempo?: string;
   currentAudioUrl?: string;
@@ -64,6 +70,9 @@ interface AudioAnalyzerSectionProps {
 export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   onApplyDetection,
   onInsertChordsIntoLyrics,
+  canUndoInsertChords,
+  onUndoInsertChords,
+  savedAudioAnalysis,
   currentKey,
   currentTempo,
   currentAudioUrl,
@@ -456,6 +465,30 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const handleApplyAll = () => {
     if (!analysisResult && !tempoAnalysis && !keyAnalysis && !meterAnalysis) return;
 
+    const chordsList = keyAnalysis?.chords || (analysisResult?.chords ? analysisResult.chords.map(c => ({
+      startTime: c.seconds ?? 0,
+      endTime: (c.seconds ?? 0) + 4,
+      chord: c.chord,
+      confidence: 0.85
+    })) : undefined);
+
+    const completeAudioAnalysis: SavedAudioAnalysis = {
+      analyzedAt: new Date().toISOString(),
+      source: analysisResult?.source || (keyAnalysis ? 'essentia_wasm' : 'client_dsp'),
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
+      tempoConfidence: tempoAnalysis ? 0.95 : analysisResult?.tempoConfidence,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
+      rawTempo: tempoAnalysis?.tempo ?? analysisResult?.rawTempo,
+      key: getEffectiveKey(),
+      scale: keyAnalysis?.scale === 'minor' ? 'Menor' : keyAnalysis?.scale === 'major' ? 'Mayor' : analysisResult?.scale,
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      durationSeconds: duration || analysisResult?.durationSeconds,
+      chordProgression: getChordProgressionSummary(),
+      chords: chordsList,
+      musicalNotes: analysisResult?.musicalNotes || (keyAnalysis ? `Tonalidad ${getEffectiveKey()} analizada con Essentia WASM.` : undefined)
+    };
+
     onApplyDetection({
       tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
       key: getEffectiveKey(),
@@ -465,7 +498,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       chordProgression: getChordProgressionSummary(),
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
-      chords: keyAnalysis?.chords || undefined
+      chords: chordsList,
+      audioAnalysis: completeAudioAnalysis
     });
 
     setApplied(true);
@@ -530,6 +564,67 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-300 flex items-center gap-2 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Saved Audio Analysis Card (when song already has audio analysis saved) */}
+      {savedAudioAnalysis && !file && (
+        <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-2.5 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center justify-center shrink-0 shadow-2xs">
+                <Music className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
+                    Análisis de Audio Guardado en la Canción
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 font-semibold">
+                    {savedAudioAnalysis.chords?.length || 0} acordes detectados
+                  </span>
+                  {savedAudioAnalysis.analyzedAt && (
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      ({new Date(savedAudioAnalysis.analyzedAt).toLocaleDateString('es-ES')})
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                  Tono: <strong className="text-[var(--accent-primary)] font-mono">{savedAudioAnalysis.key}</strong>
+                  {savedAudioAnalysis.scale && ` (${savedAudioAnalysis.scale})`} · Tempo: <strong className="font-mono">{savedAudioAnalysis.tempo} BPM</strong> · Compás: <strong className="font-mono">{savedAudioAnalysis.timeSignature || '4/4'}</strong>
+                  {savedAudioAnalysis.chordProgression && (
+                    <span className="hidden sm:inline font-mono text-[var(--text-muted)]"> · {savedAudioAnalysis.chordProgression}</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {onInsertChordsIntoLyrics && savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onInsertChordsIntoLyrics(savedAudioAnalysis.chords!)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Insertar automáticamente los acordes detectados en las sílabas de la letra"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Insertar acordes en sílabas</span>
+                </button>
+              )}
+
+              {canUndoInsertChords && onUndoInsertChords && (
+                <button
+                  type="button"
+                  onClick={onUndoInsertChords}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Deshacer el cambio de letra y restaurar la versión anterior"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Deshacer</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1258,15 +1353,28 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                           <span>CSV</span>
                         </button>
                         {onInsertChordsIntoLyrics && (
-                          <button
-                            type="button"
-                            onClick={() => onInsertChordsIntoLyrics(keyAnalysis.chords!)}
-                            className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 hover:bg-purple-500/30 text-purple-700 dark:text-purple-300 border border-purple-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                            title="Insertar esta progresión de acordes automáticamente en el editor de letra"
-                          >
-                            <Wand2 className="w-2.5 h-2.5 text-purple-500" />
-                            <span>Insertar en letra</span>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onInsertChordsIntoLyrics(keyAnalysis.chords!)}
+                              className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Insertar esta progresión de acordes automáticamente en las sílabas correspondientes de la letra"
+                            >
+                              <Sparkles className="w-2.5 h-2.5" />
+                              <span>Insertar en sílabas</span>
+                            </button>
+                            {canUndoInsertChords && onUndoInsertChords && (
+                              <button
+                                type="button"
+                                onClick={onUndoInsertChords}
+                                className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="Deshacer el cambio de letra y restaurar la versión anterior"
+                              >
+                                <Undo2 className="w-2.5 h-2.5 text-amber-500" />
+                                <span>Deshacer</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1324,27 +1432,74 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleApplyAll}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
-                applied
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)]'
-              }`}
-            >
-              {applied ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>¡Aplicado al Formulario!</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Aplicar datos al formulario</span>
-                </>
+            <div className="flex items-center gap-2">
+              {onInsertChordsIntoLyrics && ((analysisResult.chords && analysisResult.chords.length > 0) || (keyAnalysis?.chords && keyAnalysis.chords.length > 0)) && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chordsToInsert: ChordSegment[] = [];
+                      if (analysisResult.chords && analysisResult.chords.length > 0) {
+                        analysisResult.chords.forEach((c, idx, arr) => {
+                          const start = typeof c.seconds === 'number' ? c.seconds : idx * 3.0;
+                          const nextStart = arr[idx + 1]?.seconds;
+                          const end = typeof nextStart === 'number' ? nextStart : start + 3.0;
+                          chordsToInsert.push({
+                            startTime: start,
+                            endTime: end,
+                            chord: c.chord,
+                            confidence: 0.95
+                          });
+                        });
+                      } else if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+                        chordsToInsert.push(...keyAnalysis.chords);
+                      }
+                      if (chordsToInsert.length > 0) {
+                        onInsertChordsIntoLyrics(chordsToInsert);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                    title="Insertar acordes detectados automáticamente en las sílabas exactas de la letra"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Insertar en sílabas ({analysisResult.chords?.length || keyAnalysis?.chords?.length})</span>
+                  </button>
+                  {canUndoInsertChords && onUndoInsertChords && (
+                    <button
+                      type="button"
+                      onClick={onUndoInsertChords}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                      title="Deshacer la inserción de acordes en la letra"
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      <span>Deshacer</span>
+                    </button>
+                  )}
+                </div>
               )}
-            </button>
+
+              <button
+                type="button"
+                onClick={handleApplyAll}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                  applied
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)]'
+                }`}
+              >
+                {applied ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>¡Aplicado al Formulario!</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Aplicar datos al formulario</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Metric Badges Grid: Tempo, Key, Scale, Meter */}

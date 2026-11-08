@@ -4,16 +4,31 @@
  * Includes comprehensive validation and error handling
  */
 
-import { ChordSegment, getCleanChordSequence } from '../audio/chords';
+import type { ChordSegment } from '../audio/chords';
 import { ParsedLrc, SyncedLyricLine, LrcMetadata, formatLrcTimestamp } from '../../types/lyrics';
 import { parseLrc, stripChordsFromText, stripLrcTimestamps } from './parseLrc';
 import {
   generateLrcWithSyllableTiming,
   generateLrcFromPlainLyricsWithChords,
   upgradeLrcToSyllableLevel,
+  calculateSyllableTiming,
   TimingDistributionStrategy
 } from './lrcSyncGenerator';
-import { syllabifyLine, SyllableizedLine } from './syllableAnalysis';
+import { syllabifyLine, SyllableizedLine, reconstructLineWithChords } from './syllableAnalysis';
+
+export function getCleanChordSequence(
+  chords: (ChordSegment | { timestamp?: string; seconds?: number; chord?: string; [key: string]: unknown } | string)[]
+): string[] {
+  const seq: string[] = [];
+  for (const item of chords) {
+    const chordName = typeof item === 'string' ? item.trim() : (item.chord ? String(item.chord).trim() : '');
+    if (!chordName || chordName === 'N.C.') continue;
+    if (seq.length === 0 || seq[seq.length - 1] !== chordName) {
+      seq.push(chordName);
+    }
+  }
+  return seq;
+}
 
 export interface LyricsAndChordsSync {
   lrc: string;
@@ -285,6 +300,279 @@ export function mergeDetectedChordsWithExisting(
       `Failed to merge chords: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+}
+
+export interface InsertChordsOptions {
+  lrc?: string;
+  lrcText?: string;
+  audioDuration?: number;
+  bpm?: number;
+  tempo?: number;
+  tempoOffset?: number;
+  timingStrategy?: TimingDistributionStrategy;
+}
+
+/**
+ * Automatically inserts detected musical chords into the corresponding syllables of the lyrics.
+ * Uses syllable-level timing from LRC timestamps or audio analysis duration / BPM estimation.
+ * Preserves Markdown headers (## Estrofa, ## Coro, etc.), empty lines, and original punctuation/spacing.
+ */
+export function insertChordsIntoSyllables(
+  lyrics: string,
+  detectedChords: (ChordSegment | { timestamp?: string; seconds?: number; chord: string } | string)[],
+  options?: InsertChordsOptions
+): string {
+  if (!detectedChords || detectedChords.length === 0) {
+    return lyrics;
+  }
+
+  // 1. Normalize detected chords into clean chord array and segment array with timestamps
+  const cleanChords = getCleanChordSequence(detectedChords);
+  if (cleanChords.length === 0) {
+    return lyrics;
+  }
+
+  let normalizedSegments: ChordSegment[] = [];
+  let hasTimestamps = false;
+
+  for (let i = 0; i < detectedChords.length; i++) {
+    const item = detectedChords[i];
+    if (typeof item === 'string') {
+      normalizedSegments.push({
+        startTime: 0,
+        endTime: 0,
+        chord: item.trim(),
+        confidence: 1
+      });
+    } else if ('startTime' in item && typeof item.startTime === 'number') {
+      hasTimestamps = true;
+      normalizedSegments.push({
+        startTime: item.startTime,
+        endTime: typeof item.endTime === 'number' ? item.endTime : item.startTime + 2.0,
+        chord: item.chord.trim(),
+        confidence: typeof item.confidence === 'number' ? item.confidence : 1
+      });
+    } else if ('seconds' in item && typeof item.seconds === 'number') {
+      hasTimestamps = true;
+      normalizedSegments.push({
+        startTime: item.seconds,
+        endTime: item.seconds + 2.0,
+        chord: item.chord.trim(),
+        confidence: 1
+      });
+    } else if ('timestamp' in item && typeof item.timestamp === 'string') {
+      const parts = item.timestamp.split(':');
+      if (parts.length === 2) {
+        const sec = parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+        if (!isNaN(sec)) {
+          hasTimestamps = true;
+          normalizedSegments.push({
+            startTime: sec,
+            endTime: sec + 2.0,
+            chord: item.chord.trim(),
+            confidence: 1
+          });
+        }
+      }
+    }
+  }
+
+  // Filter out any empty chord names
+  normalizedSegments = normalizedSegments.filter(s => s.chord && s.chord !== 'N.C.');
+
+  // If no valid segments with timing, create synthetic timing from cleanChords
+  if (!hasTimestamps || normalizedSegments.length === 0) {
+    normalizedSegments = cleanChords.map((chord, idx) => ({
+      startTime: idx * 4.0,
+      endTime: (idx + 1) * 4.0,
+      chord,
+      confidence: 1
+    }));
+  }
+
+  // 2. If lyrics are blank or default placeholder, generate initial skeleton
+  const isDefaultOrEmpty =
+    !lyrics ||
+    !lyrics.trim() ||
+    lyrics.includes('Escribe el primer verso aquí') ||
+    lyrics.includes('Segundo verso con acordes');
+
+  if (isDefaultOrEmpty) {
+    const c1 = cleanChords[0] || 'C';
+    const c2 = cleanChords[1] || cleanChords[0] || 'G';
+    const c3 = cleanChords[2] || cleanChords[0] || 'Am';
+    const c4 = cleanChords[3] || cleanChords[1] || 'F';
+
+    return [
+      '## Estrofa 1',
+      `[${c1}] Primer verso de la estrofa`,
+      `[${c2}] Segundo verso con melodía`,
+      `[${c3}] Tercer verso en desarrollo`,
+      `[${c4}] Cuarto verso hacia la transición`,
+      '',
+      '## Estribillo',
+      `[${cleanChords[cleanChords.length > 4 ? 4 : 0] || c1}] Línea principal del estribillo`,
+      `[${cleanChords[cleanChords.length > 5 ? 5 : 1] || c2}] Elevación melódica`,
+      `[${cleanChords[cleanChords.length > 6 ? 6 : 2] || c3}] Fuerza armónica`,
+      `[${cleanChords[cleanChords.length > 7 ? 7 : 3] || c4}] Cierre de la sección`,
+      ''
+    ].join('\n');
+  }
+
+  // 3. Process lines and determine timing for each lyric line
+  const rawLines = lyrics.split('\n');
+  
+  // Extract parsed LRC line timings if available
+  const lrcLineMap = new Map<number, { startTime: number; endTime: number }>();
+  const lrcSource = options?.lrcText || options?.lrc;
+  if (lrcSource && lrcSource.trim()) {
+    try {
+      const parsedLrcData = parseLrc(lrcSource);
+      if (parsedLrcData.lines.length > 0) {
+        let lrcIdx = 0;
+        for (let i = 0; i < rawLines.length; i++) {
+          const trimmed = rawLines[i].trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          if (lrcIdx < parsedLrcData.lines.length) {
+            const currentLrc = parsedLrcData.lines[lrcIdx];
+            const nextLrc = parsedLrcData.lines[lrcIdx + 1];
+            const dur = nextLrc ? Math.max(1.5, nextLrc.time - currentLrc.time) : 4.0;
+            lrcLineMap.set(i, {
+              startTime: currentLrc.time,
+              endTime: currentLrc.time + dur
+            });
+            lrcIdx++;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not extract line timing from LRC', e);
+    }
+  }
+
+  // Count sung lines to estimate spacing if LRC wasn't present
+  const sungLineIndices: number[] = [];
+  rawLines.forEach((l, idx) => {
+    const t = l.trim();
+    if (t && !t.startsWith('#')) {
+      sungLineIndices.push(idx);
+    }
+  });
+
+  const totalSung = sungLineIndices.length;
+  const audioDur = options?.audioDuration && options.audioDuration > 5
+    ? options.audioDuration
+    : normalizedSegments[normalizedSegments.length - 1].endTime || (totalSung * 4.0);
+
+  const tempoOffset = options?.tempoOffset || 0;
+  const availableSingingDuration = Math.max(10, audioDur - tempoOffset);
+  const estimatedSecondsPerLine = totalSung > 0
+    ? Math.max(2.5, Math.min(10.0, availableSingingDuration / totalSung))
+    : 4.0;
+
+  const timingStrategy = options?.timingStrategy || 'phonetic';
+
+  // 4. Transform each line by positioning chords on syllables
+  let sungCount = 0;
+  let lastPlacedChord: string | null = null;
+  let fallbackChordIdx = 0;
+
+  const resultLines = rawLines.map((line, lineIndex) => {
+    const trimmed = line.trim();
+
+    // Preserve Markdown headers (##, #) and blank lines
+    if (!trimmed || trimmed.startsWith('#')) {
+      return line;
+    }
+
+    // Determine line timing window
+    let lineStart: number;
+    let lineEnd: number;
+
+    const fromLrc = lrcLineMap.get(lineIndex);
+    if (fromLrc) {
+      lineStart = fromLrc.startTime;
+      lineEnd = fromLrc.endTime;
+    } else {
+      lineStart = tempoOffset + sungCount * estimatedSecondsPerLine;
+      lineEnd = lineStart + estimatedSecondsPerLine;
+    }
+    sungCount++;
+
+    // Clean any existing chords in brackets from the line to re-position on exact syllables
+    const cleanLine = stripChordsFromText(line);
+    const syllabized = syllabifyLine(cleanLine);
+
+    if (syllabized.syllableCount === 0) {
+      return line;
+    }
+
+    // Calculate exact timing for each syllable within the line's window
+    const syllableTimingMap = calculateSyllableTiming(
+      syllabized.syllables,
+      lineStart,
+      lineEnd,
+      timingStrategy
+    );
+
+    const chordMap = new Map<number, string>();
+
+    // Chords active or transitioning within this line window
+    const chordsInWindow = normalizedSegments.filter(
+      c => c.endTime > lineStart && c.startTime < lineEnd
+    );
+
+    if (chordsInWindow.length > 0) {
+      // 1. Initial chord at the start of the line (syllable 0)
+      const initialChord = chordsInWindow[0].chord;
+      chordMap.set(0, initialChord);
+      lastPlacedChord = initialChord;
+
+      // 2. Transitions occurring during the line
+      for (const chordSeg of chordsInWindow) {
+        // If this chord starts after lineStart, map it to the closest syllable
+        if (chordSeg.startTime > lineStart + 0.3 && chordSeg.chord !== lastPlacedChord) {
+          let closestSyllableIndex = 0;
+          let minTimeDiff = Infinity;
+
+          for (let sylIdx = 0; sylIdx < syllabized.syllables.length; sylIdx++) {
+            const sylTime = syllableTimingMap.get(sylIdx) ?? (lineStart + (sylIdx / syllabized.syllables.length) * (lineEnd - lineStart));
+            const diff = Math.abs(sylTime - chordSeg.startTime);
+            if (diff < minTimeDiff) {
+              minTimeDiff = diff;
+              closestSyllableIndex = sylIdx;
+            }
+          }
+
+          // Do not overwrite syllable 0 if it was placed
+          if (closestSyllableIndex > 0 && !chordMap.has(closestSyllableIndex)) {
+            chordMap.set(closestSyllableIndex, chordSeg.chord);
+            lastPlacedChord = chordSeg.chord;
+          }
+        }
+      }
+    } else {
+      // Fallback: distribute progression cyclically across lines
+      const chordToPlace = cleanChords[fallbackChordIdx % cleanChords.length];
+      chordMap.set(0, chordToPlace);
+      fallbackChordIdx++;
+
+      // If the line is long (>= 7 syllables) and more chords exist, place harmonic mid-phrase chord
+      if (syllabized.syllableCount >= 7 && cleanChords.length > 1) {
+        const midChord = cleanChords[fallbackChordIdx % cleanChords.length];
+        const midSyl = Math.floor(syllabized.syllableCount / 2);
+        if (midChord !== chordToPlace) {
+          chordMap.set(midSyl, midChord);
+          fallbackChordIdx++;
+        }
+      }
+    }
+
+    // Reconstruct line with chords positioned at syllables, preserving whitespace and punctuation
+    return reconstructLineWithChords(syllabized, chordMap);
+  });
+
+  return resultLines.join('\n');
 }
 
 /**

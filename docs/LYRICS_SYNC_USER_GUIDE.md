@@ -406,7 +406,7 @@ function LyricsEditor() {
 
       {syncState.warnings && (
         <section className="warnings">
-          <h3>⚠️ Warnings</h3>
+          <h3>Warnings</h3>
           <ul>
             {syncState.warnings.map(w => <li key={w}>{w}</li>)}
           </ul>
@@ -415,7 +415,7 @@ function LyricsEditor() {
 
       {syncState.error && (
         <section className="error">
-          <h3>❌ Error</h3>
+          <h3>Error</h3>
           <p>{syncState.error}</p>
         </section>
       )}
@@ -423,6 +423,51 @@ function LyricsEditor() {
   );
 }
 ```
+
+## Automatic Syllable-Level Chord Insertion
+
+The song editor and audio analyzer include automated chord mapping that aligns detected musical harmonies to the exact syllables in your lyrics.
+
+### Initial Audio Analysis
+
+When you load a demo or voice recording in the Audio Analyzer (either via the modal dialog or the full analyzer page):
+
+1. Upload or drag an audio file (MP3, WAV, M4A, OGG).
+2. The acoustic DSP engine calculates BPM, musical key, scale, meter, and time-stamped chord progressions.
+3. In the Analysis Results Card or the Chords Timeline bar, click the button labeled:
+   `Insertar en silabas (N)`
+4. The detected chords are calculated against syllable boundaries and inserted directly into your lyrics text.
+5. If you wish to revert the insertion, click the adjacent `Deshacer` button immediately.
+
+### Persistent Audio Analysis Storage
+
+When you save the song, the complete audio detection result is saved directly into the song file's Markdown YAML frontmatter under `audioAnalysis`. This stored data includes:
+- Detected key, scale, and BPM
+- Meter and downbeat offset
+- Audio length and tuning recommendation
+- Full timestamped chord progression list with confidence scores
+
+Because this analysis is saved with the rest of your song metadata, you do not need to reanalyze the audio file when returning to the song in future sessions.
+
+### Inserting Chords Anytime in the Song Editor
+
+Whenever you edit a song that already has saved audio analysis data:
+
+1. Open the song in the Studio Editor (`lyrics.md` tab) or the Song Editor Modal.
+2. In the lyrics toolbar, notice the `Insertar en silabas` button showing the number of available chords.
+3. You can also access this action from the top menu bar under:
+   `Musica -> Insertar acordes en silabas`
+4. Clicking this button replaces any placeholder or previous chords by mapping the stored progression to the syllables of your current verses.
+5. You can also access this from the `audio-studio.dsp` tab under the Analysis Results Card and Chord Timeline.
+
+### Undoing Chord Insertion
+
+If you want to return to your previous lyrics before inserting chords:
+- Click the `Deshacer` button in the lyrics toolbar (next to the insert button).
+- Or select `Editar -> Deshacer insercion de acordes` from the menu bar.
+- Or select `Musica -> Deshacer insercion de acordes`.
+
+Your exact previous lyrics text will be immediately restored.
 
 ## Best Practices
 
@@ -437,6 +482,7 @@ function LyricsEditor() {
 
 ## See Also
 
-- [Technical Documentation](./LYRICS_SYNC_TECHNICAL.md) - Deep dive into algorithms
+- [Technical Documentation](./LYRICS_SYNC_TECHNICAL.md) - Deep dive into algorithms and persistence schema
 - [Integration Example](./INTEGRATION_EXAMPLE.ts) - Code examples
 - [Chord Detection API](../src/lib/audio/chords.ts) - Chord detection details
+

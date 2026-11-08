@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { X, Sparkles, Wand2, Plus, Maximize2, Minimize2 } from 'lucide-react';
 import { AudioAnalyzerSection } from './AudioAnalyzerSection';
 
+import { ChordSegment } from '../lib/audio/chords';
+import { SavedAudioAnalysis } from '../types/song';
+
 interface AudioAnalyzerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -14,6 +17,8 @@ interface AudioAnalyzerModalProps {
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => void;
 }
 
@@ -35,6 +40,8 @@ export const AudioAnalyzerModal: React.FC<AudioAnalyzerModalProps> = ({
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => {
     if (onCreateSongFromAudio) {
       onCreateSongFromAudio(data);

@@ -1,4 +1,4 @@
-import { Song, SongStatus } from '../types/song';
+import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
 import JSZip from 'jszip';
 
 // Musical notes scale for chord transposition
@@ -234,6 +234,7 @@ export function songToMarkdown(song: Song): string {
     song?.coverImage ? `coverImage: "${song.coverImage}"` : null,
     song?.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
     song?.lrc ? `lrc: "${song.lrc.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song?.audioAnalysis ? `audioAnalysis: "${JSON.stringify(song.audioAnalysis).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : null,
     song?.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${String(t).replace(/"/g, '')}"`).join(', ')}]` : null,
     `createdAt: "${safeCreatedAt}"`,
     `updatedAt: "${safeUpdatedAt}"`,
@@ -306,6 +307,15 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     }
   }
 
+  let parsedAudioAnalysis: SavedAudioAnalysis | undefined = undefined;
+  if (meta.audioAnalysis) {
+    try {
+      parsedAudioAnalysis = JSON.parse(meta.audioAnalysis);
+    } catch (e) {
+      console.warn('Failed to parse audioAnalysis from markdown frontmatter', e);
+    }
+  }
+
   return {
     id,
     title: meta.title || 'Sin título',
@@ -331,6 +341,7 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     coverImage: meta.coverImage || undefined,
     notes: meta.notes || undefined,
     lrc: meta.lrc || undefined,
+    audioAnalysis: parsedAudioAnalysis,
     tags: parsedTags && parsedTags.length > 0 ? parsedTags : undefined,
     lyrics: lyricsBody,
     createdAt: meta.createdAt || now,

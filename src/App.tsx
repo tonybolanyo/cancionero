@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Song, SongStatus, SongViewMode } from './types/song';
+import { Song, SongStatus, SongViewMode, SavedAudioAnalysis } from './types/song';
+import { ChordSegment } from './lib/audio/chords';
 import { Album } from './types/album';
 import { StorageService } from './services/storageService';
 import { songToMarkdown } from './utils/markdownParser';
@@ -454,6 +455,8 @@ function CancioneroApp() {
     chordProgression?: string;
     suggestedLyricsChords?: string;
     tempoOffset?: number;
+    chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => {
     const newId = `cancion-${Date.now()}`;
     const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
@@ -477,6 +480,7 @@ function CancioneroApp() {
       notes: initialNotes,
       tags: ['acústico', 'maqueta'],
       lyrics: data.suggestedLyricsChords || `## Estrofa 1\n[${data.key || 'Am'}] Primer verso...\n[C] Segundo verso\n\n## Estribillo\n[G] Y el estribillo asciende...`,
+      audioAnalysis: data.audioAnalysis,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

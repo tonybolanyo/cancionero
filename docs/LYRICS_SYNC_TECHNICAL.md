@@ -394,56 +394,82 @@ npm test
 
 ### Core Functions
 
-```typescript
-// Syllable Analysis
-function syllabifyWord(word: string): string[]
-function syllabifyLine(line: string): SyllableizedLine
-function findSyllableAtPosition(
-  syllabized: SyllableizedLine,
-  charPosition: number
-): Syllable | null
-
-// LRC Generation
-function calculateSyllableTiming(
-  syllables: Syllable[],
-  startTime: number,
-  endTime: number,
-  strategy?: TimingDistributionStrategy
-): Map<number, number>
-
-function generateSyllableLrcLine(
-  lineText: string,
-  lineStartTime: number,
-  lineEndTime: number,
-  chordsInWindow?: ChordSegment[],
-  timingStrategy?: TimingDistributionStrategy,
-  lineId?: string
-): LrcLineWithChords
-
-// Integration
-function generateSyncedLrcFromPlainLyrics(
-  plainLyrics: string,
-  detectedChords?: ChordSegment[],
-  metadata?: LrcMetadata,
-  options?: { timingStrategy?: TimingDistributionStrategy; linesPerMinute?: number }
-): LyricsAndChordsSync
-
-function upgradeExistingLrcWithChords(
-  lrcContent: string,
-  detectedChords: ChordSegment[],
-  timingStrategy?: TimingDistributionStrategy
-): LyricsAndChordsSync
-
-function analyzeLyricsStructure(
-  lyrics: string
-): Array<{ lineNumber: number; text: string; syllables: SyllableizedLine; syllableCount: number }>
-
-function estimateLyricsTimings(
+// Syllable-Level Chord Insertion and Persistence
+function insertChordsIntoSyllables(
   lyrics: string,
-  options?: { linesPerMinute?: number; tempoBeats?: number[] }
-): Array<{ text: string; startTime: number; endTime: number }>
+  detectedChords: (ChordSegment | string)[],
+  options?: InsertChordsOptions
+): string
+
+interface InsertChordsOptions {
+  timingStrategy?: TimingDistributionStrategy;
+  lrcText?: string;
+  audioDuration?: number;
+  tempo?: number;
+  tempoOffset?: number;
+}
+
+## Audio Analysis Persistence Architecture
+
+### SavedAudioAnalysis Schema
+
+To avoid continuous audio reprocessing, detected audio metrics are saved directly inside the song model and serialized to the song Markdown YAML frontmatter.
+
+```typescript
+export interface SavedAudioAnalysis {
+  analyzedAt: string;                // ISO timestamp of analysis
+  source: 'dsp_local' | 'gemini_ai'; // Detection engine source
+  tempo?: number;                    // Calculated BPM
+  tempoConfidence?: number;          // Beat confidence score (0 to 1)
+  tempoOffset?: number;              // Downbeat offset in seconds
+  rawTempo?: number;                 // Pre-adjusted tempo
+  key?: string;                      // Musical key (e.g., Am, G, Dm)
+  scale?: 'major' | 'minor';         // Modal scale
+  timeSignature?: string;            // Time signature (4/4, 3/4, 6/8, 2/4)
+  tuning?: string;                   // Instrument tuning recommendation
+  durationSeconds?: number;          // Full audio length in seconds
+  chordProgression?: string;         // Summary progression string
+  chords?: ChordSegment[];           // Full time-stamped chord list
+  musicalNotes?: string;             // Additional analysis context
+}
 ```
+
+### Serialization in Markdown Frontmatter
+
+Audio analysis is persisted in the song Markdown file frontmatter under the `audioAnalysis` field. The object is serialized into a JSON string with proper YAML escaping:
+
+```markdown
+---
+id: "cancion-ejemplo"
+title: "Cancion de Ejemplo"
+status: "draft"
+key: "Am"
+tempo: 96
+timeSignature: "4/4"
+audioAnalysis: "{\"analyzedAt\":\"2025-05-10T14:30:00.000Z\",\"source\":\"dsp_local\",\"tempo\":96,\"key\":\"Am\",\"scale\":\"minor\",\"timeSignature\":\"4/4\",\"durationSeconds\":180,\"chords\":[{\"startTime\":0,\"endTime\":2.5,\"chord\":\"Am\",\"confidence\":0.95},{\"startTime\":2.5,\"endTime\":5,\"chord\":\"G\",\"confidence\":0.92}]}"
+---
+## Estrofa 1
+[Am] Caminando por la calle [G]vieja
+```
+
+When reading a file via `markdownToSong`, the parser parses `meta.audioAnalysis` safely back into the structured `SavedAudioAnalysis` object.
+
+## Syllable-Level Chord Insertion Workflow
+
+The `insertChordsIntoSyllables` function performs syllable-level mapping:
+
+1. **Chord Normalization**: Validates input chord segments, sorts by start time, and falls back to cyclic progression if timestamps are not present.
+2. **Lyric Preservation**: Skips Markdown section headers (`## Intro`, `## Estrofa`, `## Estribillo`) and empty lines without modification.
+3. **Line Time Window Calculation**: If an LRC track is provided, line timing windows are calculated from exact LRC cues. If LRC is unavailable, line durations are estimated proportionally using tempo and audio duration.
+4. **Syllable Segmentation**: The verse text is syllabified into syllable tokens with character indices, preserving original casing, punctuation, and accents.
+5. **Harmonic Mapping**: For every chord segment starting within a line, the chord onset timestamp is mapped to the syllable whose computed onset is closest in time.
+6. **Reconstruction**: `reconstructLineWithChords` inserts each chord bracket (`[Chord]`) before the designated syllable. Chords at the beginning of a line include a trailing space (`[Am] Texto`) to follow standard cancionero conventions.
+
+## Undo Mechanism
+
+The editor stores the previous lyrics string in `lyricsUndoHistory` before applying syllable insertion. If the user wishes to revert, clicking the Undo button (`Deshacer`) restores the exact previous lyrics state and clears the undo stack.
 
 ## License
 
 Part of the Cancionero project. See LICENSE file for details.
+

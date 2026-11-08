@@ -1,11 +1,12 @@
 import { PITCH_CLASSES, WindowedChroma, computeWindowedChromagrams } from './chroma';
 import { extractMonoChannelData } from './bufferUtils';
+import { insertChordsIntoSyllables, InsertChordsOptions } from '../lyrics/lyricsChordIntegration';
 
 export interface ChordSegment {
   startTime: number;
   endTime: number;
   chord: string;
-  confidence: number;
+  confidence?: number;
 }
 
 export type ChordType =
@@ -440,7 +441,7 @@ export function exportChordsToJSON(chords: ChordSegment[], songTitle?: string): 
       startTime: Number(c.startTime.toFixed(3)),
       endTime: Number(c.endTime.toFixed(3)),
       duration: Number((c.endTime - c.startTime).toFixed(3)),
-      confidence: Number(c.confidence.toFixed(2))
+      confidence: Number((c.confidence ?? 1).toFixed(2))
     }))
   };
   return JSON.stringify(exportPayload, null, 2);
@@ -453,7 +454,7 @@ export function exportChordsToCSV(chords: ChordSegment[]): string {
   const headers = 'chord,start_time,end_time,duration_seconds,confidence\n';
   const rows = chords.map(c => {
     const dur = (c.endTime - c.startTime).toFixed(3);
-    return `${c.chord},${c.startTime.toFixed(3)},${c.endTime.toFixed(3)},${dur},${c.confidence.toFixed(2)}`;
+    return `${c.chord},${c.startTime.toFixed(3)},${c.endTime.toFixed(3)},${dur},${(c.confidence ?? 1).toFixed(2)}`;
   }).join('\n');
   return headers + rows;
 }
@@ -476,10 +477,12 @@ export function downloadChordExport(content: string, filename: string, mimeType:
 /**
  * Extracts a deduplicated and sanitized chord sequence (ignoring consecutive duplicates and 'N.C.').
  */
-export function getCleanChordSequence(chords: (ChordSegment | string)[]): string[] {
+export function getCleanChordSequence(
+  chords: (ChordSegment | { timestamp?: string; seconds?: number; chord?: string; [key: string]: unknown } | string)[]
+): string[] {
   const seq: string[] = [];
   for (const item of chords) {
-    const chordName = typeof item === 'string' ? item.trim() : item.chord?.trim();
+    const chordName = typeof item === 'string' ? item.trim() : (item.chord ? String(item.chord).trim() : '');
     if (!chordName || chordName === 'N.C.') continue;
     if (seq.length === 0 || seq[seq.length - 1] !== chordName) {
       seq.push(chordName);
@@ -488,78 +491,18 @@ export function getCleanChordSequence(chords: (ChordSegment | string)[]): string
   return seq;
 }
 
+export { insertChordsIntoSyllables };
+export type { InsertChordsOptions };
+
 /**
- * Automatically integrates detected musical chords into the song's lyrics editor text.
- * 
- * Behavior:
- * 1. If lyrics are blank or default placeholder: generates a structured song skeleton with verses & chorus.
- * 2. If lyrics already contain lines of text without chords: prepends the cyclical chord progression
- *    at the beginning of each non-empty lyric line (skipping Markdown headers like ## Estrofa).
- * 3. If lyrics already have chords in brackets ([Am], etc.): smoothly replaces existing bracketed chords
- *    with the newly detected progression while preserving the lyrics.
+ * Automatically integrates detected musical chords into the song's lyrics editor text
+ * positioned at the corresponding syllables according to audio analysis.
  */
 export function insertChordsIntoLyrics(
   currentLyrics: string,
-  detectedChords: (ChordSegment | string)[]
+  detectedChords: (ChordSegment | string)[],
+  options?: InsertChordsOptions
 ): string {
-  const cleanChords = getCleanChordSequence(detectedChords);
-  if (cleanChords.length === 0) {
-    return currentLyrics;
-  }
-
-  const isDefaultOrEmpty =
-    !currentLyrics ||
-    !currentLyrics.trim() ||
-    currentLyrics.includes('Escribe el primer verso aquí') ||
-    currentLyrics.includes('Segundo verso con acordes');
-
-  if (isDefaultOrEmpty) {
-    const c1 = cleanChords[0] || 'C';
-    const c2 = cleanChords[1] || cleanChords[0] || 'G';
-    const c3 = cleanChords[2] || cleanChords[0] || 'Am';
-    const c4 = cleanChords[3] || cleanChords[1] || 'F';
-
-    return [
-      '## Estrofa 1',
-      `[${c1}] Primer verso de la estrofa`,
-      `[${c2}] Segundo verso con melodía`,
-      `[${c3}] Tercer verso en desarrollo`,
-      `[${c4}] Cuarto verso hacia la transición`,
-      '',
-      '## Estribillo',
-      `[${cleanChords[cleanChords.length > 4 ? 4 : 0] || c1}] Línea principal del estribillo`,
-      `[${cleanChords[cleanChords.length > 5 ? 5 : 1] || c2}] Elevación melódica`,
-      `[${cleanChords[cleanChords.length > 6 ? 6 : 2] || c3}] Fuerza armónica`,
-      `[${cleanChords[cleanChords.length > 7 ? 7 : 3] || c4}] Cierre de la sección`,
-      ''
-    ].join('\n');
-  }
-
-  const lines = currentLyrics.split('\n');
-  let chordIndex = 0;
-
-  const updatedLines = lines.map(line => {
-    const trimmed = line.trim();
-
-    // Preserve blank lines and Markdown headers (##, #, etc.)
-    if (!trimmed || trimmed.startsWith('#')) {
-      return line;
-    }
-
-    const chordToInsert = cleanChords[chordIndex % cleanChords.length];
-    chordIndex++;
-
-    // If the line begins with an existing bracketed chord: [Am] Text...
-    if (/^\s*\[[A-G][#b]?[^\]]*\]\s*/.test(line)) {
-      return line.replace(/^\s*\[[A-G][#b]?[^\]]*\]\s*/, `[${chordToInsert}] `);
-    }
-
-    // If the line doesn't have chords, prepend [Chord]
-    const leadingWhitespace = line.match(/^\s*/)?.[0] || '';
-    const cleanText = line.trim();
-    return `${leadingWhitespace}[${chordToInsert}] ${cleanText}`;
-  });
-
-  return updatedLines.join('\n');
+  return insertChordsIntoSyllables(currentLyrics, detectedChords, options);
 }
 

@@ -50,7 +50,7 @@ import {
   ShieldCheck,
   Key
 } from 'lucide-react';
-import { Song, SongStatus } from '../types/song';
+import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
 import { Album } from '../types/album';
 import {
   songToMarkdown,
@@ -68,6 +68,7 @@ import { useAuth } from '../context/AuthContext';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { GoogleDriveService } from '../services/googleDriveService';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
+import { insertChordsIntoSyllables } from '../lib/lyrics/lyricsChordIntegration';
 import {
   parseLrc,
   serializeToLrc,
@@ -173,6 +174,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
   // Audio Analysis & Transcription States
   const [detectedChords, setDetectedChords] = useState<ChordSegment[]>([]);
+  const [savedAudioAnalysis, setSavedAudioAnalysis] = useState<SavedAudioAnalysis | null>(song?.audioAnalysis || null);
+  const [lyricsUndoHistory, setLyricsUndoHistory] = useState<string | null>(null);
   const [audioAnalysisNotice, setAudioAnalysisNotice] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [transcriptionEngine, setTranscriptionEngine] = useState<'backend_gemini' | 'local_whisper'>('local_whisper');
@@ -234,6 +237,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setTags(song.tags || []);
       setRawMarkdown(songToMarkdown(song));
       setCommitMessage(`feat: actualizar canción "${song.title}"`);
+      setSavedAudioAnalysis(song.audioAnalysis || null);
+      setLyricsUndoHistory(null);
+      if (song.audioAnalysis?.chords && song.audioAnalysis.chords.length > 0) {
+        setDetectedChords(song.audioAnalysis.chords);
+      }
     } else {
       const autoId = `cancion-${Date.now()}`;
       setId(autoId);
@@ -261,6 +269,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       setLrc('');
       setTags(['acústico', 'maqueta']);
       setCommitMessage('feat: nueva composición en el cancionero');
+      setSavedAudioAnalysis(null);
+      setLyricsUndoHistory(null);
+      setDetectedChords([]);
     }
   }, [song, initialAlbumId]);
 
@@ -547,6 +558,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     suggestedLyricsChords?: string;
     tempoOffset?: number;
     chords?: ChordSegment[];
+    audioAnalysis?: SavedAudioAnalysis;
   }) => {
     if (data.tempo) setTempo(data.tempo.toString());
     if (data.key) setKey(data.key);
@@ -555,6 +567,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (data.audioUrl) setAudioUrl(data.audioUrl);
     if (data.chords && data.chords.length > 0) {
       setDetectedChords(data.chords);
+    }
+    if (data.audioAnalysis) {
+      setSavedAudioAnalysis(data.audioAnalysis);
     }
     if (data.chordProgression && !notes) {
       setNotes(`Progresión armónica detectada: ${data.chordProgression}`);
@@ -569,12 +584,31 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   };
 
   const handleInsertDetectedChords = (chordsOverride?: ChordSegment[]) => {
-    const list = chordsOverride || detectedChords;
-    if (!list || list.length === 0) return;
+    const list = chordsOverride || savedAudioAnalysis?.chords || detectedChords;
+    if (!list || list.length === 0) {
+      showFeedback('No hay acordes detectados disponibles');
+      return;
+    }
 
-    const updated = insertChordsIntoLyrics(lyrics, list);
+    // Save lyrics to undo history
+    setLyricsUndoHistory(lyrics);
+
+    const updated = insertChordsIntoSyllables(lyrics, list, {
+      lrcText: lrc || undefined,
+      audioDuration: audioDuration || savedAudioAnalysis?.durationSeconds,
+      tempo: tempo ? parseInt(tempo, 10) : savedAudioAnalysis?.tempo || 96
+    });
+
     setLyrics(updated);
-    showFeedback('Acordes detectados intercalados en la letra');
+    showFeedback(`¡${list.length} acordes insertados en las sílabas exactas!`);
+  };
+
+  const handleUndoChordInsertion = () => {
+    if (lyricsUndoHistory !== null) {
+      setLyrics(lyricsUndoHistory);
+      setLyricsUndoHistory(null);
+      showFeedback('Inserción de acordes deshecha');
+    }
   };
 
   // Voice-to-Text Transcription Handler (Supports both Local Whisper & Gemini AI Cloud)
@@ -700,6 +734,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
           driveFileId: driveFileId || parsed.driveFileId || undefined,
           driveFileName: driveFileName || parsed.driveFileName || undefined,
           isPrivateDemo: isPrivateDemo ?? parsed.isPrivateDemo ?? true,
+          audioAnalysis: parsed.audioAnalysis || savedAudioAnalysis || undefined,
           updatedAt: new Date().toISOString()
         };
       } catch (err: any) {
@@ -742,6 +777,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         tags: tags.length > 0 ? tags : undefined,
         lyrics: lyrics.trim(),
         lrc: lrc.trim() || undefined,
+        audioAnalysis: savedAudioAnalysis || undefined,
         createdAt: song?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -963,6 +999,22 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                     Insertar Sección Puente
                   </button>
                   <div className="h-px bg-[var(--border-subtle)] my-1" />
+                  {lyricsUndoHistory !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUndoChordInsertion();
+                        setOpenMenu(null);
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Undo2 className="w-3.5 h-3.5" />
+                        <span>Deshacer inserción de acordes</span>
+                      </div>
+                      <kbd className="font-mono text-[10px]">Ctrl+Z</kbd>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1000,6 +1052,40 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               </button>
               {openMenu === 'musica' && (
                 <div className="absolute left-0 top-full mt-1 w-64 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xl z-50 py-1 text-xs">
+                  {(savedAudioAnalysis?.chords?.length || detectedChords.length > 0) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleInsertDetectedChords();
+                          setOpenMenu(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-between cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Insertar acordes en sílabas</span>
+                        </div>
+                        <span className="font-mono text-[10px]">({savedAudioAnalysis?.chords?.length || detectedChords.length})</span>
+                      </button>
+                      {lyricsUndoHistory !== null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleUndoChordInsertion();
+                            setOpenMenu(null);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-between cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Undo2 className="w-3.5 h-3.5" />
+                            <span>Deshacer inserción de acordes</span>
+                          </div>
+                        </button>
+                      )}
+                      <div className="h-px bg-[var(--border-subtle)] my-1" />
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1666,6 +1752,32 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                       ))}
                     </select>
 
+                    <div className="h-4 w-px bg-[var(--border-subtle)] mx-1" />
+
+                    {(savedAudioAnalysis?.chords?.length || detectedChords.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => handleInsertDetectedChords()}
+                        className="px-2.5 py-1 text-xs font-semibold rounded bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        title="Insertar acordes detectados automáticamente en las sílabas exactas de la letra"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Insertar en sílabas ({savedAudioAnalysis?.chords?.length || detectedChords.length})</span>
+                      </button>
+                    )}
+
+                    {lyricsUndoHistory !== null && (
+                      <button
+                        type="button"
+                        onClick={handleUndoChordInsertion}
+                        className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                        title="Deshacer la inserción de acordes y restaurar la letra anterior"
+                      >
+                        <Undo2 className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Deshacer</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={handleStripChords}
@@ -1682,7 +1794,14 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   {/* Left: Code/Lyrics Editor */}
                   <div className="flex flex-col relative bg-[var(--bg-surface)]">
                     <div className="px-4 py-2 bg-[var(--bg-surface-subtle)]/50 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-mono flex items-center justify-between">
-                      <span>Editor de Versos y Armonía</span>
+                      <div className="flex items-center gap-2">
+                        <span>Editor de Versos y Armonía</span>
+                        {savedAudioAnalysis && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 font-sans">
+                            🎵 Análisis guardado ({savedAudioAnalysis.key || key} · {savedAudioAnalysis.tempo || tempo} BPM)
+                          </span>
+                        )}
+                      </div>
                       <span>Inserta <code>[Acorde]</code> justo antes de la sílaba acentuada</span>
                     </div>
 
@@ -1856,6 +1975,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                     <AudioAnalyzerSection
                       onApplyDetection={handleApplyAudioDetection}
                       onInsertChordsIntoLyrics={handleInsertDetectedChords}
+                      canUndoInsertChords={lyricsUndoHistory !== null}
+                      onUndoInsertChords={handleUndoChordInsertion}
+                      savedAudioAnalysis={savedAudioAnalysis || undefined}
                       currentKey={key}
                       currentTempo={tempo}
                       currentAudioUrl={audioUrl}
