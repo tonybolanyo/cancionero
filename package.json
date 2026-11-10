@@ -4,8 +4,8 @@
   "version": "0.9.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run generate-catalog && tsx server.ts",
-    "start": "npm run generate-catalog && tsx server.ts",
+    "dev": "tsx server.ts",
+    "start": "tsx server.ts",
     "generate-version": "node scripts/generate-version.js",
     "generate-changelog": "node scripts/generate-changelog.js",
     "generate-catalog": "node scripts/generate-catalog.mjs",

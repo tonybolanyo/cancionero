@@ -84,6 +84,12 @@ import { LyricsTranscriptionResult } from '../types/transcription';
 import { useAppNavigation } from '../context/NavigationContext';
 import { LrcSyncAssistant } from '../components/LrcSyncAssistant';
 import {
+  extractMp3Metadata,
+  ExtractedMp3Metadata,
+  Mp3FieldKey
+} from '../lib/audio/mp3Metadata';
+import { Mp3MetadataComparisonModal } from '../components/Mp3MetadataComparisonModal';
+import {
   getDiatonicChordsForKey,
   calculateSongCompleteness,
   SONGWRITING_TEMPLATES
@@ -196,6 +202,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   // Tap-to-sync assistant modal state
   const [isSyncAssistantOpen, setIsSyncAssistantOpen] = useState<boolean>(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+
+  // MP3 Metadata Extraction & Side-by-Side Comparison Modal
+  const [pendingMp3Metadata, setPendingMp3Metadata] = useState<ExtractedMp3Metadata | null>(null);
+  const [isMp3MetadataModalOpen, setIsMp3MetadataModalOpen] = useState<boolean>(false);
+  const [mp3MetadataFileName, setMp3MetadataFileName] = useState<string>('');
 
   // Raw Markdown
   const [rawMarkdown, setRawMarkdown] = useState('');
@@ -506,9 +517,23 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     const localUrl = URL.createObjectURL(file);
     setAudioUrl(localUrl);
 
-    if (!title.trim()) {
-      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setTitle(cleanName);
+    // Extract and inspect MP3 ID3 metadata, lyrics and synchronization
+    try {
+      const extracted = await extractMp3Metadata(file);
+      if (extracted.hasAnyMetadata && extracted.detectedFieldsCount > 0) {
+        setPendingMp3Metadata(extracted);
+        setMp3MetadataFileName(file.name);
+        setIsMp3MetadataModalOpen(true);
+      } else if (!title.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setTitle(cleanName);
+      }
+    } catch (metaErr) {
+      console.warn('Error al leer metadatos MP3:', metaErr);
+      if (!title.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setTitle(cleanName);
+      }
     }
 
     if (isGoogleDriveConnected) {
@@ -546,6 +571,71 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         type: 'info',
         message: 'Audio cargado en memoria listo para reproducir y detectar tono y tempo.'
       });
+    }
+  };
+
+  // Apply selected MP3 metadata fields with author confirmation
+  const handleApplyMp3Fields = (selectedFields: Partial<Record<Mp3FieldKey, string | number>>) => {
+    const updatedNames: string[] = [];
+
+    if (selectedFields.title !== undefined) {
+      setTitle(String(selectedFields.title));
+      updatedNames.push('Título');
+    }
+    if (selectedFields.lyrics !== undefined) {
+      setLyricsUndoHistory(lyrics);
+      setLyrics(String(selectedFields.lyrics));
+      updatedNames.push('Letra');
+    }
+    if (selectedFields.lrc !== undefined) {
+      setLrc(String(selectedFields.lrc));
+      updatedNames.push('Letra sincronizada');
+    }
+    if (selectedFields.key !== undefined) {
+      setKey(String(selectedFields.key));
+      updatedNames.push('Tono');
+    }
+    if (selectedFields.tempo !== undefined) {
+      setTempo(String(selectedFields.tempo));
+      updatedNames.push('Tempo');
+    }
+    if (selectedFields.year !== undefined) {
+      setYear(Number(selectedFields.year));
+      updatedNames.push('Año');
+    }
+    if (selectedFields.genre !== undefined) {
+      setGenre(String(selectedFields.genre));
+      updatedNames.push('Género');
+    }
+    if (selectedFields.notes !== undefined) {
+      setNotes(String(selectedFields.notes));
+      updatedNames.push('Notas');
+    }
+    if (selectedFields.timeSignature !== undefined) {
+      setTimeSignature(String(selectedFields.timeSignature));
+      updatedNames.push('Compás');
+    }
+    if (selectedFields.tuning !== undefined) {
+      setTuning(String(selectedFields.tuning));
+      updatedNames.push('Afinación');
+    }
+    if (selectedFields.albumTitle !== undefined) {
+      const albumStr = String(selectedFields.albumTitle);
+      const matched = albums.find(a => a.title.toLowerCase() === albumStr.toLowerCase());
+      if (matched) {
+        setSelectedAlbumId(matched.id);
+        updatedNames.push('Álbum');
+      } else {
+        setNotes(prev => prev ? `${prev}\nÁlbum original: ${albumStr}` : `Álbum original: ${albumStr}`);
+        updatedNames.push('Álbum (en notas)');
+      }
+    }
+
+    if (updatedNames.length > 0) {
+      const msg = `¡Metadatos del MP3 actualizados! Se han sobreescrito ${updatedNames.length} campos: ${updatedNames.join(', ')}`;
+      setAudioAnalysisNotice(msg);
+      showFeedback(msg);
+      setTimeout(() => setAudioAnalysisNotice(null), 6000);
     }
   };
 
@@ -1952,6 +2042,60 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                           </div>
                         </div>
                       </div>
+
+                      {/* MP3 Metadata & ID3 Card */}
+                      {(pendingMp3Metadata || activeAudioFile) && (
+                        <div className="p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                              <FileAudio className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-xs text-[var(--text-primary)]">
+                                  Metadatos ID3 del archivo MP3
+                                </h4>
+                                {pendingMp3Metadata && (
+                                  <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                                    {pendingMp3Metadata.format}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-[var(--text-secondary)]">
+                                {pendingMp3Metadata
+                                  ? `${pendingMp3Metadata.detectedFieldsCount} ${pendingMp3Metadata.detectedFieldsCount === 1 ? 'campo detectado' : 'campos detectados'} (${[
+                                      pendingMp3Metadata.title && 'Título',
+                                      pendingMp3Metadata.lyrics && 'Letra',
+                                      pendingMp3Metadata.lrc && 'Sincronización LRC',
+                                      pendingMp3Metadata.key && 'Tono',
+                                      pendingMp3Metadata.tempo && 'Tempo'
+                                    ].filter(Boolean).join(', ') || 'Metadatos disponibles'})`
+                                  : 'Inspecciona y compara en paralelo los metadatos y letras de tu archivo.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!pendingMp3Metadata && activeAudioFile) {
+                                try {
+                                  const ext = await extractMp3Metadata(activeAudioFile);
+                                  setPendingMp3Metadata(ext);
+                                  setMp3MetadataFileName(activeAudioFile.name);
+                                } catch (e) {
+                                  console.warn(e);
+                                }
+                              }
+                              setIsMp3MetadataModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-[var(--bg-surface)] border border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer shadow-xs"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <span>Comparar metadatos en paralelo</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div
@@ -2695,6 +2839,30 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MP3 Metadata Side-by-Side Comparison Modal */}
+      {pendingMp3Metadata && (
+        <Mp3MetadataComparisonModal
+          isOpen={isMp3MetadataModalOpen}
+          onClose={() => setIsMp3MetadataModalOpen(false)}
+          metadata={pendingMp3Metadata}
+          fileName={mp3MetadataFileName || activeAudioFile?.name || driveFileName}
+          currentSongData={{
+            title,
+            lyrics,
+            lrc,
+            key,
+            tempo,
+            year,
+            genre,
+            notes,
+            timeSignature,
+            tuning,
+            albumTitle: albums?.find(a => a.id === selectedAlbumId)?.title
+          }}
+          onApplyFields={handleApplyMp3Fields}
+        />
       )}
     </div>
   );

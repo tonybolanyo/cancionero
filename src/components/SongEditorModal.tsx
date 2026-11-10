@@ -42,6 +42,12 @@ import { insertChordsIntoSyllables } from '../lib/lyrics/lyricsChordIntegration'
 import { parseLrc } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { LrcSyncAssistant } from './LrcSyncAssistant';
+import {
+  extractMp3Metadata,
+  ExtractedMp3Metadata,
+  Mp3FieldKey
+} from '../lib/audio/mp3Metadata';
+import { Mp3MetadataComparisonModal } from './Mp3MetadataComparisonModal';
 
 interface SongEditorModalProps {
   song: Song | null;
@@ -99,6 +105,46 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
       return false;
     }
   });
+
+  // MP3 Metadata Extraction & Side-by-Side Comparison Modal
+  const [pendingMp3Metadata, setPendingMp3Metadata] = useState<ExtractedMp3Metadata | null>(null);
+  const [isMp3MetadataModalOpen, setIsMp3MetadataModalOpen] = useState<boolean>(false);
+  const [mp3MetadataFileName, setMp3MetadataFileName] = useState<string>('');
+
+  const handleAudioFileChosen = async (file: File) => {
+    try {
+      const extracted = await extractMp3Metadata(file);
+      if (extracted.hasAnyMetadata && extracted.detectedFieldsCount > 0) {
+        setPendingMp3Metadata(extracted);
+        setMp3MetadataFileName(file.name);
+        setIsMp3MetadataModalOpen(true);
+      } else if (!title.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setTitle(cleanName);
+      }
+    } catch (err) {
+      console.warn('Error al extraer metadatos del archivo MP3:', err);
+    }
+  };
+
+  const handleApplyMp3Fields = (selectedFields: Partial<Record<Mp3FieldKey, string | number>>) => {
+    if (selectedFields.title !== undefined) setTitle(String(selectedFields.title));
+    if (selectedFields.lyrics !== undefined) {
+      setLyricsUndoHistory(lyrics);
+      setLyrics(String(selectedFields.lyrics));
+    }
+    if (selectedFields.lrc !== undefined) {
+      setLrc(String(selectedFields.lrc));
+      setShowLrcEditor(true);
+    }
+    if (selectedFields.key !== undefined) setKey(String(selectedFields.key));
+    if (selectedFields.tempo !== undefined) setTempo(String(selectedFields.tempo));
+    if (selectedFields.year !== undefined) setYear(Number(selectedFields.year));
+    if (selectedFields.genre !== undefined) setGenre(String(selectedFields.genre));
+    if (selectedFields.notes !== undefined) setNotes(String(selectedFields.notes));
+    if (selectedFields.timeSignature !== undefined) setTimeSignature(String(selectedFields.timeSignature));
+    if (selectedFields.tuning !== undefined) setTuning(String(selectedFields.tuning));
+  };
 
   const handleToggleStudioExpanded = () => {
     setIsStudioExpanded(prev => {
@@ -736,6 +782,7 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
                 onInsertChordsIntoLyrics={handleInsertDetectedChords}
                 canUndoInsertChords={lyricsUndoHistory !== null}
                 onUndoInsertChords={handleUndoChordInsertion}
+                onAudioFileSelected={handleAudioFileChosen}
                 savedAudioAnalysis={savedAudioAnalysis || undefined}
                 currentKey={key}
                 currentTempo={tempo}
@@ -1424,6 +1471,29 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
           setShowLrcEditor(true);
         }}
       />
+
+      {/* MP3 Metadata Side-by-Side Comparison Modal */}
+      {pendingMp3Metadata && (
+        <Mp3MetadataComparisonModal
+          isOpen={isMp3MetadataModalOpen}
+          onClose={() => setIsMp3MetadataModalOpen(false)}
+          metadata={pendingMp3Metadata}
+          fileName={mp3MetadataFileName}
+          currentSongData={{
+            title,
+            lyrics,
+            lrc,
+            key,
+            tempo,
+            year,
+            genre,
+            notes,
+            timeSignature,
+            tuning
+          }}
+          onApplyFields={handleApplyMp3Fields}
+        />
+      )}
     </div>
   );
 };
