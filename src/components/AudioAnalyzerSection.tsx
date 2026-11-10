@@ -33,7 +33,7 @@ import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
 import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
 import { PitchShiftPlayer } from '../lib/audio/pitchShiftPlayer';
-import { AccidentalPreference, respellChord } from '../utils/markdownParser';
+import { AccidentalPreference, respellChord, isValidPlayableAudioUrl } from '../utils/markdownParser';
 import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } from '../lib/audio/meter';
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -799,13 +799,17 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       </div>
 
       {/* Hidden audio element for playback preview and timing synchronization */}
-      {audioUrl && (
+      {isValidPlayableAudioUrl(audioUrl) && (
         <audio
           ref={audioRef}
           src={audioUrl}
           onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
           onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
           onEnded={() => setIsPlaying(false)}
+          onError={(e) => {
+            console.warn('Error en el elemento de audio de AudioAnalyzerSection:', e);
+            setIsPlaying(false);
+          }}
           className="hidden"
         />
       )}

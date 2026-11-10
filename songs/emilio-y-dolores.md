@@ -9,7 +9,6 @@ tempo: 102
 timeSignature: "6/8"
 tuning: "Estándar (EADGBE)"
 spotifyUrl: "https://open.spotify.com/track/2gUnsFXzinBAlE135MVRY8?si=I1p1KmFTQH6elFjarTKgpA&utm_source=copy-link"
-audioUrl: "blob:https://tonygb.com/a1dddb5f-7513-4076-a010-dc36dd1c491c"
 notes: "Progresión armónica detectada: Fm - A#m - Fm - C# - A#m - Fm - C - Fm (offset 1er beat: 0.554s)"
 tags: ["acústico"]
 createdAt: "2026-10-29T20:02:24.766Z"

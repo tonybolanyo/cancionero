@@ -8,7 +8,6 @@ key: "F#"
 tempo: 169
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/6ee249b2-765d-4915-bf4a-7dee788cc3bd"
 notes: "Progresión armónica detectada: F# - B - C# - D#m"
 tags: ["inédita", "eléctrica"]
 createdAt: "2026-10-25T22:29:41.110Z"

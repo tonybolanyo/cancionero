@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowLeft, Wand2 } from 'lucide-react';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { useAppNavigation } from '../context/NavigationContext';
+import { useAuth } from '../context/AuthContext';
+import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 
 import { ChordSegment } from '../lib/audio/chords';
 import { SavedAudioAnalysis } from '../types/song';
@@ -25,6 +27,16 @@ export const AudioAnalyzerPage: React.FC<AudioAnalyzerPageProps> = ({
   onCreateSongFromAudio
 }) => {
   const { goBack, navigate } = useAppNavigation();
+  const { isAuthor } = useAuth();
+
+  if (!isAuthor) {
+    return (
+      <AuthorAccessGuard
+        title="Detector de Audio Reservado al Autor"
+        description="El análisis acústico de archivos de audio, tempo, afinación, compás y acordes está reservado exclusivamente para el autor propietario."
+      />
+    );
+  }
 
   const handleApplyDetection = (data: {
     tempo: number;

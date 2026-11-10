@@ -1,5 +1,6 @@
 import { AudioAnalysisResult, analyzeAudioWithWebAudio } from '../utils/webAudioAnalyzer';
 import { fileToBase64Payload } from '../lib/audio/fileEncoding';
+import { getStoredAuthorToken } from '../utils/authConfig';
 
 export interface AnalysisProgressCallback {
   (stage: 'reading' | 'ai_analysis' | 'dsp_analysis' | 'complete', message: string): void;
@@ -10,12 +11,12 @@ export class AudioAnalysisService {
    * Analyzes an uploaded audio file (.mp3, .wav)
    * Prioritizes 100% local client-side processing in the browser via Web Audio API + web-audio-beat-detector,
    * fully adhering to privacy, offline and GitHub Pages requirements (0 API credits required).
-   * Server AI is only attempted if explicitly requested via options.useServerAi.
+   * Server AI is only attempted if explicitly requested via options.useServerAi and user is authorized author.
    */
   static async analyzeAudio(
     file: File,
     onProgress?: AnalysisProgressCallback,
-    options?: { useServerAi?: boolean }
+    options?: { useServerAi?: boolean; authToken?: string }
   ): Promise<AudioAnalysisResult> {
     const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/x-wav'];
     const isMp3OrWav =
@@ -29,24 +30,29 @@ export class AudioAnalysisService {
 
     onProgress?.('reading', 'Leyendo archivo de audio...');
 
-    // 1. Optional Server-Side AI (only if explicitly enabled)
+    // 1. Optional Server-Side AI (only if explicitly enabled with author credentials)
     if (options?.useServerAi) {
-      try {
-        onProgress?.('ai_analysis', 'Consultando modelo de Inteligencia Artificial (tempo, escala, acordes)...');
+      const token = options?.authToken || getStoredAuthorToken();
+      if (!token) {
+        console.info('Audio analysis: no author token provided for server AI, using client Web Audio DSP.');
+      } else {
+        try {
+          onProgress?.('ai_analysis', 'Consultando modelo de Inteligencia Artificial (tempo, escala, acordes)...');
 
-        const cleanBase64 = await fileToBase64Payload(file);
+          const cleanBase64 = await fileToBase64Payload(file);
 
-        const response = await fetch('/api/analyze-audio', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            audioBase64: cleanBase64,
-            mimeType: file.type || (file.name.endsWith('.wav') ? 'audio/wav' : 'audio/mp3'),
-            filename: file.name
-          })
-        });
+          const response = await fetch('/api/analyze-audio', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              audioBase64: cleanBase64,
+              mimeType: file.type || (file.name.endsWith('.wav') ? 'audio/wav' : 'audio/mp3'),
+              filename: file.name
+            })
+          });
 
         if (response.ok) {
           const data = await response.json();
@@ -81,8 +87,9 @@ export class AudioAnalysisService {
         console.warn('Server-side AI analysis not available or depleted, using client Web Audio DSP:', err);
       }
     }
+  }
 
-    // 2. Default & reliable path: Local Client-Side Web Audio API + web-audio-beat-detector
+  // 2. Default & reliable path: Local Client-Side Web Audio API + web-audio-beat-detector
     onProgress?.('dsp_analysis', 'Procesando señal con motor local Web Audio DSP...');
     const dspResult = await analyzeAudioWithWebAudio(file);
     onProgress?.('complete', 'Análisis local completado exitosamente.');

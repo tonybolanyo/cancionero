@@ -8,7 +8,6 @@ key: "Em"
 tempo: 101
 timeSignature: "6/8"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/21ad1e36-851a-4e6f-883f-72c999e3f8c2"
 notes: "Progresión armónica: A# - Dm - C - G - A# - Dm - F - Dm"
 tags: ["acústico", "inédita", "guitarra"]
 createdAt: "2026-10-29T19:53:32.139Z"

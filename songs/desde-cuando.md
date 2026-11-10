@@ -8,7 +8,6 @@ key: "C#"
 tempo: 74
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/94936a66-6fbd-4e82-b5e2-ffaa8b0c931b"
 notes: "Progresión armónica: C# - F# - G# - A#m"
 tags: ["acústico", "social"]
 createdAt: "2026-10-26T06:32:48.239Z"

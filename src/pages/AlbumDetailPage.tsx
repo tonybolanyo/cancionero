@@ -21,6 +21,8 @@ import { Album } from '../types/album';
 import { Song } from '../types/song';
 import { useAppNavigation } from '../context/NavigationContext';
 import { useAuth } from '../context/AuthContext';
+import { isValidPlayableAudioUrl } from '../utils/markdownParser';
+import { isSafeExternalUrl } from '../utils/authConfig';
 
 interface AlbumDetailPageProps {
   album: Album;
@@ -76,7 +78,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
   };
 
   const handlePlayAudio = (trackId: string, audioUrl?: string) => {
-    if (!audioUrl) return;
+    if (!isValidPlayableAudioUrl(audioUrl)) return;
 
     if (playingTrackId === trackId && audioElement) {
       audioElement.pause();
@@ -89,17 +91,28 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
       audioElement.pause();
     }
 
-    const audio = new Audio(audioUrl);
-    audio.play().then(() => {
-      setPlayingTrackId(trackId);
-      setAudioElement(audio);
+    try {
+      const audio = new Audio(audioUrl);
+      audio.onerror = () => {
+        console.warn('Audio preview playback error for track:', trackId);
+        setPlayingTrackId(null);
+        setAudioElement(null);
+      };
       audio.onended = () => {
         setPlayingTrackId(null);
         setAudioElement(null);
       };
-    }).catch(err => {
-      console.warn('Error playing audio preview', err);
-    });
+      audio.play().then(() => {
+        setPlayingTrackId(trackId);
+        setAudioElement(audio);
+      }).catch(err => {
+        console.warn('Error playing audio preview', err);
+        setPlayingTrackId(null);
+        setAudioElement(null);
+      });
+    } catch (err) {
+      console.warn('Could not initialize audio player', err);
+    }
   };
 
   return (
@@ -206,7 +219,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
 
           {/* Streaming Platforms Links */}
           <div className="flex flex-wrap items-center gap-2.5 mb-6">
-            {album.spotifyUrl && (
+            {isSafeExternalUrl(album.spotifyUrl) && (
               <a
                 href={album.spotifyUrl}
                 target="_blank"
@@ -221,7 +234,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
               </a>
             )}
 
-            {album.appleMusicUrl && (
+            {isSafeExternalUrl(album.appleMusicUrl) && (
               <a
                 href={album.appleMusicUrl}
                 target="_blank"
@@ -236,7 +249,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
               </a>
             )}
 
-            {album.youtubeUrl && (
+            {isSafeExternalUrl(album.youtubeUrl) && (
               <a
                 href={album.youtubeUrl}
                 target="_blank"
@@ -251,7 +264,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
               </a>
             )}
 
-            {album.soundcloudUrl && (
+            {isSafeExternalUrl(album.soundcloudUrl) && (
               <a
                 href={album.soundcloudUrl}
                 target="_blank"
@@ -324,9 +337,9 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
                       </span>
 
                       {/* Play preview button if song has audio */}
-                      {song?.audioUrl && (
+                      {isValidPlayableAudioUrl(song?.audioUrl) && (
                         <button
-                          onClick={() => handlePlayAudio(track.id || track.songId || `t-${idx}`, song.audioUrl)}
+                          onClick={() => handlePlayAudio(track.id || track.songId || `t-${idx}`, song?.audioUrl)}
                           className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
                             isPlaying
                               ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'

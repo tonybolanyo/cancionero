@@ -215,7 +215,7 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
         </button>
 
         <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
-          {onOpenVisualizer && (
+          {isAuthor && onOpenVisualizer && (
             <button
               onClick={() => onOpenVisualizer(song)}
               className="p-2 hover:text-red-500 rounded-lg hover:bg-red-500/10 border border-[var(--border-subtle)] hover:border-red-500/30 transition-colors cursor-pointer"

@@ -169,8 +169,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Vídeo YouTube Visualizer Button */}
-          {onOpenVideoVisualizer && (
+          {/* Vídeo YouTube Visualizer Button (Exclusively for Author) */}
+          {isAuthor && onOpenVideoVisualizer && (
             <button
               type="button"
               onClick={onOpenVideoVisualizer}

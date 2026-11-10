@@ -18,7 +18,7 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
   onClose,
   onRenameSuccess,
 }) => {
-  const { token } = useAuth();
+  const { token, isAuthor } = useAuth();
   const [newSlug, setNewSlug] = useState('');
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoPush, setAutoPush] = useState<boolean>(() =>
@@ -34,7 +34,7 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
     }
   }, [song, isOpen]);
 
-  if (!isOpen || !song) return null;
+  if (!isOpen || !song || !isAuthor) return null;
 
   const sanitizeSlug = (input: string) => {
     return input
@@ -58,6 +58,10 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthor) {
+      setErrorMessage('Acceso denegado: solo el autor propietario puede renombrar archivos.');
+      return;
+    }
     const clean = sanitizeSlug(newSlug);
 
     if (!clean) {

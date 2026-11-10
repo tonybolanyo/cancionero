@@ -8,7 +8,6 @@ key: "F#"
 tempo: 68
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/cd3c76b2-86a8-4aa3-9665-034c6d47021a"
 notes: "Poema de Mario Benedetti.\nProgresión armónica: F# - B - C# - D#m"
 tags: ["acústico", "inédita", "poesía"]
 createdAt: "2026-10-26T19:52:12.135Z"

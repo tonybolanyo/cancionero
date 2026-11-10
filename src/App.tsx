@@ -41,6 +41,7 @@ import { AudioAnalyzerPage } from './pages/AudioAnalyzerPage';
 import { AboutPage } from './pages/AboutPage';
 import { GitSyncPage } from './pages/GitSyncPage';
 import { SpotifyImportPage } from './pages/SpotifyImportPage';
+import { AuthorAccessGuard } from './components/AuthorAccessGuard';
 
 import { Music2, BarChart3, BookOpen, Disc, ArrowRight, Plus } from 'lucide-react';
 
@@ -100,6 +101,10 @@ function CancioneroApp() {
   const [isVisualizerModalOpen, setIsVisualizerModalOpen] = useState<boolean>(false);
 
   const handleOpenVisualizer = (targetSong?: Song) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const s = targetSong || (currentRoute.name === 'song-detail' ? songs.find(item => item.id === currentRoute.songId) : null) || songs[0] || null;
     if (s) {
       setVisualizerSong(s);
@@ -119,18 +124,30 @@ function CancioneroApp() {
   }, []);
 
   const handleStartWithLyrics = () => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setPendingAudioFile(null);
     setIsQuickStartOpen(false);
     navigate({ name: 'song-new' });
   };
 
   const handleStartWithAudioFile = (file: File) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setPendingAudioFile(file);
     setIsQuickStartOpen(false);
     navigate({ name: 'song-new' });
   };
 
   const handleStartWithTemplate = (template: typeof SONGWRITING_TEMPLATES[0]) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setPendingAudioFile(null);
     const newId = `cancion-${Date.now()}`;
     const newSong: Song = {
@@ -188,13 +205,18 @@ function CancioneroApp() {
   // Auto-open visualizer when navigating to video-visualizer route
   useEffect(() => {
     if (currentRoute.name === 'video-visualizer') {
+      if (!isAuthor) {
+        setIsAuthModalOpen(true);
+        navigate({ name: 'catalog' });
+        return;
+      }
       const targetSong = (currentRoute.songId ? songs.find(s => s.id === currentRoute.songId) : null) || songs[0] || null;
       if (targetSong) {
         setVisualizerSong(targetSong);
         setIsVisualizerModalOpen(true);
       }
     }
-  }, [currentRoute, songs]);
+  }, [currentRoute, songs, isAuthor, navigate]);
 
   // Setup keyboard shortcuts
   useEffect(() => {
@@ -317,6 +339,10 @@ function CancioneroApp() {
 
   // Song CRUD
   const handleSaveSong = (song: Song, pushResult?: PushResult) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const updated = StorageService.upsertSong(song);
     setSongs(updated);
     checkGitStatus();
@@ -393,6 +419,10 @@ function CancioneroApp() {
 
   // Album CRUD
   const handleSaveAlbum = (album: Album) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const updated = StorageService.upsertAlbum(album);
     setAlbums(updated);
 
@@ -429,6 +459,10 @@ function CancioneroApp() {
   };
 
   const handleDeleteAlbum = (album: Album) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     if (typeof window !== 'undefined') {
       const ok = window.confirm(`¿Estás seguro de que deseas eliminar el álbum "${album.title}"? Las canciones del catálogo no se borrarán.`);
       if (!ok) return;
@@ -458,6 +492,10 @@ function CancioneroApp() {
     chords?: ChordSegment[];
     audioAnalysis?: SavedAudioAnalysis;
   }) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const newId = `cancion-${Date.now()}`;
     const offsetNote = typeof data.tempoOffset === 'number' && data.tempoOffset > 0
       ? ` (offset 1er beat: ${data.tempoOffset.toFixed(3)}s)`
@@ -491,6 +529,10 @@ function CancioneroApp() {
   };
 
   const handleImportSongs = (importedSongs: Song[]) => {
+    if (!isAuthor) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setSongs([...songs, ...importedSongs]);
     checkGitStatus();
   };
@@ -724,9 +766,9 @@ function CancioneroApp() {
         hasUncommittedChanges={hasUncommittedChanges}
         onOpenAbout={() => navigate({ name: 'about' })}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenAudioAnalyzer={() => navigate({ name: 'audio-analyzer' })}
+        onOpenAudioAnalyzer={isAuthor ? () => navigate({ name: 'audio-analyzer' }) : undefined}
         onOpenSongbook={() => navigate({ name: 'songbook' })}
-        onOpenVideoVisualizer={() => handleOpenVisualizer()}
+        onOpenVideoVisualizer={isAuthor ? () => handleOpenVisualizer() : undefined}
       />
 
       {/* Main Page Content Router */}
@@ -757,11 +799,19 @@ function CancioneroApp() {
 
         {/* Route: Album Editor (New or Edit) */}
         {(currentRoute.name === 'album-new' || currentRoute.name === 'album-edit') && (
-          <AlbumEditorPage
-            album={activeEditAlbum}
-            songs={songs}
-            onSave={handleSaveAlbum}
-          />
+          isAuthor ? (
+            <AlbumEditorPage
+              album={activeEditAlbum}
+              songs={songs}
+              onSave={handleSaveAlbum}
+            />
+          ) : (
+            <AuthorAccessGuard
+              title="Editor de Álbumes Protegido"
+              description="Solo el autor propietario tiene acceso a la creación y edición de álbumes discográficos."
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )
         )}
 
         {/* Route: Albums Overview Gallery */}
@@ -804,14 +854,22 @@ function CancioneroApp() {
 
         {/* Route: Song Editor Page (New or Edit) */}
         {(currentRoute.name === 'song-new' || currentRoute.name === 'song-edit') && (
-          <SongEditorPage
-            song={activeEditSong}
-            albums={albums}
-            initialAlbumId={currentRoute.name === 'song-new' ? currentRoute.initialAlbumId : undefined}
-            initialAudioFile={pendingAudioFile || undefined}
-            onSave={handleSaveSong}
-            onDelete={handleOpenDelete}
-          />
+          isAuthor ? (
+            <SongEditorPage
+              song={activeEditSong}
+              albums={albums}
+              initialAlbumId={currentRoute.name === 'song-new' ? currentRoute.initialAlbumId : undefined}
+              initialAudioFile={pendingAudioFile || undefined}
+              onSave={handleSaveSong}
+              onDelete={handleOpenDelete}
+            />
+          ) : (
+            <AuthorAccessGuard
+              title="Editor de Canciones Protegido"
+              description="Solo el autor propietario puede redactar versos, transcribir acordes o modificar la biblioteca lírica."
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )
         )}
 
         {/* Route: Songbook Page */}
@@ -824,8 +882,25 @@ function CancioneroApp() {
 
         {/* Route: Audio Analyzer Page */}
         {currentRoute.name === 'audio-analyzer' && (
-          <AudioAnalyzerPage
-            onCreateSongFromAudio={handleCreateSongFromAudio}
+          isAuthor ? (
+            <AudioAnalyzerPage
+              onCreateSongFromAudio={handleCreateSongFromAudio}
+            />
+          ) : (
+            <AuthorAccessGuard
+              title="Analizador de Audio Protegido"
+              description="El análisis acústico y extracción armónica de pistas de audio está restringido al autor de la obra."
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )
+        )}
+
+        {/* Route: Video Visualizer Page Guard */}
+        {currentRoute.name === 'video-visualizer' && !isAuthor && (
+          <AuthorAccessGuard
+            title="Generador de Vídeo Protegido"
+            description="La creación de vídeos para YouTube con letra sincronizada está reservada únicamente para el autor propietario."
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
           />
         )}
 
@@ -836,18 +911,34 @@ function CancioneroApp() {
 
         {/* Route: Git Sync Page */}
         {currentRoute.name === 'git-sync' && (
-          <GitSyncPage
-            songs={songs}
-            onSongsUpdated={handleSongsUpdated}
-          />
+          isAuthor ? (
+            <GitSyncPage
+              songs={songs}
+              onSongsUpdated={handleSongsUpdated}
+            />
+          ) : (
+            <AuthorAccessGuard
+              title="Sincronización Git Protegida"
+              description="El repositorio Git y la gestión de versiones en GitHub son accesibles exclusivamente para el autor propietario."
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )
         )}
 
         {/* Route: Spotify Import Page */}
         {currentRoute.name === 'spotify-import' && (
-          <SpotifyImportPage
-            songs={songs}
-            onImport={handleImportSongs}
-          />
+          isAuthor ? (
+            <SpotifyImportPage
+              songs={songs}
+              onImport={handleImportSongs}
+            />
+          ) : (
+            <AuthorAccessGuard
+              title="Importación de Spotify Protegida"
+              description="La importación masiva de canciones desde Spotify está restringida al autor del catálogo."
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )
         )}
 
         {/* Route: Default Main Catalog */}

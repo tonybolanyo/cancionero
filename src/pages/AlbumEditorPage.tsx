@@ -15,6 +15,8 @@ import {
 import { Album, AlbumTrack } from '../types/album';
 import { Song } from '../types/song';
 import { useAppNavigation } from '../context/NavigationContext';
+import { useAuth } from '../context/AuthContext';
+import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 
 interface AlbumEditorPageProps {
   album: Album | null;
@@ -37,6 +39,7 @@ export const AlbumEditorPage: React.FC<AlbumEditorPageProps> = ({
   onSave
 }) => {
   const { navigate, goBack } = useAppNavigation();
+  const { isAuthor } = useAuth();
 
   // Form states - ONLY title is mandatory
   const [title, setTitle] = useState(album?.title || '');
@@ -155,9 +158,19 @@ export const AlbumEditorPage: React.FC<AlbumEditorPageProps> = ({
       updatedAt: new Date().toISOString()
     };
 
+    if (!isAuthor) return;
     onSave(savedAlbum);
     navigate({ name: 'album-detail', albumId });
   };
+
+  if (!isAuthor) {
+    return (
+      <AuthorAccessGuard
+        title="Editor de Álbumes Reservado al Autor"
+        description="La creación y edición de álbumes y listas de canciones está reservada exclusivamente para el autor propietario."
+      />
+    );
+  }
 
   return (
     <div className="max-w-[1000px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">

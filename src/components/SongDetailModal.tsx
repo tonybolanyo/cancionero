@@ -31,6 +31,7 @@ import {
   parseLyricLine,
   getYouTubeEmbedUrl,
   getSpotifyEmbedUrl,
+  isValidPlayableAudioUrl,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { exportSongToPdf } from '../utils/pdfGenerator';
@@ -164,15 +165,17 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
     }
   }, [song.id, song.lrc, song.lyrics]);
 
-  // Synthetic timer for rehearsals when audioUrl is not attached
+  const hasPlayableAudio = isValidPlayableAudioUrl(song.audioUrl);
+
+  // Synthetic timer for rehearsals when audioUrl is not attached or playable
   useEffect(() => {
-    if (!song.audioUrl && isPlayingAudio) {
+    if (!hasPlayableAudio && isPlayingAudio) {
       const interval = window.setInterval(() => {
         setCurrentTime(t => t + 0.1);
       }, 100);
       return () => clearInterval(interval);
     }
-  }, [song.audioUrl, isPlayingAudio]);
+  }, [hasPlayableAudio, isPlayingAudio]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -226,12 +229,15 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
   const spotifyEmbed = getSpotifyEmbedUrl(song.spotifyUrl);
 
   const toggleAudio = () => {
-    if (song.audioUrl && audioRef.current) {
+    if (hasPlayableAudio && audioRef.current) {
       if (isPlayingAudio) {
         audioRef.current.pause();
         setIsPlayingAudio(false);
       } else {
-        audioRef.current.play().catch(e => console.warn(e));
+        audioRef.current.play().catch(e => {
+          console.warn('Playback error caught:', e);
+          setIsPlayingAudio(false);
+        });
         setIsPlayingAudio(true);
       }
     } else {
@@ -241,7 +247,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
 
   const handleSeek = (timeInSeconds: number) => {
     setCurrentTime(timeInSeconds);
-    if (song.audioUrl && audioRef.current) {
+    if (hasPlayableAudio && audioRef.current) {
       audioRef.current.currentTime = timeInSeconds;
     }
   };
@@ -628,7 +634,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
         {/* Media & Player Hub Section */}
         <div className="p-4 sm:p-6 bg-[var(--bg-surface-subtle)] border-b border-[var(--border-subtle)] no-print print:hidden">
           {/* Direct HTML5 Demo Audio Player */}
-          {song.audioUrl && (
+          {hasPlayableAudio && (
             <div className="mb-4 p-3.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button
@@ -657,6 +663,10 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
                 onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
                 onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
                 onEnded={() => setIsPlayingAudio(false)}
+                onError={(e) => {
+                  console.warn('Error en la fuente de audio local:', e);
+                  setIsPlayingAudio(false);
+                }}
                 className="hidden"
               />
 
@@ -775,7 +785,7 @@ export const SongDetailModal: React.FC<SongDetailModalProps> = ({
             )}
 
             {/* If no audio links available (Draft or Private) */}
-            {!song.spotifyUrl && !song.youtubeUrl && !song.soundcloudUrl && !song.audioUrl && (
+            {!song.spotifyUrl && !song.youtubeUrl && !song.soundcloudUrl && !hasPlayableAudio && (
               <div className="col-span-full p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">

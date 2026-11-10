@@ -195,6 +195,37 @@ export function parseLyricLine(line: string): LyricSegment[] {
 }
 
 /**
+ * Validates if an audio URL is currently playable in a standard HTML5 audio element
+ * without causing MEDIA_ERR_SRC_NOT_SUPPORTED ("The element has no supported sources").
+ * Excludes empty strings, pseudo-protocols like gdrive://, and cross-origin or expired blob URLs.
+ */
+export function isValidPlayableAudioUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+
+  // Pseudo-protocols cannot be used directly in <audio src="...">
+  if (trimmed.startsWith('gdrive://')) return false;
+
+  // Blob URLs must belong to the active window session origin
+  if (trimmed.startsWith('blob:')) {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return trimmed.startsWith(`blob:${window.location.origin}/`);
+    }
+    return false;
+  }
+
+  // Standard web audio sources
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('data:audio/')
+  );
+}
+
+/**
  * Serialize a Song object to Markdown with YAML frontmatter
  */
 export function songToMarkdown(song: Song): string {
@@ -227,7 +258,7 @@ export function songToMarkdown(song: Song): string {
     song?.appleMusicUrl ? `appleMusicUrl: "${song.appleMusicUrl}"` : null,
     song?.youtubeUrl ? `youtubeUrl: "${song.youtubeUrl}"` : null,
     song?.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
-    song?.audioUrl ? `audioUrl: "${song.audioUrl}"` : null,
+    song?.audioUrl && isValidPlayableAudioUrl(song.audioUrl) && !song.audioUrl.startsWith('blob:') ? `audioUrl: "${song.audioUrl}"` : null,
     song?.driveFileId ? `driveFileId: "${song.driveFileId}"` : null,
     song?.driveFileName ? `driveFileName: "${song.driveFileName.replace(/"/g, '\\"')}"` : null,
     typeof song?.isPrivateDemo === 'boolean' ? `isPrivateDemo: ${song.isPrivateDemo}` : null,
@@ -334,7 +365,7 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     appleMusicUrl: meta.appleMusicUrl || undefined,
     youtubeUrl: meta.youtubeUrl || undefined,
     soundcloudUrl: meta.soundcloudUrl || undefined,
-    audioUrl: meta.audioUrl || undefined,
+    audioUrl: isValidPlayableAudioUrl(meta.audioUrl) ? meta.audioUrl : undefined,
     driveFileId: meta.driveFileId || undefined,
     driveFileName: meta.driveFileName || undefined,
     isPrivateDemo: meta.isPrivateDemo !== undefined ? meta.isPrivateDemo === 'true' : (Boolean(meta.driveFileId) ? true : undefined),

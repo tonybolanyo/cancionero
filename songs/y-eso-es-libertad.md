@@ -8,7 +8,6 @@ key: "A#m"
 tempo: 85
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/5b2e3845-908a-439f-b5c9-4c047af0d43b"
 notes: "Progresión armónica detectada: A#m - C# - D#m - Fm"
 tags: ["acústico", "inédita"]
 createdAt: "2026-10-26T15:13:41.446Z"

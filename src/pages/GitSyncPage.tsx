@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { GitSyncModal } from '../components/GitSyncModal';
 import { useAppNavigation } from '../context/NavigationContext';
+import { useAuth } from '../context/AuthContext';
+import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 import { Song } from '../types/song';
 
 interface GitSyncPageProps {
@@ -14,6 +16,16 @@ export const GitSyncPage: React.FC<GitSyncPageProps> = ({
   onSongsUpdated
 }) => {
   const { goBack } = useAppNavigation();
+  const { isAuthor } = useAuth();
+
+  if (!isAuthor) {
+    return (
+      <AuthorAccessGuard
+        title="Sincronización Git Reservada al Autor"
+        description="La gestión de commits, copias de seguridad, restauración y sincronización con el repositorio remoto de GitHub está reservada exclusivamente para el autor propietario."
+      />
+    );
+  }
 
   return (
     <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">

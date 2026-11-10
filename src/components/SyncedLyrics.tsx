@@ -27,6 +27,7 @@ import { parseLyricLine } from '../utils/markdownParser';
 import { LrcSyncAssistant } from './LrcSyncAssistant';
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
 import { LocalTranscriptionSupport, LyricsTranscriptionResult } from '../types/transcription';
+import { useAuth } from '../context/AuthContext';
 
 export interface SyncedLyricsProps {
   lines: SyncedLyricLine[];
@@ -61,6 +62,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
   onUpdateLyrics,
   onSaveToSong
 }) => {
+  const { isAuthor, authorToken } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -269,7 +271,11 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
     setTranscriptionError(null);
     setTranscriptionNotice(null);
     try {
-      const result = await LyricsTranscriptionService.transcribeWithBackendFromFile(transcriptionFile, backendConsent);
+      const result = await LyricsTranscriptionService.transcribeWithBackendFromFile(
+        transcriptionFile,
+        backendConsent,
+        authorToken || undefined
+      );
       if (result.lines.length === 0) {
         throw new Error('El backend no devolvió segmentos temporales utilizables.');
       }
@@ -398,15 +404,17 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Tap-to-sync Live Assistant */}
-          <button
-            onClick={() => setIsAssistantOpen(true)}
-            className="px-2.5 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
-            title="Abrir Asistente para estampar marcas de tiempo en vivo pulsando la barra espaciadora"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Grabar Marcas [Espacio]</span>
-          </button>
+          {/* Tap-to-sync Live Assistant (Author only) */}
+          {isAuthor && (
+            <button
+              onClick={() => setIsAssistantOpen(true)}
+              className="px-2.5 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Abrir Asistente para estampar marcas de tiempo en vivo pulsando la barra espaciadora"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Grabar Marcas [Espacio]</span>
+            </button>
+          )}
 
           {/* Auto-scroll toggle */}
           <button
@@ -462,8 +470,8 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
             {copiedRaw ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Import / Paste LRC */}
-          {onUpdateLyrics && (
+          {/* Import / Paste LRC (Author only) */}
+          {isAuthor && onUpdateLyrics && (
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="px-2.5 py-1 rounded-md bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-white font-medium transition-colors cursor-pointer flex items-center gap-1.5"
@@ -484,8 +492,8 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
         </div>
       </div>
 
-      {/* Section: Lyrics Transcription */}
-      {onUpdateLyrics && (
+      {/* Section: Lyrics Transcription (Author only) */}
+      {isAuthor && onUpdateLyrics && (
         <div className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:px-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
@@ -670,7 +678,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
             <p className="text-xs text-[var(--text-muted)] max-w-md mb-4 leading-relaxed">
               Puedes cargar un archivo .LRC o pegar marcas de tiempo en formato [mm:ss.xx] para seguir la letra en tiempo real sobre el reproductor.
             </p>
-            {onUpdateLyrics && (
+            {isAuthor && onUpdateLyrics && (
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={() => setIsAssistantOpen(true)}

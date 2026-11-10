@@ -40,6 +40,7 @@ import {
   getSpotifyEmbedUrl,
   AccidentalPreference
 } from '../utils/markdownParser';
+import { isSafeExternalUrl } from '../utils/authConfig';
 import { exportSongToPdf } from '../utils/pdfGenerator';
 import { SyncedLyrics } from '../components/SyncedLyrics';
 import { SyncedLyricLine, LrcMetadata } from '../types/lyrics';
@@ -300,6 +301,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   };
 
   const handleSaveSyncedLyrics = (newLines: SyncedLyricLine[], rawLrc: string) => {
+    if (!isAuthor) return;
     setSyncedLines(newLines);
     setCustomLrcText(rawLrc);
 
@@ -478,17 +480,17 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Editar Canción</span>
               </button>
+
+              <button
+                onClick={() => setIsVisualizerOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+                title="Generar vídeo para YouTube con letra sincronizada (1080p / 720p / 360p)"
+              >
+                <Youtube className="w-3.5 h-3.5" />
+                <span>Vídeo YouTube</span>
+              </button>
             </>
           )}
-
-          <button
-            onClick={() => setIsVisualizerOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
-            title="Generar vídeo para YouTube con letra sincronizada (1080p / 720p / 360p)"
-          >
-            <Youtube className="w-3.5 h-3.5" />
-            <span>Vídeo YouTube</span>
-          </button>
 
           <button
             onClick={() => onDownloadMd(song)}
@@ -634,7 +636,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
         {/* Streaming links & Audio preview if present */}
         <div className="flex flex-wrap items-center gap-3">
-          {song.spotifyUrl && (
+          {song.spotifyUrl && isSafeExternalUrl(song.spotifyUrl) && (
             <a
               href={song.spotifyUrl}
               target="_blank"
@@ -645,7 +647,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          {song.appleMusicUrl && (
+          {song.appleMusicUrl && isSafeExternalUrl(song.appleMusicUrl) && (
             <a
               href={song.appleMusicUrl}
               target="_blank"
@@ -656,7 +658,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          {song.youtubeUrl && (
+          {song.youtubeUrl && isSafeExternalUrl(song.youtubeUrl) && (
             <a
               href={song.youtubeUrl}
               target="_blank"
@@ -667,7 +669,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          {song.soundcloudUrl && (
+          {song.soundcloudUrl && isSafeExternalUrl(song.soundcloudUrl) && (
             <a
               href={song.soundcloudUrl}
               target="_blank"
@@ -729,6 +731,11 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlayingAudio(false)}
+            onError={(e) => {
+              console.warn('Error en la reproducción de audio en SongDetailPage:', e);
+              setIsPlayingAudio(false);
+              setDriveAudioError('No se pudo reproducir la pista de audio.');
+            }}
           />
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -962,7 +969,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               songTitle={song.title}
               showChords={showChords}
               fontSize={fontSize}
-              onSaveToSong={handleSaveSyncedLyrics}
+              onSaveToSong={isAuthor ? handleSaveSyncedLyrics : undefined}
             />
           </div>
         )}

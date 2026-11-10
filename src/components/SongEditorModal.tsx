@@ -30,6 +30,7 @@ import {
   transposeLyrics,
   respellChord,
   respellLyrics,
+  isValidPlayableAudioUrl,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
@@ -1392,12 +1393,16 @@ export const SongEditorModal: React.FC<SongEditorModalProps> = ({
         </div>
       </div>
 
-      {audioUrl && (
+      {isValidPlayableAudioUrl(audioUrl) && (
         <audio
           ref={assistantAudioRef}
           src={audioUrl}
           onTimeUpdate={() => assistantAudioRef.current && setAssistantCurrentTime(assistantAudioRef.current.currentTime)}
           onEnded={() => setAssistantIsPlaying(false)}
+          onError={(e) => {
+            console.warn('Error en la fuente de audio del asistente:', e);
+            setAssistantIsPlaying(false);
+          }}
           className="hidden"
         />
       )}

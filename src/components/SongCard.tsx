@@ -163,7 +163,7 @@ export const SongCard: React.FC<SongCardProps> = ({
         </button>
 
         <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
-          {onOpenVisualizer && (
+          {isAuthor && onOpenVisualizer && (
             <button
               onClick={() => onOpenVisualizer(song)}
               className="p-1.5 hover:text-red-500 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"

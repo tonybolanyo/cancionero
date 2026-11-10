@@ -8,7 +8,6 @@ key: "Gm"
 tempo: 77
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/fd971b4d-0334-4736-a6a4-b04fc50ceee4"
 notes: "Progresión armónica detectada: Fm - G# - D# - Cm - Fm - G# - Fm - Cm (offset 1er beat: 0.749s)"
 tags: ["acústico", "inédita"]
 createdAt: "2026-10-30T16:55:56.360Z"

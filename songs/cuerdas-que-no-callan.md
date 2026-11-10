@@ -8,7 +8,6 @@ key: "Fm"
 tempo: 89
 timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
-audioUrl: "blob:https://tonygb.com/311c2786-c24c-4f49-996d-0be0ba406fd7"
 tags: ["acústico", "inédita"]
 createdAt: "2026-07-04T18:00:00Z"
 updatedAt: "2026-10-26T21:26:42.834Z"

@@ -13,6 +13,7 @@ import { decodeAudioBuffer } from '../lib/audio/tempo';
 import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { segmentsToSyncedLyricLines } from '../lib/lyrics/transcription';
 import { fileToBase64Payload } from '../lib/audio/fileEncoding';
+import { getStoredAuthorToken } from '../utils/authConfig';
 
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
@@ -209,10 +210,16 @@ export class LyricsTranscriptionService {
 
   static async transcribeWithBackendFromFile(
     file: File,
-    consentGranted: boolean
+    consentGranted: boolean,
+    authToken?: string
   ): Promise<LyricsTranscriptionResult> {
     if (!consentGranted) {
       throw new Error('Debes aceptar explícitamente el envío de audio al backend antes de transcribir.');
+    }
+
+    const token = authToken || getStoredAuthorToken();
+    if (!token) {
+      throw new Error('Operación no permitida: Se requiere iniciar sesión como autor para transcribir con el backend.');
     }
 
     const base64 = await fileToBase64Payload(file);
@@ -223,7 +230,8 @@ export class LyricsTranscriptionService {
     const response = await fetch('/api/transcribe-lyrics', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         audioBase64: base64,

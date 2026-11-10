@@ -1,5 +1,5 @@
 import { Song } from '../types/song';
-import { markdownToSong } from '../utils/markdownParser';
+import { markdownToSong, isValidPlayableAudioUrl } from '../utils/markdownParser';
 import bundledSongsJson from './bundledSongs.json';
 
 /**
@@ -14,7 +14,11 @@ export function loadSongsFromMarkdownFiles(): Song[] {
   if (Array.isArray(bundledSongsJson)) {
     for (const item of (bundledSongsJson as Song[])) {
       if (item && item.id) {
-        loadedSongsMap.set(item.id, item);
+        if (item.audioUrl && !isValidPlayableAudioUrl(item.audioUrl)) {
+          loadedSongsMap.set(item.id, { ...item, audioUrl: undefined });
+        } else {
+          loadedSongsMap.set(item.id, item);
+        }
       }
     }
   }

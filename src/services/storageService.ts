@@ -2,7 +2,8 @@ import { Song, GitCommit, GitStatusSummary } from '../types/song';
 import { Album } from '../types/album';
 import { INITIAL_SONGS } from '../data/initialSongs';
 import { INITIAL_ALBUMS } from '../data/initialAlbums';
-import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
+import { songToMarkdown, markdownToSong, isValidPlayableAudioUrl } from '../utils/markdownParser';
+import { isStoredSessionAuthorized, AUTHORIZED_GITHUB_USER } from '../utils/authConfig';
 
 const STORAGE_KEY_SONGS = 'tony_cancionero_songs_v1';
 const STORAGE_KEY_ALBUMS = 'tony_cancionero_albums_v1';
@@ -287,8 +288,16 @@ export class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_SONGS);
       if (stored) {
-        const localSongs: Song[] = JSON.parse(stored);
+        let localSongs: Song[] = JSON.parse(stored);
         if (Array.isArray(localSongs) && localSongs.length > 0) {
+          // Sanitize any stale/orphaned blob URLs from past browsing sessions
+          localSongs = localSongs.map(s => {
+            if (s.audioUrl && !isValidPlayableAudioUrl(s.audioUrl)) {
+              return { ...s, audioUrl: undefined };
+            }
+            return s;
+          });
+
           const { songs: reconciled } = this.reconcileWithCatalog(
             localSongs,
             INITIAL_SONGS,
@@ -318,9 +327,34 @@ export class StorageService {
    */
   static saveSongs(songs: Song[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY_SONGS, JSON.stringify(songs));
+      // Never persist session blob URLs into persistent localStorage
+      const sanitized = songs.map(s => {
+        if (s.audioUrl && (s.audioUrl.startsWith('blob:') || !isValidPlayableAudioUrl(s.audioUrl))) {
+          return { ...s, audioUrl: undefined };
+        }
+        return s;
+      });
+      localStorage.setItem(STORAGE_KEY_SONGS, JSON.stringify(sanitized));
     } catch (e) {
       console.error('Failed to save songs', e);
+    }
+  }
+
+  /**
+   * Validates if the current session has verified author rights.
+   */
+  static isAuthorAuthorized(): boolean {
+    if (typeof window === 'undefined') return true;
+    return isStoredSessionAuthorized();
+  }
+
+  /**
+   * Asserts that author privileges exist before mutating persistent content.
+   */
+  static assertAuthorAuthorized(actionName: string): void {
+    if (!this.isAuthorAuthorized()) {
+      console.warn(`StorageService: intento no autorizado de "${actionName}".`);
+      throw new Error(`Acceso no autorizado: Solo el autor (@${AUTHORIZED_GITHUB_USER}) tiene permisos para ${actionName}.`);
     }
   }
 
@@ -328,6 +362,7 @@ export class StorageService {
    * Save or update a single song
    */
   static upsertSong(song: Song): Song[] {
+    this.assertAuthorAuthorized('crear o modificar canciones');
     const songs = this.getSongs();
     const existingIndex = songs.findIndex(s => s.id === song.id);
     const updatedSong: Song = {
@@ -351,6 +386,7 @@ export class StorageService {
    * Delete a song by ID, cleaning up snapshot and recording local commit
    */
   static deleteSong(id: string, autoCommit: boolean = true): { success: boolean; songs: Song[]; deletedSong?: Song } {
+    this.assertAuthorAuthorized('eliminar canciones');
     const songs = this.getSongs();
     const targetSong = songs.find(s => s.id === id);
     const filtered = songs.filter(s => s.id !== id);
@@ -391,6 +427,7 @@ export class StorageService {
     newIdRaw: string,
     autoCommit: boolean = true
   ): { success: boolean; error?: string; songs: Song[]; renamedSong?: Song } {
+    this.assertAuthorAuthorized('renombrar identificadores de canciones');
     const cleanNewId = newIdRaw
       .trim()
       .toLowerCase()
@@ -574,7 +611,11 @@ export class StorageService {
   /**
    * Create a new Git commit recording current files state
    */
+  /**
+   * Create a new Git commit recording current files state
+   */
   static createGitCommit(message: string, author: string = 'Tony <tony@tonygb.com>'): { commit: GitCommit; status: GitStatusSummary } {
+    this.assertAuthorAuthorized('registrar commits en el repositorio');
     const songs = this.getSongs();
     const status = this.getGitStatus();
 
@@ -661,6 +702,7 @@ export class StorageService {
    * Revert a song to a previous historical version
    */
   static restoreSongVersion(songId: string, markdown: string, commitHash: string): Song {
+    this.assertAuthorAuthorized('restaurar versiones históricas');
     const restored = markdownToSong(markdown, songId);
     this.upsertSong(restored);
     this.createGitCommit(`revert: restaurar versión [${commitHash}] de '${restored.title}'`);
@@ -671,6 +713,7 @@ export class StorageService {
    * Reset data to initial demo state
    */
   static resetToDefault(): Song[] {
+    this.assertAuthorAuthorized('restablecer catálogo a demostración');
     // Create automatic safety backup point before resetting
     this.createBackupPoint(
       'Backup automático previo a restablecer catálogo inicial de demostración',
@@ -687,6 +730,7 @@ export class StorageService {
    * Import songs from JSON string
    */
   static importFromJson(jsonString: string): { success: boolean; count: number; error?: string; backup?: SongBackupPoint } {
+    this.assertAuthorAuthorized('importar canciones desde JSON');
     try {
       const data = JSON.parse(jsonString);
       if (!Array.isArray(data)) {
@@ -727,6 +771,7 @@ export class StorageService {
    * Import a single Markdown file
    */
   static importFromMarkdown(filename: string, content: string): { success: boolean; song?: Song; error?: string } {
+    this.assertAuthorAuthorized('importar canciones desde Markdown');
     try {
       const fallbackId = filename.replace(/\.md$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const song = markdownToSong(content, fallbackId);
@@ -815,6 +860,7 @@ export class StorageService {
     backup?: SongBackupPoint;
     error?: string;
   } {
+    this.assertAuthorAuthorized('restaurar copias de seguridad');
     try {
       const backups = this.getBackupPoints();
       const target = backups.find(b => b.id === backupId);
@@ -860,6 +906,7 @@ export class StorageService {
    * Delete a specific backup point
    */
   static deleteBackupPoint(backupId: string): boolean {
+    this.assertAuthorAuthorized('eliminar puntos de restauración');
     const backups = this.getBackupPoints();
     const filtered = backups.filter(b => b.id !== backupId);
     this.saveBackupPoints(filtered);
@@ -870,6 +917,7 @@ export class StorageService {
    * Clear all backup points
    */
   static clearAllBackups(): void {
+    this.assertAuthorAuthorized('purgar copias de seguridad');
     try {
       localStorage.removeItem(STORAGE_KEY_BACKUPS);
     } catch (e) {
@@ -924,6 +972,7 @@ export class StorageService {
    * Insert or update an album
    */
   static upsertAlbum(album: Album): Album[] {
+    this.assertAuthorAuthorized('crear o modificar álbumes');
     const albums = this.getAlbums();
     const now = new Date().toISOString();
     const existingIndex = albums.findIndex(a => a.id === album.id);
@@ -950,6 +999,7 @@ export class StorageService {
    * Delete an album by id
    */
   static deleteAlbum(id: string): Album[] {
+    this.assertAuthorAuthorized('eliminar álbumes');
     const albums = this.getAlbums();
     const filtered = albums.filter(a => a.id !== id);
     this.saveAlbums(filtered);

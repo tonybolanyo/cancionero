@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Song } from '../types/song';
 import { Play, FileText, Edit3, Download, History, ArrowUpDown, Disc, Music, ArrowUp, ArrowDown, FileCode, Trash2 } from 'lucide-react';
+import { isValidPlayableAudioUrl } from '../utils/markdownParser';
 
 interface SongCompactViewProps {
   songs: Song[];
@@ -170,7 +171,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
           </thead>
           <tbody className="divide-y divide-[var(--border-subtle)]">
             {sortedSongs.map((song) => {
-              const hasAudio = !!(song.spotifyUrl || song.youtubeUrl || song.soundcloudUrl || song.audioUrl);
+              const hasAudio = !!(song.spotifyUrl || song.youtubeUrl || song.soundcloudUrl || isValidPlayableAudioUrl(song.audioUrl));
               return (
                 <tr
                   key={song.id}
@@ -252,7 +253,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
                           <Play className="w-3.5 h-3.5" />
                         </span>
                       )}
-                      {song.audioUrl && (
+                      {isValidPlayableAudioUrl(song.audioUrl) && (
                         <span className="text-[var(--accent-primary)]" title="Maqueta de audio">
                           <Music className="w-3.5 h-3.5" />
                         </span>

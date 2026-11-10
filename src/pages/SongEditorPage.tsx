@@ -60,11 +60,13 @@ import {
   respellChord,
   respellLyrics,
   parseLyricLine,
+  isValidPlayableAudioUrl,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { GoogleDriveService } from '../services/googleDriveService';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
@@ -852,6 +854,15 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     if (!clean) return 0;
     return clean.split(/\s+/).length;
   }, [lyrics]);
+
+  if (!isAuthor) {
+    return (
+      <AuthorAccessGuard
+        title="Editor de Canciones Reservado al Autor"
+        description="La creación, edición y eliminación de temas, maquetas de audio y acordes está reservada exclusivamente para el autor propietario."
+      />
+    );
+  }
 
   return (
     <div className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-4 animate-fade-in text-[var(--text-primary)]">
@@ -1647,7 +1658,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         />
 
         {/* Global Hidden Audio Element */}
-        {audioUrl && (
+        {isValidPlayableAudioUrl(audioUrl) && (
           <audio
             ref={localAudioRef}
             src={audioUrl}
@@ -1658,6 +1669,10 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               if (localAudioRef.current) setAudioDuration(localAudioRef.current.duration);
             }}
             onEnded={() => setIsPlayingLocalAudio(false)}
+            onError={(e) => {
+              console.warn('Error en el reproductor de audio local:', e);
+              setIsPlayingLocalAudio(false);
+            }}
           />
         )}
 

@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { GitHubUser, GoogleAuthUser, AuthState } from '../types/auth';
-import { AUTHORIZED_GITHUB_USER, isAuthorizedAuthorLogin } from '../utils/authConfig';
+import { AUTHORIZED_GITHUB_USER, isAuthorizedAuthorLogin, AUTHORIZED_AUTHOR_EMAIL, isAuthorizedAuthorEmail } from '../utils/authConfig';
 import { GoogleDriveService } from '../services/googleDriveService';
 
 interface AuthContextType extends AuthState {
   loginWithGitHub: (token: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string; user?: GitHubUser }>;
   logout: () => void;
   isVerifyingSession: boolean;
+  authorToken: string | null;
   // Google Drive Integration
   googleUser: GoogleAuthUser | null;
   isGoogleDriveConnected: boolean;
@@ -111,7 +112,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   useEffect(() => {
     const unsubscribe = GoogleDriveService.initAuth(
-      (user, token) => {
+      async (user, token) => {
+        // Enforce strict check on author email
+        if (!isAuthorizedAuthorEmail(user.email)) {
+          console.warn(`Cuenta Google (${user.email}) no coincide con el autor autorizado (${AUTHORIZED_AUTHOR_EMAIL}). Desconectando.`);
+          await GoogleDriveService.signOut();
+          setGoogleUser(null);
+          setIsGoogleDriveConnected(false);
+          return;
+        }
+
         setGoogleUser({
           uid: user.uid,
           email: user.email,
@@ -290,9 +300,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /**
    * Sign in with Google Drive via Firebase Popup
    */
+  /**
+   * Sign in with Google Drive via Firebase Popup
+   */
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string; user?: GoogleAuthUser }> => {
     try {
       const result = await GoogleDriveService.signInWithGoogle();
+      const email = result.user.email;
+
+      // Enforce strict check on author email
+      if (!isAuthorizedAuthorEmail(email)) {
+        await GoogleDriveService.signOut();
+        setGoogleUser(null);
+        setIsGoogleDriveConnected(false);
+        return {
+          success: false,
+          error: `Acceso denegado: Te has identificado con ${email || 'una cuenta de Google no autorizada'}, pero solamente el propietario (${AUTHORIZED_AUTHOR_EMAIL}) tiene permisos de autor en este cancionero.`
+        };
+      }
+
       const mappedUser: GoogleAuthUser = {
         uid: result.user.uid,
         email: result.user.email,
@@ -338,14 +364,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // The user is recognized as Author if authenticated via GitHub or Google Drive
-  const isAuthor = authState.isAuthor || Boolean(googleUser);
+  // The user is recognized as Author ONLY if authenticated as the authorized GitHub account or authorized Google account
+  const isAuthor =
+    (authState.isAuthenticated && isAuthorizedAuthorLogin(authState.user?.login)) ||
+    (Boolean(googleUser) && isAuthorizedAuthorEmail(googleUser?.email));
+
+  // Author token for authenticated API calls
+  const authorToken = authState.token || GoogleDriveService.getAccessToken();
 
   return (
     <AuthContext.Provider
       value={{
         ...authState,
         isAuthor,
+        authorToken,
         loginWithGitHub,
         logout,
         isVerifyingSession,

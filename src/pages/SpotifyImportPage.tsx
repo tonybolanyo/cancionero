@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { SpotifyAlbumImportModal } from '../components/SpotifyAlbumImportModal';
 import { useAppNavigation } from '../context/NavigationContext';
+import { useAuth } from '../context/AuthContext';
+import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 import { Song } from '../types/song';
 
 interface SpotifyImportPageProps {
@@ -14,6 +16,16 @@ export const SpotifyImportPage: React.FC<SpotifyImportPageProps> = ({
   onImport
 }) => {
   const { goBack } = useAppNavigation();
+  const { isAuthor } = useAuth();
+
+  if (!isAuthor) {
+    return (
+      <AuthorAccessGuard
+        title="Importación de Álbumes Reservada al Autor"
+        description="La importación y creación de canciones en el catálogo desde discos de Spotify está reservada exclusivamente para el autor propietario."
+      />
+    );
+  }
 
   return (
     <div className="max-w-[1200px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">

@@ -18,7 +18,7 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
   onClose,
   onDeleteSuccess,
 }) => {
-  const { token } = useAuth();
+  const { token, isAuthor } = useAuth();
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoPush, setAutoPush] = useState<boolean>(() =>
     GitHubSyncService.isAutoCommitEnabled()
@@ -26,11 +26,15 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (!isOpen || !song) return null;
+  if (!isOpen || !song || !isAuthor) return null;
 
   const defaultCommitMessage = `delete: eliminar canción "${song.title}" (songs/${song.id}.md)`;
 
   const handleDelete = async () => {
+    if (!isAuthor) {
+      setErrorMessage('Acceso denegado: solo el autor propietario puede eliminar composiciones.');
+      return;
+    }
     setIsProcessing(true);
     setErrorMessage(null);
 

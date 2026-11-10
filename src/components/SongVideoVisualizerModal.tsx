@@ -27,6 +27,7 @@ import {
   Youtube
 } from 'lucide-react';
 import { Song } from '../types/song';
+import { useAuth } from '../context/AuthContext';
 import { GoogleDriveService } from '../services/googleDriveService';
 import { parseLrc, cleanRawText, CHORD_BRACKET_REGEX, stripChordsFromText } from '../lib/lyrics/parseLrc';
 import { SyncedLyricLine } from '../types/lyrics';
@@ -172,6 +173,13 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   allSongs = [],
   onSelectOtherSong
 }) => {
+  const { isAuthor } = useAuth();
+
+  // If not author, prevent rendering video generator
+  if (!isAuthor) {
+    return null;
+  }
+
   // Configuration States
   const [resolution, setResolution] = useState<VideoResolution>('1080p');
   const [effect, setEffect] = useState<VisualizerEffect>('spectrum-bars');
@@ -1490,6 +1498,11 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleAudioEnded}
+            onError={(e) => {
+              console.warn('Error en el elemento de audio de SongVideoVisualizerModal:', e);
+              setIsPlaying(false);
+              setAudioError('No se pudo cargar la pista de audio para el visualizador.');
+            }}
           />
         )}
 
@@ -1975,6 +1988,9 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
                     <video
                       src={recordedVideoUrl}
                       controls
+                      onError={(e) => {
+                        console.warn('Error al reproducir la previsualización de vídeo renderizado:', e);
+                      }}
                       className="w-full h-full object-contain"
                     />
                   </div>
