@@ -1,0 +1,1 @@
+export { AuthorAccessGuard } from '../AuthorAccessGuard';

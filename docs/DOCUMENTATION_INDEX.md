@@ -14,6 +14,7 @@ Quick reference for finding specific documentation topics in Cancionero.
 ### Developer Questions
 
 - "How do I set up the development environment?" → [Development / README.md](development/README.md)
+- "What is the component architecture and SOLID design?" → [Development / COMPONENT_ARCHITECTURE.md](development/COMPONENT_ARCHITECTURE.md)
 - "What are the git commit conventions?" → [Development / COMMIT_GUIDE.md](development/COMMIT_GUIDE.md)
 - "How do I add environment variables?" → [Development / SECRETS_CONFIGURATION.md](development/SECRETS_CONFIGURATION.md)
 - "Where is the technical architecture documented?" → [Development / IMPLEMENTATION_REPORT.md](development/IMPLEMENTATION_REPORT.md)

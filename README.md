@@ -61,6 +61,9 @@ La documentación está organizada por categorías en el directorio `/docs`:
 # Instalar dependencias
 npm install
 
+# Ejecutar tests unitarios (109 tests)
+npm test
+
 # Desarrollo local
 npm run dev
 
@@ -86,19 +89,32 @@ El servidor estará en `http://localhost:3000`.
 
 ---
 
-## 📂 Estructura del Proyecto
+## 📂 Estructura del Proyecto y Arquitectura SOLID
+
+→ Para una guía técnica detallada de la arquitectura de componentes y patrones SOLID, consulta **[Arquitectura de Componentes SOLID](docs/development/COMPONENT_ARCHITECTURE.md)**.
 
 ```text
 ├── .github/workflows/          # GitHub Actions (despliegue automático)
-├── src/                        # Código fuente (React, Vite, Tailwind)
-│   ├── components/             # Componentes de UI
-│   ├── context/                # Contextos de React
-│   ├── services/               # Servicios Git y persistencia
-│   └── utils/                  # Utilidades de transposición y parseo
-├── songs/                      # Catálogo de canciones (Markdown)
+├── src/                        # Código fuente (React 19, Vite, Tailwind CSS)
+│   ├── components/             # Componentes organizados por dominio
+│   │   ├── layout/             # Shell visual (Header, Footer, SkipLink, AppLayout)
+│   │   ├── catalog/            # Catálogo, filtros, vistas en cuadrícula/atril
+│   │   ├── modals/             # Diálogos y modales globales (AppModals)
+│   │   ├── audio/              # Reproductores, DSP, métrica y sincronización LRC
+│   │   ├── routing/            # Enrutador de vistas (AppRouter)
+│   │   ├── auth/               # Guardias de acceso para autor
+│   │   └── seo/                # Metadatos dinámicos y OpenGraph
+│   ├── hooks/                  # Custom hooks desacoplados (useSongCatalog, etc.)
+│   ├── pages/                  # Vistas y páginas completas independientes
+│   ├── context/                # Contextos de React (Theme, Auth, Navigation)
+│   ├── services/               # Servicios Git y persistencia en disco/Storage
+│   └── utils/                  # Utilidades de transposición, PDF y parseo
+├── test/                       # Batería de pruebas unitarias (Node.js test runner)
+├── songs/                      # Catálogo de canciones en formato Markdown
 ├── docs/                       # 📖 Documentación estructurada
-├── public/                     # Archivos estáticos
-└── package.json                # Dependencias y scripts
+├── public/                     # Archivos estáticos y catálogo generado
+├── package.json                # Dependencias, scripts y configuración
+└── package-lock.json           # Bloqueo de versiones sincronizado para despliegues
 ```
 
 ---

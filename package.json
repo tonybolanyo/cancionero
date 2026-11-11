@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
+    "test": "tsx --test test/*.test.ts",
     "generate-version": "node scripts/generate-version.js",
     "generate-changelog": "node scripts/generate-changelog.js",
     "generate-catalog": "node scripts/generate-catalog.mjs",
