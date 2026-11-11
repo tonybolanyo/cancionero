@@ -51,6 +51,7 @@ jobs:
         env:
           VITE_BASE_URL: ${{ steps.pages.outputs.base_path || '/cancionero/' }}
           VITE_GITHUB_ALLOWED_USER: ${{ vars.VITE_GITHUB_ALLOWED_USER || 'tonygb' }}
+          DOMAIN: tonygb.com
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
