@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-11-12
+
+### 🐛 Bug Fixes
+
+- Implement SEO sitemap and robots.txt generation ([cf05045](../../commit/cf05045)) - tonybolanyo
+
+### 🔄 Other Changes
+
+- Merge pull request #37 from tonybolanyo/special-tribble ([f19c000](../../commit/f19c000)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.12.0] - 2026-11-11
 
 ### 🎉 Features
