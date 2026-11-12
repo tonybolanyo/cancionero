@@ -83,7 +83,7 @@ function getSongs() {
     songs.push({
       id,
       title: metadata.title || id,
-      url: `${domain}${basePath}/song/${id}`,
+      url: `https://${domain}${basePath}/song/${id}`,
       lastmod,
       priority: 0.8,
       changefreq: 'monthly'
@@ -103,7 +103,7 @@ function generateSitemap(songs) {
 
   // Agregar página principal del cancionero
   xml += `  <url>
-    <loc>${domain}${basePath}/</loc>
+    <loc>https://${domain}${basePath}/</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
     <priority>0.9</priority>
     <changefreq>weekly</changefreq>
