@@ -363,3 +363,169 @@ test('respellChord and respellLyrics correctly convert between sharps (#) and fl
   assert.ok(roundtrip.includes('[A#m7b5] voz'));
 });
 
+function synthesizeChordSignal(
+  frequenciesHz: number[],
+  durationSec: number,
+  sampleRate: number = 44100,
+  amplitudes?: number[]
+): Float32Array {
+  const numSamples = Math.floor(durationSec * sampleRate);
+  const buffer = new Float32Array(numSamples);
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sum = 0;
+    for (let fIdx = 0; fIdx < frequenciesHz.length; fIdx++) {
+      const amp = amplitudes ? (amplitudes[fIdx] ?? 0.25) : 0.25;
+      sum += amp * Math.sin(2 * Math.PI * frequenciesHz[fIdx] * t);
+    }
+    buffer[i] = sum;
+  }
+  return buffer;
+}
+
+test('smoothChordsWithViterbi eliminates transient passing-note and snare glitches using KeyContext', async () => {
+  const { smoothChordsWithViterbi } = await import('../src/lib/audio/chords');
+
+  // Simulate frame-by-frame TonalExtractor predictions (hop ~0.1s) in C major
+  // Includes both a 1-frame boundary glitch and a 2-frame chromatic passing glitch
+  const rawFrames = [
+    ...Array.from({ length: 12 }, (_, i) => ({
+      startTime: i * 0.1,
+      endTime: (i + 1) * 0.1,
+      chord: i === 5 || i === 6 ? 'F#m' : 'C', // 2-frame out-of-key glitch inside C
+      confidence: i === 5 || i === 6 ? 0.45 : 0.85
+    })),
+    ...Array.from({ length: 12 }, (_, i) => ({
+      startTime: (12 + i) * 0.1,
+      endTime: (13 + i) * 0.1,
+      chord: i === 0 ? 'C#dim' : 'G', // boundary glitch on transition to G
+      confidence: i === 0 ? 0.4 : 0.88
+    })),
+    ...Array.from({ length: 12 }, (_, i) => ({
+      startTime: (24 + i) * 0.1,
+      endTime: (25 + i) * 0.1,
+      chord: i === 4 ? 'D#m' : 'Am', // isolated passing vocal note inside Am
+      confidence: i === 4 ? 0.42 : 0.86
+    }))
+  ];
+
+  const smoothed = smoothChordsWithViterbi(rawFrames, {
+    keyContext: { key: 'C', scale: 'major', confidence: 0.9 },
+    hopDurationSec: 0.1,
+    minDurationSec: 0.4
+  });
+
+  assert.deepStrictEqual(
+    smoothed.map(s => s.chord),
+    ['C', 'G', 'Am']
+  );
+  assert.strictEqual(smoothed[0].startTime, 0);
+  assert.ok(smoothed[0].endTime >= 1.1 && smoothed[0].endTime <= 1.3);
+  assert.ok(smoothed[2].endTime >= 3.5);
+});
+
+test('computeDualBandFrameChroma separates 40-180 Hz bass and 180-1200 Hz mid bands for slash chords', async () => {
+  const { computeDualBandFrameChroma } = await import('../src/lib/audio/chroma');
+  const { recognizeChordsWithViterbi } = await import('../src/lib/audio/chords');
+  const sampleRate = 44100;
+
+  // 1. C/G: Bass G2 (98.0 Hz) + C3 (130.81 Hz) + Mid C4 (261.63), E4 (329.63), G4 (392.00)
+  // Even with C3 inside 40-180 Hz, lowest prominent bass pitch is G2 (98 Hz) -> G
+  const cgAudio = synthesizeChordSignal(
+    [98.0, 130.81, 261.63, 329.63, 392.0],
+    1.5,
+    sampleRate,
+    [0.35, 0.30, 0.30, 0.28, 0.25]
+  );
+  const cgDual = computeDualBandFrameChroma(cgAudio, sampleRate);
+  assert.strictEqual(cgDual.bassEstimate.pitchName, 'G');
+  assert.ok(cgDual.bassEstimate.confidence >= 0.45);
+  const cgResult = recognizeChordsWithViterbi(
+    [{ startTime: 0, endTime: 1.5, chroma: cgDual.chroma, midChroma: cgDual.midChroma, bassEstimate: cgDual.bassEstimate }],
+    { keyContext: { key: 'C', scale: 'major', confidence: 0.85 }, minDurationSec: 0.5 }
+  );
+  assert.strictEqual(cgResult[0].chord, 'C/G');
+
+  // 2. D/F#: Bass F#2 (92.50 Hz) + Mid D4 (293.66), F#4 (369.99), A4 (440.00)
+  const dfSharpAudio = synthesizeChordSignal(
+    [92.5, 293.66, 369.99, 440.0],
+    1.5,
+    sampleRate,
+    [0.35, 0.30, 0.28, 0.26]
+  );
+  const dfSharpDual = computeDualBandFrameChroma(dfSharpAudio, sampleRate);
+  assert.strictEqual(dfSharpDual.bassEstimate.pitchName, 'F#');
+  const dfSharpResult = recognizeChordsWithViterbi(
+    [{ startTime: 0, endTime: 1.5, chroma: dfSharpDual.chroma, midChroma: dfSharpDual.midChroma, bassEstimate: dfSharpDual.bassEstimate }],
+    { keyContext: { key: 'G', scale: 'major', confidence: 0.85 }, minDurationSec: 0.5 }
+  );
+  assert.strictEqual(dfSharpResult[0].chord, 'D/F#');
+
+  // 3. Am/G: Bass G2 (98.0 Hz) + Mid A3 (220.00), C4 (261.63), E4 (329.63)
+  const amGAudio = synthesizeChordSignal(
+    [98.0, 220.0, 261.63, 329.63],
+    1.5,
+    sampleRate,
+    [0.35, 0.30, 0.28, 0.26]
+  );
+  const amGDual = computeDualBandFrameChroma(amGAudio, sampleRate);
+  assert.strictEqual(amGDual.bassEstimate.pitchName, 'G');
+  const amGResult = recognizeChordsWithViterbi(
+    [{ startTime: 0, endTime: 1.5, chroma: amGDual.chroma, midChroma: amGDual.midChroma, bassEstimate: amGDual.bassEstimate }],
+    { keyContext: { key: 'Am', scale: 'minor', confidence: 0.85 }, minDurationSec: 0.5 }
+  );
+  assert.strictEqual(amGResult[0].chord, 'Am/G');
+
+  // 4. Root-position C: Bass C2 (65.41 Hz) + Mid C4, E4, G4 -> stays "C", never "C/C"
+  const cRootAudio = synthesizeChordSignal(
+    [65.41, 261.63, 329.63, 392.0],
+    1.5,
+    sampleRate,
+    [0.35, 0.30, 0.28, 0.26]
+  );
+  const cRootDual = computeDualBandFrameChroma(cRootAudio, sampleRate);
+  assert.strictEqual(cRootDual.bassEstimate.pitchName, 'C');
+  const cRootResult = recognizeChordsWithViterbi(
+    [{ startTime: 0, endTime: 1.5, chroma: cRootDual.chroma, midChroma: cRootDual.midChroma, bassEstimate: cRootDual.bassEstimate }],
+    { keyContext: { key: 'C', scale: 'major', confidence: 0.85 }, minDurationSec: 0.5 }
+  );
+  assert.strictEqual(cRootResult[0].chord, 'C');
+});
+
+test('analyzeChordsDSP detects full songwriter progression with slash chords and Viterbi smoothing', async () => {
+  const { analyzeChordsDSP } = await import('../src/lib/audio/chords');
+  const sampleRate = 44100;
+
+  // Build 9s progression: C (0-2.25s) -> C/G (2.25-4.5s) -> Am (4.5-6.75s) -> Am/G (6.75-9s)
+  const seg1 = synthesizeChordSignal([65.41, 261.63, 329.63, 392.0], 2.25, sampleRate, [0.35, 0.3, 0.28, 0.26]);
+  const seg2 = synthesizeChordSignal([98.0, 261.63, 329.63, 392.0], 2.25, sampleRate, [0.35, 0.3, 0.28, 0.26]);
+  const seg3 = synthesizeChordSignal([110.0, 220.0, 261.63, 329.63], 2.25, sampleRate, [0.35, 0.3, 0.28, 0.26]);
+  const seg4 = synthesizeChordSignal([98.0, 220.0, 261.63, 329.63], 2.25, sampleRate, [0.35, 0.3, 0.28, 0.26]);
+
+  const totalLength = seg1.length + seg2.length + seg3.length + seg4.length;
+  const fullSignal = new Float32Array(totalLength);
+  fullSignal.set(seg1, 0);
+  fullSignal.set(seg2, seg1.length);
+  fullSignal.set(seg3, seg1.length + seg2.length);
+  fullSignal.set(seg4, seg1.length + seg2.length + seg3.length);
+
+  const mockBuffer = {
+    numberOfChannels: 1,
+    length: totalLength,
+    sampleRate,
+    duration: totalLength / sampleRate,
+    getChannelData: () => fullSignal
+  } as unknown as AudioBuffer;
+
+  const chords = analyzeChordsDSP(mockBuffer, {
+    keyContext: { key: 'C', scale: 'major', confidence: 0.9 }
+  });
+
+  const sequence = chords.map(c => c.chord);
+  assert.ok(sequence.includes('C'), `Expected C in ${sequence.join(' -> ')}`);
+  assert.ok(sequence.includes('C/G'), `Expected C/G in ${sequence.join(' -> ')}`);
+  assert.ok(sequence.includes('Am'), `Expected Am in ${sequence.join(' -> ')}`);
+  assert.ok(sequence.includes('Am/G'), `Expected Am/G in ${sequence.join(' -> ')}`);
+});
+
+

@@ -1,4 +1,9 @@
-import { PITCH_CLASSES, WindowedChroma, computeWindowedChromagrams } from './chroma';
+import {
+  PITCH_CLASSES,
+  BassPitchEstimate,
+  WindowedChroma,
+  computeWindowedChromagrams
+} from './chroma';
 import { extractMonoChannelData } from './bufferUtils';
 import { insertChordsIntoSyllables, InsertChordsOptions } from '../lyrics/lyricsChordIntegration';
 
@@ -29,12 +34,206 @@ export interface ChordTemplate {
   vector: Float32Array;
 }
 
+export interface KeyContext {
+  /** Key root name, e.g. 'C', 'Am', 'F#', 'Bb' */
+  key: string;
+  /** Scale mode */
+  scale: 'major' | 'minor';
+  /** Key detection confidence 0..1 */
+  confidence?: number;
+}
+
+export interface ViterbiOptions {
+  keyContext?: KeyContext;
+  /** Transition penalty when switching between different chords */
+  switchPenalty?: number;
+  /** Temperature scaling for cosine similarity softmax emissions (default: 10.0) */
+  emissionTemperature?: number;
+  /** Weight of the detected key prior in log-probability space (default: 1.0) */
+  keyWeight?: number;
+  /** Minimum segment duration in seconds after decoding (default: 0.75) */
+  minDurationSec?: number;
+  /** Hop duration in seconds between consecutive frames (auto-detected if omitted) */
+  hopDurationSec?: number;
+  /** Whether to resolve 40–180 Hz bass inversions into slash chords (default: true) */
+  enableSlashChords?: boolean;
+}
+
+export interface RawChordFrame {
+  startTime: number;
+  endTime: number;
+  chord: string;
+  confidence: number;
+  bassEstimate?: BassPitchEstimate;
+  midChroma?: number[];
+}
+
 /**
  * Decoupled interface for chord classification from a 12-bin chromagram vector.
  * Allows replacing this initial template heuristic with a machine learning model in the future.
  */
 export interface ChordRecognizer {
   recognize(chroma: number[] | Float32Array): { chord: string; confidence: number };
+}
+
+const NOTE_TO_INDEX: Record<string, number> = {
+  C: 0,
+  'B#': 0,
+  'C#': 1,
+  Db: 1,
+  D: 2,
+  'D#': 3,
+  Eb: 3,
+  E: 4,
+  Fb: 4,
+  F: 5,
+  'E#': 5,
+  'F#': 6,
+  Gb: 6,
+  G: 7,
+  'G#': 8,
+  Ab: 8,
+  A: 9,
+  'A#': 10,
+  Bb: 10,
+  B: 11,
+  Cb: 11
+};
+
+/**
+ * Normalizes any note spelling (sharps or flats) to pitch class index 0..11, or -1 if invalid.
+ */
+export function normalizePitchClassIndex(note: string): number {
+  if (!note) return -1;
+  const cleaned = note.trim();
+  if (NOTE_TO_INDEX[cleaned] !== undefined) {
+    return NOTE_TO_INDEX[cleaned];
+  }
+  const match = cleaned.match(/^([A-Ga-g][#b]?)/);
+  if (!match) return -1;
+  const normalized = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+  return NOTE_TO_INDEX[normalized] ?? -1;
+}
+
+/**
+ * Parses a KeyContext into canonical tonic index (0..11), scale, and confidence.
+ */
+export function parseKeyContext(keyContext?: KeyContext): {
+  tonicIndex: number;
+  scale: 'major' | 'minor';
+  confidence: number;
+} | null {
+  if (!keyContext || !keyContext.key) return null;
+  const raw = keyContext.key.trim();
+  const isMinorSuffix = raw.endsWith('m') && !raw.endsWith('dim');
+  const rootPart = isMinorSuffix ? raw.slice(0, -1) : raw;
+  const tonicIndex = normalizePitchClassIndex(rootPart);
+  if (tonicIndex < 0) return null;
+
+  const scale: 'major' | 'minor' =
+    keyContext.scale === 'minor' || isMinorSuffix ? 'minor' : 'major';
+  const confidence = Math.max(0, Math.min(1, keyContext.confidence ?? 0.75));
+  return { tonicIndex, scale, confidence };
+}
+
+/**
+ * Parses a chord symbol (including slash chords like "D/F#", "Am/G", "C#m7")
+ * into its structural components and pitch-class bitmask.
+ */
+export function parseChordSymbol(chord: string): {
+  baseChord: string;
+  rootIndex: number;
+  type: ChordType;
+  bassIndex: number;
+  pitchMask: number;
+  isNoChord: boolean;
+} {
+  const trimmed = (chord || '').trim();
+  if (!trimmed || trimmed === 'N.C.' || trimmed === 'N' || trimmed === 'NC') {
+    return {
+      baseChord: 'N.C.',
+      rootIndex: -1,
+      type: 'major',
+      bassIndex: -1,
+      pitchMask: 0,
+      isNoChord: true
+    };
+  }
+
+  const [mainPart, bassPart] = trimmed.split('/');
+  const bassIndex = bassPart ? normalizePitchClassIndex(bassPart) : -1;
+
+  const match = mainPart.match(/^([A-Ga-g][#b]?)(.*)$/);
+  if (!match) {
+    return {
+      baseChord: trimmed,
+      rootIndex: -1,
+      type: 'major',
+      bassIndex,
+      pitchMask: 0,
+      isNoChord: true
+    };
+  }
+
+  const rootIndex = normalizePitchClassIndex(match[1]);
+  const suffix = match[2].trim();
+
+  let type: ChordType = 'major';
+  let intervals: number[] = [0, 4, 7];
+
+  if (suffix === '' || suffix === 'maj') {
+    type = 'major';
+    intervals = [0, 4, 7];
+  } else if (suffix === 'm' || suffix === 'min') {
+    type = 'minor';
+    intervals = [0, 3, 7];
+  } else if (suffix === '5') {
+    type = 'power';
+    intervals = [0, 7];
+  } else if (suffix === '7') {
+    type = 'dom7';
+    intervals = [0, 4, 7, 10];
+  } else if (suffix === 'maj7' || suffix === 'M7') {
+    type = 'maj7';
+    intervals = [0, 4, 7, 11];
+  } else if (suffix === 'm7' || suffix === 'min7') {
+    type = 'min7';
+    intervals = [0, 3, 7, 10];
+  } else if (suffix === 'sus2') {
+    type = 'sus2';
+    intervals = [0, 2, 7];
+  } else if (suffix === 'sus4' || suffix === 'sus') {
+    type = 'sus4';
+    intervals = [0, 5, 7];
+  } else if (suffix === 'dim') {
+    type = 'dim';
+    intervals = [0, 3, 6];
+  } else if (suffix === 'm7b5' || suffix === 'ø') {
+    type = 'm7b5';
+    intervals = [0, 3, 6, 10];
+  } else if (suffix === 'aug' || suffix === '+') {
+    type = 'aug';
+    intervals = [0, 4, 8];
+  } else if (suffix.startsWith('m')) {
+    type = 'minor';
+    intervals = [0, 3, 7];
+  }
+
+  let pitchMask = 0;
+  if (rootIndex >= 0) {
+    for (const iv of intervals) {
+      pitchMask |= 1 << ((rootIndex + iv) % 12);
+    }
+  }
+
+  return {
+    baseChord: mainPart,
+    rootIndex,
+    type,
+    bassIndex,
+    pitchMask,
+    isNoChord: rootIndex < 0
+  };
 }
 
 /**
@@ -253,6 +452,733 @@ export class TemplateChordRecognizer implements ChordRecognizer {
 export const defaultChordRecognizer = new TemplateChordRecognizer();
 
 /**
+ * Computes log-prior harmonic weights for a candidate chord given a detected musical key.
+ * Favors diatonic degrees (I, IV, V, vi, ii, iii in major; i, III, iv, v/V, VI, VII in minor),
+ * gently accommodates common borrowed/secondary dominants, and penalizes chromatic outliers
+ * caused by passing vocal notes or percussive transients.
+ */
+export function getKeyPriorLogProb(
+  chord: string,
+  keyContext?: KeyContext,
+  keyWeight: number = 1.0
+): number {
+  const parsedKey = parseKeyContext(keyContext);
+  if (!parsedKey || keyWeight <= 0) return 0;
+
+  const parsedChord = parseChordSymbol(chord);
+  if (parsedChord.isNoChord || parsedChord.rootIndex < 0) return -0.8 * keyWeight;
+
+  const degree = (parsedChord.rootIndex - parsedKey.tonicIndex + 12) % 12;
+  const type = parsedChord.type;
+  const strength = keyWeight * (0.45 + 0.75 * parsedKey.confidence);
+
+  const isMajorFamily = type === 'major' || type === 'maj7' || type === 'dom7' || type === 'sus2' || type === 'sus4' || type === 'power';
+  const isMinorFamily = type === 'minor' || type === 'min7' || type === 'sus2' || type === 'sus4' || type === 'power';
+
+  if (parsedKey.scale === 'major') {
+    // I (Tonic)
+    if (degree === 0 && (type === 'major' || type === 'maj7' || type === 'sus2' || type === 'sus4' || type === 'power')) {
+      return 0.85 * strength;
+    }
+    // IV, V (Primary subdominant/dominant)
+    if ((degree === 5 || degree === 7) && isMajorFamily) {
+      return 0.65 * strength;
+    }
+    // vi (Relative minor)
+    if (degree === 9 && isMinorFamily) {
+      return 0.60 * strength;
+    }
+    // ii, iii (Secondary diatonic)
+    if ((degree === 2 || degree === 4) && isMinorFamily) {
+      return 0.35 * strength;
+    }
+    // vii° (Leading tone)
+    if (degree === 11 && (type === 'dim' || type === 'm7b5')) {
+      return 0.15 * strength;
+    }
+    // Common songwriter borrowed / secondary dominants in Major:
+    // bVII (10), iv (5 minor), II7 (2 dom7), III7 (4 dom7), VI7 (9 dom7), bVI (8 major), bIII (3 major)
+    if (
+      (degree === 10 && isMajorFamily) ||
+      (degree === 5 && isMinorFamily) ||
+      ((degree === 2 || degree === 4 || degree === 9) && type === 'dom7') ||
+      ((degree === 8 || degree === 3) && isMajorFamily)
+    ) {
+      return -0.25 * strength;
+    }
+    return -1.25 * strength;
+  } else {
+    // Minor key (Natural + Harmonic V/V7)
+    // i (Tonic)
+    if (degree === 0 && isMinorFamily) {
+      return 0.85 * strength;
+    }
+    // VI, VII, III (Primary major chords in minor)
+    if ((degree === 8 || degree === 10 || degree === 3) && isMajorFamily) {
+      return 0.60 * strength;
+    }
+    // iv (Subdominant)
+    if (degree === 5 && isMinorFamily) {
+      return 0.60 * strength;
+    }
+    // v / V / V7 (Dominant minor or harmonic major/dom7)
+    if (degree === 7 && (isMinorFamily || isMajorFamily)) {
+      return 0.60 * strength;
+    }
+    // ii° (Supertonic diminished / minor)
+    if (degree === 2 && (type === 'dim' || type === 'm7b5' || isMinorFamily)) {
+      return 0.25 * strength;
+    }
+    // Common borrowed chords in Minor: IV (5 major - Dorian), I (0 major - Picardy/secondary), bII (1 major - Neapolitan)
+    if (
+      (degree === 5 && isMajorFamily) ||
+      (degree === 0 && type === 'major') ||
+      (degree === 1 && isMajorFamily)
+    ) {
+      return -0.25 * strength;
+    }
+    return -1.25 * strength;
+  }
+}
+
+function countBits(n: number): number {
+  let count = 0;
+  let x = n;
+  while (x > 0) {
+    count += x & 1;
+    x >>= 1;
+  }
+  return count;
+}
+
+/**
+ * Computes harmonic transition affinity bonus between two distinct chords
+ * based on circle-of-fifths proximity, shared pitch classes, and relative major/minor closeness.
+ */
+function computeHarmonicAffinity(
+  rootA: number,
+  maskA: number,
+  rootB: number,
+  maskB: number
+): number {
+  if (rootA < 0 || rootB < 0) return 0;
+
+  let bonus = 0;
+  const interval = (rootB - rootA + 12) % 12;
+
+  // Circle of fifths neighbors (P5 / P4, e.g. G -> C, C -> F, Am -> Dm)
+  if (interval === 5 || interval === 7) {
+    bonus += 0.35;
+  } else if (interval === 3 || interval === 9) {
+    // Relative major/minor root movement (e.g. C <-> Am)
+    bonus += 0.25;
+  } else if (interval === 0) {
+    // Same root quality refinement (e.g. G -> G7 or Am -> Am7)
+    bonus += 0.30;
+  }
+
+  // Shared pitch classes bonus
+  const sharedNotes = countBits(maskA & maskB);
+  bonus += Math.min(0.25, sharedNotes * 0.08);
+
+  return bonus;
+}
+
+/**
+ * Resolves a chord + 40–180 Hz bass estimate into a slash chord (e.g. C/G, D/F#, Am/G)
+ * when the lowest bass pitch is clear, musically valid, and differs from the chord root.
+ */
+export function resolveSlashChord(
+  baseChord: string,
+  bassEstimate?: BassPitchEstimate,
+  keyContext?: KeyContext
+): string {
+  if (!bassEstimate || bassEstimate.pitchClass < 0 || !bassEstimate.pitchName) {
+    return baseChord;
+  }
+
+  const parsed = parseChordSymbol(baseChord);
+  if (parsed.isNoChord || parsed.rootIndex < 0) {
+    return baseChord;
+  }
+
+  // Root-position bass matches the chord root -> no slash suffix needed
+  if (bassEstimate.pitchClass === parsed.rootIndex) {
+    return parsed.baseChord;
+  }
+
+  // Require real bass presence in 40–180 Hz
+  if (bassEstimate.energyRatio < 0.08 && bassEstimate.confidence < 0.55) {
+    return parsed.baseChord;
+  }
+
+  const bassPc = bassEstimate.pitchClass;
+  const intervalFromRoot = (bassPc - parsed.rootIndex + 12) % 12;
+
+  // 1. Chord tone in the bass (1st inversion 3rd, 2nd inversion 5th, or 7th)
+  const isChordTone = (parsed.pitchMask & (1 << bassPc)) !== 0;
+
+  // 2. Common songwriter pedal / descending walking bass intervals (e.g. Am/G -> m7, C/B -> M7, G/A -> M2, D/G -> P4)
+  const isCommonWalkingBass =
+    intervalFromRoot === 10 || // minor 7th in bass (Am/G, D/C, G/F, Em/D)
+    intervalFromRoot === 11 || // major 7th in bass (C/B, Am/G#)
+    intervalFromRoot === 2 ||  // 2nd/9th in bass (G/A, F/G)
+    intervalFromRoot === 5;    // 4th pedal bass (G/C, A/D)
+
+  // 3. Diatonic bass note in the detected musical key
+  let isDiatonicBass = false;
+  const parsedKey = parseKeyContext(keyContext);
+  if (parsedKey) {
+    const keyDegree = (bassPc - parsedKey.tonicIndex + 12) % 12;
+    const majorDegrees = [0, 2, 4, 5, 7, 9, 11];
+    const minorDegrees = [0, 2, 3, 5, 7, 8, 10, 11];
+    const scaleSet = parsedKey.scale === 'major' ? majorDegrees : minorDegrees;
+    isDiatonicBass = scaleSet.includes(keyDegree);
+  }
+
+  let requiredConfidence = 0.68; // chromatic non-chord bass requires strong certainty
+  if (isChordTone) {
+    requiredConfidence = 0.36;
+  } else if (isCommonWalkingBass) {
+    requiredConfidence = 0.42;
+  } else if (isDiatonicBass) {
+    requiredConfidence = 0.48;
+  }
+
+  if (bassEstimate.confidence >= requiredConfidence) {
+    return `${parsed.baseChord}/${bassEstimate.pitchName}`;
+  }
+
+  return parsed.baseChord;
+}
+
+/**
+ * Applies lightweight temporal stabilization to per-window bass estimates so isolated
+ * single-frame kick/thud glitches do not trigger spurious slash chords, while real
+ * walking basslines (Am -> Am/G) and sustained inversions (C/G, D/F#) are preserved.
+ */
+function smoothBassEstimates(
+  estimates: (BassPitchEstimate | undefined)[],
+  hopDurationSec: number
+): (BassPitchEstimate | undefined)[] {
+  const n = estimates.length;
+  if (n <= 2) return estimates;
+
+  // At fast frame rates (< 0.35s hop), examine a +/-2 frame neighborhood (~0.4s);
+  // at slower window hops (>= 0.35s), examine +/-1 window.
+  const radius = hopDurationSec < 0.35 ? 2 : 1;
+  const smoothed: (BassPitchEstimate | undefined)[] = new Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const curr = estimates[i];
+    if (!curr || curr.pitchClass < 0) {
+      smoothed[i] = curr;
+      continue;
+    }
+
+    // Count neighbor votes for pitch classes weighted by confidence
+    const votes = new Float64Array(12);
+    let totalWeight = 0;
+
+    for (let j = Math.max(0, i - radius); j <= Math.min(n - 1, i + radius); j++) {
+      const est = estimates[j];
+      if (!est || est.pitchClass < 0) continue;
+      const distWeight = j === i ? 1.0 : 0.7;
+      const w = est.confidence * distWeight;
+      votes[est.pitchClass] += w;
+      totalWeight += w;
+    }
+
+    let bestPc = curr.pitchClass;
+    let bestVote = -1;
+    for (let pc = 0; pc < 12; pc++) {
+      if (votes[pc] > bestVote) {
+        bestVote = votes[pc];
+        bestPc = pc;
+      }
+    }
+
+    // If neighbors strongly disagree with an isolated low-to-moderate spike, adopt neighbor consensus
+    if (bestPc !== curr.pitchClass && curr.confidence < 0.72) {
+      smoothed[i] = {
+        ...curr,
+        pitchClass: bestPc,
+        pitchName: PITCH_CLASSES[bestPc],
+        confidence: Number(Math.min(1, bestVote / Math.max(1e-6, totalWeight)).toFixed(3))
+      };
+    } else {
+      smoothed[i] = curr;
+    }
+  }
+
+  return smoothed;
+}
+
+/**
+ * Merges consecutive identical chord segments and absorbs micro-segments shorter
+ * than minDurationSec into adjacent chords.
+ */
+function aggregateAndMergeSegments(
+  frames: { startTime: number; endTime: number; chord: string; confidence: number }[],
+  minDurationSec: number
+): ChordSegment[] {
+  if (frames.length === 0) return [];
+
+  const grouped: { startTime: number; endTime: number; chord: string; confSum: number; count: number }[] = [];
+  let current: { startTime: number; endTime: number; chord: string; confSum: number; count: number } | null = null;
+
+  for (const frame of frames) {
+    if (!current || current.chord !== frame.chord) {
+      if (current) grouped.push(current);
+      current = {
+        startTime: frame.startTime,
+        endTime: frame.endTime,
+        chord: frame.chord,
+        confSum: frame.confidence,
+        count: 1
+      };
+    } else {
+      current.endTime = frame.endTime;
+      current.confSum += frame.confidence;
+      current.count++;
+    }
+  }
+  if (current) grouped.push(current);
+
+  const initialSegments: ChordSegment[] = grouped.map(s => ({
+    startTime: Number(s.startTime.toFixed(3)),
+    endTime: Number(s.endTime.toFixed(3)),
+    chord: s.chord,
+    confidence: Number((s.confSum / s.count).toFixed(2))
+  }));
+
+  if (minDurationSec <= 0) return initialSegments;
+
+  const finalSegments: ChordSegment[] = [];
+  for (const seg of initialSegments) {
+    const dur = seg.endTime - seg.startTime;
+    if (dur < minDurationSec && finalSegments.length > 0) {
+      finalSegments[finalSegments.length - 1].endTime = seg.endTime;
+    } else {
+      if (finalSegments.length > 0 && finalSegments[finalSegments.length - 1].chord === seg.chord) {
+        finalSegments[finalSegments.length - 1].endTime = seg.endTime;
+      } else {
+        finalSegments.push({ ...seg });
+      }
+    }
+  }
+
+  return finalSegments;
+}
+
+/**
+ * Contextual Harmonic Smoothing using a lightweight Key-Weighted Viterbi Decoder
+ * for frame-by-frame chord predictions (such as Essentia TonalExtractor output).
+ * Eliminates isolated and multi-frame passing-note / percussion glitches while
+ * optionally resolving 40–180 Hz bass inversions into slash chords (C/G, D/F#, Am/G).
+ */
+export function smoothChordsWithViterbi(
+  rawFrames: RawChordFrame[],
+  options: ViterbiOptions = {}
+): ChordSegment[] {
+  if (rawFrames.length === 0) return [];
+
+  const minDurationSec = options.minDurationSec ?? 0.5;
+  const keyWeight = options.keyWeight ?? 1.0;
+  const enableSlashChords = options.enableSlashChords ?? true;
+
+  // Estimate hop duration from frames
+  let hopDurationSec = options.hopDurationSec ?? 0;
+  if (hopDurationSec <= 0) {
+    if (rawFrames.length > 1) {
+      hopDurationSec = Math.max(0.02, rawFrames[1].startTime - rawFrames[0].startTime);
+    } else {
+      hopDurationSec = Math.max(0.05, rawFrames[0].endTime - rawFrames[0].startTime);
+    }
+  }
+
+  // Calibrate switch penalty inversely with hop duration so short hops require sustained evidence
+  const switchPenalty =
+    options.switchPenalty ??
+    Math.max(1.8, Math.min(5.8, 2.2 * Math.pow(0.5 / Math.max(0.03, hopDurationSec), 0.35)));
+
+  // Build state vocabulary: 24 standard Major & Minor triads + any extra observed chords
+  const stateSet = new Set<string>();
+  for (let pc = 0; pc < 12; pc++) {
+    stateSet.add(PITCH_CLASSES[pc]);
+    stateSet.add(`${PITCH_CLASSES[pc]}m`);
+  }
+  for (const f of rawFrames) {
+    const parsed = parseChordSymbol(f.chord);
+    if (!parsed.isNoChord) {
+      stateSet.add(parsed.baseChord);
+    }
+  }
+
+  const states = Array.from(stateSet);
+  const N = states.length;
+  const T = rawFrames.length;
+
+  const stateIndexMap = new Map<string, number>();
+  const stateMeta = states.map((s, idx) => {
+    stateIndexMap.set(s, idx);
+    const parsed = parseChordSymbol(s);
+    const tmplVec = new Float32Array(12);
+    if (parsed.rootIndex >= 0) {
+      for (let pc = 0; pc < 12; pc++) {
+        if ((parsed.pitchMask & (1 << pc)) !== 0) {
+          tmplVec[pc] = pc === parsed.rootIndex ? 1.0 : 0.82;
+        }
+      }
+    }
+    return {
+      chord: s,
+      rootIndex: parsed.rootIndex,
+      pitchMask: parsed.pitchMask,
+      vector: tmplVec,
+      keyPrior: getKeyPriorLogProb(s, options.keyContext, keyWeight)
+    };
+  });
+
+  // Precompute transition matrix trans[i * N + j]
+  const trans = new Float64Array(N * N);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      if (i === j) {
+        trans[i * N + j] = 0;
+      } else {
+        const affinity = computeHarmonicAffinity(
+          stateMeta[i].rootIndex,
+          stateMeta[i].pitchMask,
+          stateMeta[j].rootIndex,
+          stateMeta[j].pitchMask
+        );
+        trans[i * N + j] = -switchPenalty + affinity;
+      }
+    }
+  }
+
+  // Viterbi DP tables
+  let prevDp = new Float64Array(N);
+  let currDp = new Float64Array(N);
+  const backptr = new Int16Array(T * N);
+  const frameEmission = new Float64Array(N);
+
+  const computeFrameLogEmission = (frame: RawChordFrame, out: Float64Array) => {
+    const obsParsed = parseChordSymbol(frame.chord);
+    const conf = Math.max(0.05, Math.min(1, frame.confidence || 0.65));
+
+    // Check if dual-band midChroma (180–1200 Hz) is available to help disambiguate inversions
+    const hasMidChroma =
+      Array.isArray(frame.midChroma) &&
+      frame.midChroma.length === 12 &&
+      frame.midChroma.some(v => v > 0.05);
+
+    if (obsParsed.isNoChord) {
+      // Unpitched / silence frame: flat emission so Viterbi holds current chord
+      out.fill(0);
+      if (hasMidChroma && frame.midChroma) {
+        for (let s = 0; s < N; s++) {
+          out[s] = 4.0 * cosineSimilarity(frame.midChroma, stateMeta[s].vector);
+        }
+      }
+      return;
+    }
+
+    const obsIdx = stateIndexMap.get(obsParsed.baseChord) ?? -1;
+    const matchScore = 2.6 + 2.4 * conf;
+
+    for (let s = 0; s < N; s++) {
+      let score = 0;
+      if (s === obsIdx) {
+        score = matchScore;
+      } else {
+        // Partial credit if candidate shares pitch classes with observed chord (e.g. C vs Am)
+        const shared = countBits(obsParsed.pitchMask & stateMeta[s].pitchMask);
+        if (shared >= 2) {
+          score = 0.85 * conf;
+        } else if (shared === 1) {
+          score = 0.25 * conf;
+        }
+      }
+
+      if (hasMidChroma && frame.midChroma) {
+        const midSim = cosineSimilarity(frame.midChroma, stateMeta[s].vector);
+        score = 0.62 * score + 0.38 * (6.5 * midSim);
+      }
+
+      out[s] = score;
+    }
+  };
+
+  // Initialization (t = 0)
+  computeFrameLogEmission(rawFrames[0], frameEmission);
+  for (let s = 0; s < N; s++) {
+    prevDp[s] = frameEmission[s] + stateMeta[s].keyPrior;
+    backptr[s] = 0;
+  }
+
+  // Forward pass
+  for (let t = 1; t < T; t++) {
+    computeFrameLogEmission(rawFrames[t], frameEmission);
+    const rowOffset = t * N;
+
+    for (let j = 0; j < N; j++) {
+      let bestVal = -Infinity;
+      let bestPrev = 0;
+      const transOffset = j; // trans[i * N + j]
+      for (let i = 0; i < N; i++) {
+        const candidate = prevDp[i] + trans[i * N + transOffset];
+        if (candidate > bestVal) {
+          bestVal = candidate;
+          bestPrev = i;
+        }
+      }
+      currDp[j] = bestVal + frameEmission[j] + stateMeta[j].keyPrior;
+      backptr[rowOffset + j] = bestPrev;
+    }
+
+    // Normalize DP scores to prevent numerical drift on long audio
+    let maxDp = -Infinity;
+    for (let j = 0; j < N; j++) {
+      if (currDp[j] > maxDp) maxDp = currDp[j];
+    }
+    for (let j = 0; j < N; j++) {
+      currDp[j] -= maxDp;
+    }
+
+    const tmp = prevDp;
+    prevDp = currDp;
+    currDp = tmp;
+  }
+
+  // Backtrace optimal state sequence
+  const bestPath = new Int16Array(T);
+  let bestLastState = 0;
+  let bestLastScore = -Infinity;
+  for (let s = 0; s < N; s++) {
+    if (prevDp[s] > bestLastScore) {
+      bestLastScore = prevDp[s];
+      bestLastState = s;
+    }
+  }
+  bestPath[T - 1] = bestLastState;
+  for (let t = T - 2; t >= 0; t--) {
+    bestPath[t] = backptr[(t + 1) * N + bestPath[t + 1]];
+  }
+
+  // Stabilize bass estimates across neighboring frames before attaching slash chords
+  const smoothedBass = enableSlashChords
+    ? smoothBassEstimates(rawFrames.map(f => f.bassEstimate), hopDurationSec)
+    : new Array(T).fill(undefined);
+
+  const decodedFrames = rawFrames.map((f, t) => {
+    const baseChord = stateMeta[bestPath[t]].chord;
+    const finalChord = enableSlashChords
+      ? resolveSlashChord(baseChord, smoothedBass[t], options.keyContext)
+      : baseChord;
+    return {
+      startTime: f.startTime,
+      endTime: f.endTime,
+      chord: finalChord,
+      confidence: Number(Math.max(0, Math.min(1, f.confidence || 0.75)).toFixed(2))
+    };
+  });
+
+  return aggregateAndMergeSegments(decodedFrames, minDurationSec);
+}
+
+/**
+ * Full Chromagram-Matrix Viterbi Decoder + Dual-Band Slash Chord Resolution.
+ * Scores every chord template via cosine similarity (preferring midChroma 180–1200 Hz
+ * when available), weights probabilities by detected key, decodes the globally optimal
+ * harmonic sequence, and attaches 40–180 Hz bass inversions (C/G, D/F#, Am/G).
+ */
+export function recognizeChordsWithViterbi(
+  windowedChroma: WindowedChroma[],
+  options: ViterbiOptions = {},
+  customTemplates?: ChordTemplate[]
+): ChordSegment[] {
+  if (windowedChroma.length === 0) return [];
+
+  const templates = customTemplates || buildAllChordTemplates();
+  const N = templates.length;
+  const T = windowedChroma.length;
+
+  const minDurationSec = options.minDurationSec ?? 0.75;
+  const baseTemp = options.emissionTemperature ?? 10.0;
+  const keyWeight = options.keyWeight ?? 1.0;
+  const enableSlashChords = options.enableSlashChords ?? true;
+
+  let hopDurationSec = options.hopDurationSec ?? 0;
+  if (hopDurationSec <= 0) {
+    hopDurationSec =
+      T > 1
+        ? Math.max(0.05, windowedChroma[1].startTime - windowedChroma[0].startTime)
+        : Math.max(0.5, windowedChroma[0].endTime - windowedChroma[0].startTime);
+  }
+
+  const switchPenalty =
+    options.switchPenalty ??
+    Math.max(1.4, Math.min(4.5, 1.85 * Math.pow(0.75 / Math.max(0.05, hopDurationSec), 0.35)));
+
+  const stateMeta = templates.map(tmpl => {
+    const parsed = parseChordSymbol(tmpl.chord);
+    return {
+      chord: tmpl.chord,
+      rootIndex: tmpl.rootIndex,
+      pitchMask: parsed.pitchMask,
+      keyPrior: getKeyPriorLogProb(tmpl.chord, options.keyContext, keyWeight)
+    };
+  });
+
+  // Precompute transition matrix
+  const trans = new Float64Array(N * N);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      if (i === j) {
+        trans[i * N + j] = 0;
+      } else {
+        const affinity = computeHarmonicAffinity(
+          stateMeta[i].rootIndex,
+          stateMeta[i].pitchMask,
+          stateMeta[j].rootIndex,
+          stateMeta[j].pitchMask
+        );
+        trans[i * N + j] = -switchPenalty + affinity;
+      }
+    }
+  }
+
+  const selectTriadVector = (w: WindowedChroma): number[] => {
+    if (w.midChroma && w.midChroma.length === 12) {
+      let maxMid = 0;
+      for (let i = 0; i < 12; i++) {
+        if (w.midChroma[i] > maxMid) maxMid = w.midChroma[i];
+      }
+      if (maxMid > 0.05) {
+        return w.midChroma;
+      }
+    }
+    return w.chroma;
+  };
+
+  let prevDp = new Float64Array(N);
+  let currDp = new Float64Array(N);
+  const backptr = new Int16Array(T * N);
+  const simScores = new Float64Array(N);
+  const logEmission = new Float64Array(N);
+  const frameConfidences = new Float64Array(T);
+
+  const computeEmissions = (t: number) => {
+    const vec = selectTriadVector(windowedChroma[t]);
+    let maxSim = 0;
+    for (let s = 0; s < N; s++) {
+      const sim = cosineSimilarity(vec, templates[s].vector);
+      simScores[s] = sim;
+      if (sim > maxSim) maxSim = sim;
+    }
+
+    frameConfidences[t] = Math.max(0, Math.min(1, maxSim));
+
+    // Modulate emission sharpness by harmonic clarity so noisy/percussive frames flatten naturally
+    const clarity = Math.max(0.25, Math.min(1.0, (maxSim - 0.35) / 0.5));
+    const temp = baseTemp * clarity;
+
+    // Log-softmax over chord templates
+    let maxLogit = -Infinity;
+    for (let s = 0; s < N; s++) {
+      const logit = temp * simScores[s];
+      logEmission[s] = logit;
+      if (logit > maxLogit) maxLogit = logit;
+    }
+
+    let sumExp = 0;
+    for (let s = 0; s < N; s++) {
+      sumExp += Math.exp(logEmission[s] - maxLogit);
+    }
+    const logZ = maxLogit + Math.log(sumExp || 1);
+    for (let s = 0; s < N; s++) {
+      logEmission[s] -= logZ;
+    }
+  };
+
+  // Initialization (t = 0)
+  computeEmissions(0);
+  for (let s = 0; s < N; s++) {
+    prevDp[s] = logEmission[s] + stateMeta[s].keyPrior;
+    backptr[s] = 0;
+  }
+
+  // Forward pass
+  for (let t = 1; t < T; t++) {
+    computeEmissions(t);
+    const rowOffset = t * N;
+
+    for (let j = 0; j < N; j++) {
+      let bestVal = -Infinity;
+      let bestPrev = 0;
+      for (let i = 0; i < N; i++) {
+        const candidate = prevDp[i] + trans[i * N + j];
+        if (candidate > bestVal) {
+          bestVal = candidate;
+          bestPrev = i;
+        }
+      }
+      currDp[j] = bestVal + logEmission[j] + stateMeta[j].keyPrior;
+      backptr[rowOffset + j] = bestPrev;
+    }
+
+    let maxDp = -Infinity;
+    for (let j = 0; j < N; j++) {
+      if (currDp[j] > maxDp) maxDp = currDp[j];
+    }
+    for (let j = 0; j < N; j++) {
+      currDp[j] -= maxDp;
+    }
+
+    const tmp = prevDp;
+    prevDp = currDp;
+    currDp = tmp;
+  }
+
+  // Backtrace
+  const bestPath = new Int16Array(T);
+  let bestLastState = 0;
+  let bestLastScore = -Infinity;
+  for (let s = 0; s < N; s++) {
+    if (prevDp[s] > bestLastScore) {
+      bestLastScore = prevDp[s];
+      bestLastState = s;
+    }
+  }
+  bestPath[T - 1] = bestLastState;
+  for (let t = T - 2; t >= 0; t--) {
+    bestPath[t] = backptr[(t + 1) * N + bestPath[t + 1]];
+  }
+
+  // Smooth bass estimates & resolve slash chords
+  const smoothedBass = enableSlashChords
+    ? smoothBassEstimates(windowedChroma.map(w => w.bassEstimate), hopDurationSec)
+    : new Array(T).fill(undefined);
+
+  const decodedFrames = windowedChroma.map((w, t) => {
+    const baseChord = templates[bestPath[t]].chord;
+    const finalChord = enableSlashChords
+      ? resolveSlashChord(baseChord, smoothedBass[t], options.keyContext)
+      : baseChord;
+    return {
+      startTime: w.startTime,
+      endTime: w.endTime,
+      chord: finalChord,
+      confidence: Number(frameConfidences[t].toFixed(2))
+    };
+  });
+
+  return aggregateAndMergeSegments(decodedFrames, minDurationSec);
+}
+
+/**
  * Applies temporal smoothing across consecutive window predictions:
  * 1. 3-window majority vote to eliminate isolated 1-frame transient noise.
  * 2. Merging consecutive identical chords.
@@ -282,56 +1208,7 @@ export function smoothChordWindows(
     }
   }
 
-  // Step 2: Aggregate consecutive identical chords into continuous segments
-  const segments: { startTime: number; endTime: number; chord: string; confSum: number; count: number }[] = [];
-  let current: { startTime: number; endTime: number; chord: string; confSum: number; count: number } | null = null;
-
-  for (const win of filtered) {
-    if (!current || current.chord !== win.chord) {
-      if (current) {
-        segments.push(current);
-      }
-      current = {
-        startTime: win.startTime,
-        endTime: win.endTime,
-        chord: win.chord,
-        confSum: win.confidence,
-        count: 1
-      };
-    } else {
-      current.endTime = win.endTime;
-      current.confSum += win.confidence;
-      current.count++;
-    }
-  }
-
-  if (current) {
-    segments.push(current);
-  }
-
-  const initialSegments: ChordSegment[] = segments.map(s => ({
-    startTime: Number(s.startTime.toFixed(3)),
-    endTime: Number(s.endTime.toFixed(3)),
-    chord: s.chord,
-    confidence: Number((s.confSum / s.count).toFixed(2))
-  }));
-
-  // Step 3: Merge micro-segments shorter than minDurationSec
-  const finalSegments: ChordSegment[] = [];
-  for (const seg of initialSegments) {
-    const dur = seg.endTime - seg.startTime;
-    if (dur < minDurationSec && finalSegments.length > 0) {
-      finalSegments[finalSegments.length - 1].endTime = seg.endTime;
-    } else {
-      if (finalSegments.length > 0 && finalSegments[finalSegments.length - 1].chord === seg.chord) {
-        finalSegments[finalSegments.length - 1].endTime = seg.endTime;
-      } else {
-        finalSegments.push({ ...seg });
-      }
-    }
-  }
-
-  return finalSegments;
+  return aggregateAndMergeSegments(filtered, minDurationSec);
 }
 
 /**
@@ -379,29 +1256,69 @@ export function alignChordsToBeats(
 
 /**
  * Detects chord progression from a temporal sequence of windowed chromagrams.
+ * Uses Key-Weighted Viterbi smoothing and dual-band slash-chord detection by default
+ * when using the built-in recognizer.
  */
 export function detectChordsFromChromagram(
   windowedChroma: WindowedChroma[],
   recognizer: ChordRecognizer = defaultChordRecognizer,
-  beats?: number[]
+  beats?: number[],
+  options: {
+    keyContext?: KeyContext;
+    enableViterbi?: boolean;
+    enableSlashChords?: boolean;
+    minDurationSec?: number;
+  } = {}
 ): ChordSegment[] {
-  const windowPredictions = windowedChroma.map(w => {
-    const res = recognizer.recognize(w.chroma);
-    return {
-      startTime: w.startTime,
-      endTime: w.endTime,
-      chord: res.chord,
-      confidence: res.confidence
-    };
-  });
+  if (windowedChroma.length === 0) return [];
 
-  const smoothed = smoothChordWindows(windowPredictions, 0.75);
+  const useViterbi = options.enableViterbi ?? (recognizer === defaultChordRecognizer);
+
+  let smoothed: ChordSegment[];
+  if (useViterbi && recognizer === defaultChordRecognizer) {
+    smoothed = recognizeChordsWithViterbi(windowedChroma, {
+      keyContext: options.keyContext,
+      enableSlashChords: options.enableSlashChords ?? true,
+      minDurationSec: options.minDurationSec ?? 0.75
+    });
+  } else if (useViterbi) {
+    const rawFrames: RawChordFrame[] = windowedChroma.map(w => {
+      const vec = w.midChroma && w.midChroma.some(v => v > 0.05) ? w.midChroma : w.chroma;
+      const res = recognizer.recognize(vec);
+      return {
+        startTime: w.startTime,
+        endTime: w.endTime,
+        chord: res.chord,
+        confidence: res.confidence,
+        bassEstimate: w.bassEstimate,
+        midChroma: w.midChroma
+      };
+    });
+    smoothed = smoothChordsWithViterbi(rawFrames, {
+      keyContext: options.keyContext,
+      enableSlashChords: options.enableSlashChords ?? true,
+      minDurationSec: options.minDurationSec ?? 0.75
+    });
+  } else {
+    const windowPredictions = windowedChroma.map(w => {
+      const res = recognizer.recognize(w.chroma);
+      return {
+        startTime: w.startTime,
+        endTime: w.endTime,
+        chord: res.chord,
+        confidence: res.confidence
+      };
+    });
+    smoothed = smoothChordWindows(windowPredictions, options.minDurationSec ?? 0.75);
+  }
+
   return alignChordsToBeats(smoothed, beats);
 }
 
 /**
  * Analyzes chords for an AudioBuffer by slicing into 1-2s windows with overlap,
- * computing chromagrams, classifying triads/5ths, smoothing, and aligning with beats.
+ * computing dual-band chromagrams (40–180 Hz bass & 180–1200 Hz mid),
+ * applying Key-Weighted Viterbi smoothing + slash chord detection, and aligning with beats.
  */
 export function analyzeChordsDSP(
   audioBuffer: AudioBuffer,
@@ -410,21 +1327,32 @@ export function analyzeChordsDSP(
     windowDurationSec?: number;
     hopDurationSec?: number;
     recognizer?: ChordRecognizer;
+    keyContext?: KeyContext;
+    enableViterbi?: boolean;
+    enableSlashChords?: boolean;
+    minDurationSec?: number;
   } = {}
 ): ChordSegment[] {
   const channelData = extractMonoChannelData(audioBuffer);
   const sampleRate = audioBuffer.sampleRate;
 
-  // Windowing: 1.5s with 50% overlap (0.75s hop)
+  // Windowing: 1.5s with 50% overlap (0.75s hop) & dual-band extraction
   const windowedChroma = computeWindowedChromagrams(channelData, sampleRate, {
     windowDurationSec: options.windowDurationSec ?? 1.5,
-    hopDurationSec: options.hopDurationSec ?? 0.75
+    hopDurationSec: options.hopDurationSec ?? 0.75,
+    dualBand: true
   });
 
   return detectChordsFromChromagram(
     windowedChroma,
     options.recognizer || defaultChordRecognizer,
-    options.beats
+    options.beats,
+    {
+      keyContext: options.keyContext,
+      enableViterbi: options.enableViterbi,
+      enableSlashChords: options.enableSlashChords,
+      minDurationSec: options.minDurationSec
+    }
   );
 }
 
@@ -505,4 +1433,3 @@ export function insertChordsIntoLyrics(
 ): string {
   return insertChordsIntoSyllables(currentLyrics, detectedChords, options);
 }
-

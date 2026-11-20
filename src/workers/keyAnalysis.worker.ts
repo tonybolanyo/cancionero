@@ -14,6 +14,14 @@ if (typeof workerCtx.window === 'undefined') {
 
 import EssentiaWASM from 'essentia.js/dist/essentia-wasm.web.js';
 import Essentia from 'essentia.js/dist/essentia.js-core.es.js';
+import { computeWindowedChromagrams } from '../lib/audio/chroma';
+import {
+  KeyContext,
+  RawChordFrame,
+  alignChordsToBeats,
+  recognizeChordsWithViterbi,
+  smoothChordsWithViterbi
+} from '../lib/audio/chords';
 
 export interface ChordSegment {
   startTime: number;
@@ -182,17 +190,34 @@ function computeAverageHpcp(essentia: any, signal: Float32Array): number[] {
 
 /**
  * Detects frame-by-frame continuous chords using Essentia's TonalExtractor
- * (incorporating HPCP calculation and ChordsDetection internally in C++ WASM).
- * Aggregates and smooths consecutive frames into timed ChordSegments.
+ * combined with dual-band chromagrams (40–180 Hz bass & 180–1200 Hz mid),
+ * then applies Key-Weighted Viterbi smoothing and slash-chord resolution (C/G, D/F#, Am/G).
  */
 function extractChordProgression(
   essentia: any,
   signal: Float32Array,
   sampleRate: number,
-  beats?: number[]
+  beats?: number[],
+  keyContext?: KeyContext
 ): ChordSegment[] {
   const hopSize = signal.length > sampleRate * 75 ? 4096 : 2048;
   const frameSize = 4096;
+  const hopDurationSec = hopSize / sampleRate;
+
+  // Dual-band windows: 40–180 Hz bass (slash chords) & 180–1200 Hz mid (triad disambiguation)
+  const dualWindowSec = 0.8;
+  const dualHopSec = 0.4;
+  const dualWindows = computeWindowedChromagrams(signal, sampleRate, {
+    windowDurationSec: dualWindowSec,
+    hopDurationSec: dualHopSec,
+    dualBand: true
+  });
+
+  const lookupDualWindow = (timeSec: number) => {
+    if (dualWindows.length === 0) return undefined;
+    const idx = Math.max(0, Math.min(dualWindows.length - 1, Math.round(timeSec / dualHopSec)));
+    return dualWindows[idx];
+  };
 
   let audioVec: any = null;
   let tonalRes: any = null;
@@ -205,97 +230,71 @@ function extractChordProgression(
     const strengthVec = tonalRes.chords_strength;
     const numFrames = progression && progression.size ? progression.size() : 0;
 
-    if (numFrames === 0) return [];
-
-    const rawSegments: ChordSegment[] = [];
-    let current: { chord: string; startTime: number; endTime: number; strengthSum: number; count: number } | null = null;
-
-    for (let i = 0; i < numFrames; i++) {
-      const chord = progression.get(i);
-      const strength = strengthVec ? strengthVec.get(i) : 0.7;
-      const frameTime = (i * hopSize) / sampleRate;
-
-      if (!current || current.chord !== chord) {
-        if (current) {
-          const conf = Number((current.strengthSum / current.count).toFixed(2));
-          rawSegments.push({
-            startTime: Number(current.startTime.toFixed(3)),
-            endTime: Number(frameTime.toFixed(3)),
-            chord: current.chord,
-            confidence: conf,
-            strength: conf
-          });
-        }
-        current = {
-          chord,
-          startTime: frameTime,
-          endTime: frameTime + (hopSize / sampleRate),
-          strengthSum: strength,
-          count: 1
-        };
-      } else {
-        current.endTime = frameTime + (hopSize / sampleRate);
-        current.strengthSum += strength;
-        current.count++;
-      }
+    if (numFrames === 0) {
+      const fallback = recognizeChordsWithViterbi(dualWindows, {
+        keyContext,
+        minDurationSec: 0.5,
+        enableSlashChords: true
+      });
+      return alignChordsToBeats(fallback, beats, 0.35).map(s => ({
+        startTime: s.startTime,
+        endTime: s.endTime,
+        chord: s.chord,
+        confidence: s.confidence ?? 0.75,
+        strength: s.confidence ?? 0.75
+      }));
     }
 
-    if (current) {
-      const conf = Number((current.strengthSum / current.count).toFixed(2));
-      rawSegments.push({
-        startTime: Number(current.startTime.toFixed(3)),
-        endTime: Number(current.endTime.toFixed(3)),
-        chord: current.chord,
-        confidence: conf,
-        strength: conf
+    const rawFrames: RawChordFrame[] = [];
+    for (let i = 0; i < numFrames; i++) {
+      const chord = String(progression.get(i) || 'N.C.');
+      const strength = strengthVec ? Number(strengthVec.get(i)) : 0.7;
+      const startTime = Number((i * hopDurationSec).toFixed(3));
+      const endTime = Number(((i + 1) * hopDurationSec).toFixed(3));
+      const dual = lookupDualWindow(startTime + hopDurationSec * 0.5);
+
+      rawFrames.push({
+        startTime,
+        endTime,
+        chord,
+        confidence: Number.isFinite(strength) ? Math.max(0, Math.min(1, strength)) : 0.7,
+        bassEstimate: dual?.bassEstimate,
+        midChroma: dual?.midChroma
       });
     }
 
-    // Smooth micro-glitches (< 0.2s) so chord changes correspond to true musical phrasing
-    const smoothed: ChordSegment[] = [];
-    const minChordDuration = 0.2;
+    // Contextual Key-Weighted Viterbi smoothing + 40–180 Hz slash chord resolution
+    const viterbiSegments = smoothChordsWithViterbi(rawFrames, {
+      keyContext,
+      hopDurationSec,
+      minDurationSec: 0.45,
+      enableSlashChords: true
+    });
 
-    for (const seg of rawSegments) {
-      const dur = seg.endTime - seg.startTime;
-      if (dur < minChordDuration && smoothed.length > 0) {
-        smoothed[smoothed.length - 1].endTime = seg.endTime;
-      } else {
-        if (smoothed.length > 0 && smoothed[smoothed.length - 1].chord === seg.chord) {
-          smoothed[smoothed.length - 1].endTime = seg.endTime;
-        } else {
-          smoothed.push({ ...seg });
-        }
-      }
-    }
-
-    // Align chord boundaries to the nearest beat if beats timeline is provided
-    if (beats && beats.length > 0 && smoothed.length > 0) {
-      for (let i = 0; i < smoothed.length; i++) {
-        if (i === 0) {
-          smoothed[i].startTime = 0;
-        } else {
-          smoothed[i].startTime = smoothed[i - 1].endTime;
-        }
-
-        if (i < smoothed.length - 1) {
-          const target = smoothed[i].endTime;
-          let closest = target;
-          let minDiff = 0.35; // snap tolerance in seconds
-          for (const b of beats) {
-            const diff = Math.abs(b - target);
-            if (diff < minDiff) {
-              minDiff = diff;
-              closest = b;
-            }
-          }
-          smoothed[i].endTime = Number(closest.toFixed(3));
-        }
-      }
-    }
-
-    return smoothed;
+    const aligned = alignChordsToBeats(viterbiSegments, beats, 0.35);
+    return aligned.map(seg => ({
+      startTime: seg.startTime,
+      endTime: seg.endTime,
+      chord: seg.chord,
+      confidence: seg.confidence ?? 0.75,
+      strength: seg.confidence ?? 0.75
+    }));
   } catch (err) {
     console.warn('Essentia continuous chord detection warning:', err);
+    if (dualWindows.length > 0) {
+      const fallback = recognizeChordsWithViterbi(dualWindows, {
+        keyContext,
+        minDurationSec: 0.5,
+        enableSlashChords: true
+      });
+      return alignChordsToBeats(fallback, beats, 0.35).map(s => ({
+        startTime: s.startTime,
+        endTime: s.endTime,
+        chord: s.chord,
+        confidence: s.confidence ?? 0.75,
+        strength: s.confidence ?? 0.75
+      }));
+    }
     return [];
   } finally {
     if (tonalRes) {
@@ -315,10 +314,7 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
   try {
     const essentia = await getEssentia();
 
-    // 1. Continuous frame-by-frame chord progression with TonalExtractor aligned to beats
-    const chords = extractChordProgression(essentia, channelData, sampleRate, beats);
-
-    // 2. Sample representative audio (up to 45s) for KeyExtractor
+    // 1. Sample representative audio (up to 45s) and detect musical Key & Scale FIRST
     let processedSignal = channelData;
     const maxSamples = Math.floor(sampleRate * 45);
 
@@ -353,18 +349,27 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
       throw new Error('Essentia no pudo determinar la tonalidad del audio.');
     }
 
-    // Compute averaged 12-bin chromagram profile
-    const chroma = computeAverageHpcp(essentia, processedSignal);
-
     const scale: 'major' | 'minor' =
       keyResult.scale === 'minor' || keyResult.scale === 'min' ? 'minor' : 'major';
+    const keyConfidence = Number(Math.min(1, Math.max(0, keyResult.strength || 0.75)).toFixed(2));
+
+    // 2. Continuous chord progression with Key-Weighted Viterbi & Dual-Band Slash Chords
+    const keyContext: KeyContext = {
+      key: keyResult.key,
+      scale,
+      confidence: keyConfidence
+    };
+    const chords = extractChordProgression(essentia, channelData, sampleRate, beats, keyContext);
+
+    // 3. Compute averaged 12-bin chromagram profile
+    const chroma = computeAverageHpcp(essentia, processedSignal);
 
     const result: KeyAnalysis = {
       key: keyResult.key,
       scale,
-      confidence: Number(Math.min(1, Math.max(0, keyResult.strength || 0.75)).toFixed(2)),
+      confidence: keyConfidence,
       chroma,
-      algorithm: 'Essentia.js (KeyExtractor + ChordsDetection WASM)',
+      algorithm: 'Essentia.js (KeyExtractor + Viterbi + Dual-Band Slash Chords)',
       chords
     };
 

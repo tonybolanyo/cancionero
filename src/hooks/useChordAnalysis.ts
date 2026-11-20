@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ChordSegment,
+  KeyContext,
   analyzeChordsDSP,
   exportChordsToJSON,
   exportChordsToCSV,
@@ -12,7 +13,7 @@ export interface UseChordAnalysisReturn {
   chords: ChordSegment[] | null;
   isAnalyzingChords: boolean;
   chordError: string | null;
-  analyzeChords: (audioBuffer: AudioBuffer, beats?: number[]) => Promise<ChordSegment[] | null>;
+  analyzeChords: (audioBuffer: AudioBuffer, beats?: number[], keyContext?: KeyContext) => Promise<ChordSegment[] | null>;
   resetChords: () => void;
   exportJSON: (songTitle?: string) => void;
   exportCSV: (songTitle?: string) => void;
@@ -21,7 +22,7 @@ export interface UseChordAnalysisReturn {
 
 /**
  * Hook to execute and manage temporal chromagram chord detection,
- * beat alignment, temporal smoothing, and JSON/CSV exports.
+ * beat alignment, key-weighted Viterbi smoothing, slash chords, and JSON/CSV exports.
  */
 export function useChordAnalysis(): UseChordAnalysisReturn {
   const [chords, setChords] = useState<ChordSegment[] | null>(null);
@@ -43,13 +44,13 @@ export function useChordAnalysis(): UseChordAnalysisReturn {
   }, []);
 
   const analyzeChords = useCallback(
-    async (audioBuffer: AudioBuffer, beats?: number[]): Promise<ChordSegment[] | null> => {
+    async (audioBuffer: AudioBuffer, beats?: number[], keyContext?: KeyContext): Promise<ChordSegment[] | null> => {
       setIsAnalyzingChords(true);
       setChordError(null);
 
       try {
-        // Run windowed chromagram chord detection with 1.5s windows and beat alignment
-        const result = analyzeChordsDSP(audioBuffer, { beats });
+        // Run dual-band windowed chromagram chord detection with Viterbi smoothing and beat alignment
+        const result = analyzeChordsDSP(audioBuffer, { beats, keyContext });
         if (isMountedRef.current) {
           setChords(result);
           setIsAnalyzingChords(false);

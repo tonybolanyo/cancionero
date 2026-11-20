@@ -6,6 +6,7 @@
  */
 
 import { analyzeTempo } from '../lib/audio/tempo';
+import { analyzeChordsDSP, getCleanChordSequence } from '../lib/audio/chords';
 
 export interface DetectedChord {
   timestamp: string;
@@ -295,22 +296,48 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     const { key, scale, harmonicChords } = detectKey(audioBuffer);
     const duration = Math.round(audioBuffer.duration);
 
-    // Build timeline chords
-    const chordTimeline: DetectedChord[] = [];
-    const mainProg = harmonicChords.slice(0, 4);
-    const intervalSec = Math.max(4, Math.round(duration / 8));
+    // Detect real chord progression via dual-band chromagrams + key-weighted Viterbi smoothing
+    const dspSegments = analyzeChordsDSP(audioBuffer, {
+      keyContext: {
+        key,
+        scale: scale === 'Menor' ? 'minor' : 'major',
+        confidence: 0.75
+      }
+    });
 
-    for (let i = 0; i < Math.min(8, Math.floor(duration / intervalSec)); i++) {
-      const sec = i * intervalSec;
-      const mins = Math.floor(sec / 60);
-      const remSec = sec % 60;
-      const ts = `${mins}:${remSec < 10 ? '0' : ''}${remSec}`;
-      const chord = mainProg[i % mainProg.length];
-      const section = i === 0 ? 'Intro' : i === 2 ? 'Estrofa' : i === 5 ? 'Estribillo' : undefined;
-      chordTimeline.push({ timestamp: ts, seconds: sec, chord, section });
+    const formatTimestamp = (sec: number) => {
+      const whole = Math.max(0, Math.floor(sec));
+      const mins = Math.floor(whole / 60);
+      const remSec = whole % 60;
+      return `${mins}:${remSec < 10 ? '0' : ''}${remSec}`;
+    };
+
+    const chordTimeline: DetectedChord[] = [];
+    if (dspSegments.length > 0) {
+      dspSegments.forEach((seg, idx) => {
+        const sec = Number(seg.startTime.toFixed(1));
+        const section = idx === 0 ? 'Intro' : idx === 2 ? 'Estrofa' : idx === Math.floor(dspSegments.length * 0.6) ? 'Estribillo' : undefined;
+        chordTimeline.push({
+          timestamp: formatTimestamp(seg.startTime),
+          seconds: sec,
+          chord: seg.chord,
+          section
+        });
+      });
+    } else {
+      const fallbackProg = harmonicChords.slice(0, 4);
+      const intervalSec = Math.max(4, Math.round(duration / 8));
+      for (let i = 0; i < Math.min(8, Math.floor(duration / intervalSec)); i++) {
+        const sec = i * intervalSec;
+        const chord = fallbackProg[i % fallbackProg.length];
+        const section = i === 0 ? 'Intro' : i === 2 ? 'Estrofa' : i === 5 ? 'Estribillo' : undefined;
+        chordTimeline.push({ timestamp: formatTimestamp(sec), seconds: sec, chord, section });
+      }
     }
 
-    const progressionStr = mainProg.join(' - ');
+    const cleanSeq = getCleanChordSequence(chordTimeline.map(c => c.chord));
+    const mainProg = (cleanSeq.length > 0 ? cleanSeq : harmonicChords).slice(0, 8);
+    const progressionStr = mainProg.slice(0, 6).join(' - ');
 
     return {
       tempo: bpm,
@@ -324,7 +351,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       durationSeconds: duration,
       chordProgression: progressionStr,
       chords: chordTimeline,
-      musicalNotes: `Análisis de audio procesado por DSP local. Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal recomendada: ${progressionStr}.`,
+      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.`,
       suggestedLyricsChords: `## Estrofa\n[${mainProg[0] || 'Am'}] Primer verso de la maqueta...\n[${mainProg[1] || 'C'}] Segundo verso con melodía\n\n## Estribillo\n[${mainProg[2] || 'G'}] El estribillo asciende aquí\n[${mainProg[3] || 'F'}] Resolviendo en cadencia`,
       source: 'client_dsp'
     };
