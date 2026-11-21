@@ -22,6 +22,7 @@ import {
   recognizeChordsWithViterbi,
   smoothChordsWithViterbi
 } from '../lib/audio/chords';
+import { estimateDetuningCents } from '../lib/audio/tuning';
 
 export interface ChordSegment {
   startTime: number;
@@ -38,6 +39,8 @@ export interface KeyAnalysis {
   chroma: number[];
   algorithm: string;
   chords?: ChordSegment[];
+  detuningCents?: number;
+  referenceA4Hz?: number;
 }
 
 export interface KeyWorkerRequest {
@@ -198,7 +201,8 @@ function extractChordProgression(
   signal: Float32Array,
   sampleRate: number,
   beats?: number[],
-  keyContext?: KeyContext
+  keyContext?: KeyContext,
+  referenceA4Hz: number = 440
 ): ChordSegment[] {
   const hopSize = signal.length > sampleRate * 75 ? 4096 : 2048;
   const frameSize = 4096;
@@ -210,7 +214,8 @@ function extractChordProgression(
   const dualWindows = computeWindowedChromagrams(signal, sampleRate, {
     windowDurationSec: dualWindowSec,
     hopDurationSec: dualHopSec,
-    dualBand: true
+    dualBand: true,
+    referenceA4Hz
   });
 
   const lookupDualWindow = (timeSec: number) => {
@@ -224,7 +229,7 @@ function extractChordProgression(
 
   try {
     audioVec = essentia.arrayToVector(signal);
-    tonalRes = essentia.TonalExtractor(audioVec, frameSize, hopSize, 440);
+    tonalRes = essentia.TonalExtractor(audioVec, frameSize, hopSize, referenceA4Hz);
 
     const progression = tonalRes.chords_progression;
     const strengthVec = tonalRes.chords_strength;
@@ -353,13 +358,17 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
       keyResult.scale === 'minor' || keyResult.scale === 'min' ? 'minor' : 'major';
     const keyConfidence = Number(Math.min(1, Math.max(0, keyResult.strength || 0.75)).toFixed(2));
 
+    // 1.5 Estimate tuning deviation relative to A4=440Hz for acoustic demos
+    const detuning = estimateDetuningCents(processedSignal, sampleRate);
+    const calibratedA4 = detuning.confidence >= 0.35 ? detuning.referenceA4Hz : 440;
+
     // 2. Continuous chord progression with Key-Weighted Viterbi & Dual-Band Slash Chords
     const keyContext: KeyContext = {
       key: keyResult.key,
       scale,
       confidence: keyConfidence
     };
-    const chords = extractChordProgression(essentia, channelData, sampleRate, beats, keyContext);
+    const chords = extractChordProgression(essentia, channelData, sampleRate, beats, keyContext, calibratedA4);
 
     // 3. Compute averaged 12-bin chromagram profile
     const chroma = computeAverageHpcp(essentia, processedSignal);
@@ -370,7 +379,9 @@ self.onmessage = async (e: MessageEvent<KeyWorkerRequest>) => {
       confidence: keyConfidence,
       chroma,
       algorithm: 'Essentia.js (KeyExtractor + Viterbi + Dual-Band Slash Chords)',
-      chords
+      chords,
+      detuningCents: detuning.cents,
+      referenceA4Hz: calibratedA4
     };
 
     const response: KeyWorkerResponse = {

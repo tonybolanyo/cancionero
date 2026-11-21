@@ -32,11 +32,12 @@ import { BeatAnalysis, analyzeBeatsAndOnsets } from '../lib/audio/onsets';
 import { useKeyAnalysis } from '../hooks/useKeyAnalysis';
 import { BeatTimeline } from './BeatTimeline';
 import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
-import { PitchShiftPlayer } from '../lib/audio/pitchShiftPlayer';
+import { PitchShiftPlayer, AudioEqMode } from '../lib/audio/pitchShiftPlayer';
 import { AccidentalPreference, respellChord, isValidPlayableAudioUrl } from '../utils/markdownParser';
 import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } from '../lib/audio/meter';
 import type { MusicalSection, StructureAnalysisResult } from '../lib/audio/structure';
 import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
+import { ChromaticTunerModal } from './ChromaticTunerModal';
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -124,9 +125,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Pitch-Shifting & Enharmonic Preference states
+  // Pitch-Shifting, Speed, Loop, EQ & Enharmonic Preference states
   const [pitchShiftSemitones, setPitchShiftSemitones] = useState<number>(0);
   const [preserveTempo, setPreserveTempo] = useState<boolean>(true);
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+  const [eqMode, setEqMode] = useState<AudioEqMode>('normal');
+  const [loopStart, setLoopStart] = useState<number | null>(null);
+  const [loopEnd, setLoopEnd] = useState<number | null>(null);
+  const [isTunerOpen, setIsTunerOpen] = useState<boolean>(false);
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
   const playerRef = useRef<PitchShiftPlayer | null>(null);
 
@@ -149,6 +155,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         playerRef.current = new PitchShiftPlayer({
           semitones: pitchShiftSemitones,
           preserveTempo: preserveTempo,
+          playbackRate,
+          eqMode,
           onTimeUpdate: (t) => setCurrentTime(t),
           onEnded: () => setIsPlaying(false),
           onStateChange: (playing) => setIsPlaying(playing)
@@ -237,6 +245,42 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
   const handleToggleAccidentalPreference = () => {
     setAccidentalPreference(prev => prev === 'sharps' ? 'flats' : 'sharps');
+  };
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    playerRef.current?.setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
+
+  const handleEqModeChange = (mode: AudioEqMode) => {
+    setEqMode(mode);
+    playerRef.current?.setEqMode(mode);
+  };
+
+  const handleSetLoopA = () => {
+    const t = Number(currentTime.toFixed(2));
+    setLoopStart(t);
+    const nextEnd = loopEnd !== null && loopEnd > t + 0.2 ? loopEnd : null;
+    setLoopEnd(nextEnd);
+    playerRef.current?.setLoop(t, nextEnd);
+  };
+
+  const handleSetLoopB = () => {
+    const t = Number(currentTime.toFixed(2));
+    const start = loopStart ?? 0;
+    const end = t > start + 0.2 ? t : Math.min(duration || 60, start + 4);
+    setLoopStart(start);
+    setLoopEnd(end);
+    playerRef.current?.setLoop(start, end);
+  };
+
+  const handleClearLoop = () => {
+    setLoopStart(null);
+    setLoopEnd(null);
+    playerRef.current?.clearLoop();
   };
 
   const handleCalculateTempo = async (overrideFile?: File, customMin?: number, customMax?: number) => {
@@ -376,7 +420,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setIsAnalyzingStructure(false);
     resetKeyAnalysis();
     setCurrentTime(0);
+    setLoopStart(null);
+    setLoopEnd(null);
     if (playerRef.current) {
+      playerRef.current.clearLoop();
       playerRef.current.pause();
       playerRef.current.seek(0);
     }
@@ -557,6 +604,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       scale: keyAnalysis?.scale === 'minor' ? 'Menor' : keyAnalysis?.scale === 'major' ? 'Mayor' : analysisResult?.scale,
       timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
       tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      detuningCents: keyAnalysis?.detuningCents ?? analysisResult?.detuningCents,
+      referenceA4Hz: keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz,
       durationSeconds: duration || analysisResult?.durationSeconds,
       chordProgression: getChordProgressionSummary(),
       chords: chordsList,
@@ -628,9 +677,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] font-mono">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Cero secretos expuestos</span>
+        <div className="flex items-center gap-3 text-[11px] text-[var(--text-muted)] font-mono">
+          <button
+            type="button"
+            onClick={() => setIsTunerOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] font-semibold transition-colors cursor-pointer whitespace-nowrap"
+          >
+            Afinador
+          </button>
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Cero secretos expuestos</span>
+          </span>
         </div>
       </div>
 
@@ -915,6 +973,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           meter={meterAnalysis?.meter}
           downbeats={meterAnalysis?.downbeats}
           onMeterChange={handleManualMeterChange}
+          playbackRate={playbackRate}
+          onPlaybackRateChange={handlePlaybackRateChange}
+          loopStart={loopStart}
+          loopEnd={loopEnd}
+          onSetLoopA={handleSetLoopA}
+          onSetLoopB={handleSetLoopB}
+          onClearLoop={handleClearLoop}
+          eqMode={eqMode}
+          onEqModeChange={handleEqModeChange}
         />
       )}
 
@@ -1345,13 +1412,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
                   <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
                     <Cpu className="w-3 h-3 text-[var(--accent-primary)]" />
-                    <span>Algoritmo MIR</span>
+                    <span>Algoritmo MIR & Calibración A4</span>
                   </span>
                   <p className="text-xs font-semibold text-[var(--text-primary)] truncate font-mono">
                     {keyAnalysis.algorithm}
                   </p>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    Procesado 100% en el navegador con WebAssembly en hilo secundario
+                  <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                    {typeof keyAnalysis.referenceA4Hz === 'number'
+                      ? `Calibración A4: ${keyAnalysis.referenceA4Hz.toFixed(1)} Hz (${(keyAnalysis.detuningCents ?? 0) >= 0 ? '+' : ''}${keyAnalysis.detuningCents ?? 0} cents)`
+                      : 'Procesado 100% en el navegador con WebAssembly en hilo secundario'}
                   </p>
                 </div>
               </div>
@@ -1769,6 +1838,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           <strong>Seguridad y Privacidad</strong>: El análisis de audio utiliza secrets del entorno en el servidor (<code className="font-mono">GEMINI_API_KEY</code>). Ninguna clave queda expuesta en el repositorio público ni en el navegador. En despliegues estáticos (GitHub Pages), se activa automáticamente el motor local Web Audio API DSP sin requerir claves externas.
         </span>
       </div>
+
+      {isTunerOpen && (
+        <ChromaticTunerModal
+          initialTuning={analysisResult?.tuning}
+          initialA4Hz={keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? 440}
+          onClose={() => setIsTunerOpen(false)}
+        />
+      )}
     </div>
   );
 };

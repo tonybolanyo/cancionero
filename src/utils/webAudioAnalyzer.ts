@@ -11,6 +11,7 @@ import { computeWindowedChromagrams } from '../lib/audio/chroma';
 import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { MusicalSection } from '../lib/audio/structure';
 import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
+import { estimateDetuningCents } from '../lib/audio/tuning';
 
 export interface DetectedChord {
   timestamp: string;
@@ -28,6 +29,8 @@ export interface AudioAnalysisResult {
   scale: string;
   timeSignature: string;
   tuning?: string;
+  detuningCents?: number;
+  referenceA4Hz?: number;
   durationSeconds: number;
   chordProgression: string;
   chords: DetectedChord[];
@@ -301,12 +304,15 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     const { key, scale, harmonicChords } = detectKey(audioBuffer);
     const duration = Math.round(audioBuffer.duration);
 
-    // Compute dual-band windowed chromagrams + RMS energy once and reuse for both chords & SSM structure
+    // Compute tuning calibration, then dual-band windowed chromagrams + RMS energy once
     const channelData = extractMonoChannelData(audioBuffer);
+    const detuning = estimateDetuningCents(channelData, audioBuffer.sampleRate);
+    const calibratedA4 = detuning.confidence >= 0.35 ? detuning.referenceA4Hz : 440;
     const windowedChroma = computeWindowedChromagrams(channelData, audioBuffer.sampleRate, {
       windowDurationSec: 1.5,
       hopDurationSec: 0.75,
-      dualBand: true
+      dualBand: true,
+      referenceA4Hz: calibratedA4
     });
 
     // Detect real chord progression via dual-band chromagrams + key-weighted Viterbi smoothing
@@ -419,6 +425,10 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       ? ` Estructura detectada (SSM): ${detectedSections.map(s => s.label).join(' → ')}.`
       : '';
 
+    const tuningNote = Math.abs(detuning.cents) >= 6
+      ? ` Desviación de afinación: ${detuning.cents > 0 ? '+' : ''}${detuning.cents} cents (A4≈${calibratedA4} Hz).`
+      : '';
+
     return {
       tempo: bpm,
       tempoConfidence: confidence,
@@ -428,11 +438,13 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       scale,
       timeSignature: '4/4',
       tuning: 'Estándar (EADGBE)',
+      detuningCents: detuning.cents,
+      referenceA4Hz: calibratedA4,
       durationSeconds: duration,
       chordProgression: progressionStr,
       chords: chordTimeline,
       sections: detectedSections.length > 0 ? detectedSections : undefined,
-      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.${structureSummary}`,
+      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.${tuningNote}${structureSummary}`,
       suggestedLyricsChords: suggestedLyricsBlocks.join('\n\n'),
       source: 'client_dsp'
     };

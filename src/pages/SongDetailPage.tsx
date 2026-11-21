@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -9,23 +9,19 @@ import {
   Copy,
   Check,
   Printer,
-  FileCode,
   Music,
-  ArrowUp,
-  ArrowDown,
   RotateCcw,
   History,
   FileDown,
-  Clock,
-  Trash2,
   Disc,
-  Tag,
   Lock,
   Cloud,
   Sparkles,
   ScrollText,
   Youtube,
-  Film
+  Sliders,
+  Repeat,
+  Maximize2
 } from 'lucide-react';
 import { SongVideoVisualizerModal } from '../components/SongVideoVisualizerModal';
 import { Song } from '../types/song';
@@ -36,8 +32,6 @@ import {
   transposeLyrics,
   transposeChord,
   parseLyricLine,
-  getYouTubeEmbedUrl,
-  getSpotifyEmbedUrl,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { isSafeExternalUrl } from '../utils/authConfig';
@@ -49,9 +43,22 @@ import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { StorageService } from '../services/storageService';
 import { useAppNavigation } from '../context/NavigationContext';
 import { calculateSongCompleteness } from '../utils/songwriterHelper';
+import { PitchShiftPlayer, AudioEqMode } from '../lib/audio/pitchShiftPlayer';
+import {
+  InstrumentType,
+  extractUniqueChordsFromLyrics,
+  chordShapeWithCapo
+} from '../lib/music/chordDiagrams';
+import { chordToFunctionalSymbol } from '../lib/music/harmonyEngine';
+import { playChordPreview } from '../lib/audio/chordSynth';
+import { SongChordsBar, HarmonicNotationView } from '../components/ChordDiagramCard';
+import { MetronomeWidget } from '../components/MetronomeWidget';
+import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
+import { StageModeOverlay } from '../components/StageModeOverlay';
 
 interface SongDetailPageProps {
   song: Song;
+  songs?: Song[];
   albums?: Album[];
   onEdit: (song: Song) => void;
   onDownloadMd: (song: Song) => void;
@@ -64,14 +71,13 @@ interface SongDetailPageProps {
 
 export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   song,
+  songs = [],
   albums = [],
   onEdit,
   onDownloadMd,
   isAuthor,
   onSaveSong,
-  onDeleteSong,
-  onViewHistory,
-  onRenameFile
+  onViewHistory
 }) => {
   const { navigate, goBack } = useAppNavigation();
 
@@ -104,44 +110,76 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   // Auto-scroll state for singing/playing
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
-  const [scrollSpeed] = useState<number>(1);
-  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [scrollSpeed, setScrollSpeed] = useState<number>(1);
+  const [, setIsExportingPdf] = useState<boolean>(false);
   const [isVisualizerOpen, setIsVisualizerOpen] = useState<boolean>(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isStageModeOpen, setIsStageModeOpen] = useState<boolean>(false);
+  const [isTunerOpen, setIsTunerOpen] = useState<boolean>(false);
   const scrollIntervalRef = useRef<number | null>(null);
+
+  // Musical rehearsal states (Chords SVG, Capo, Notation, Synthesis)
+  const [instrument, setInstrument] = useState<InstrumentType>('guitar');
+  const [capoFret, setCapoFret] = useState<number>(0);
+  const [notationView, setNotationView] = useState<HarmonicNotationView>('chords');
+  const [activeChordDiagram, setActiveChordDiagram] = useState<string | null>(null);
 
   const completeness = React.useMemo(() => calculateSongCompleteness(song), [song]);
 
+  // Smart auto-scroll based on song duration (fallback 210s) and scrollSpeed multiplier
   useEffect(() => {
     if (isAutoScrolling) {
-      scrollIntervalRef.current = window.setInterval(() => {
-        window.scrollBy({ top: 1.2 * scrollSpeed, behavior: 'smooth' });
-      }, 50);
-    } else {
-      if (scrollIntervalRef.current) {
-        clearInterval(scrollIntervalRef.current);
-        scrollIntervalRef.current = null;
+      let targetSec = 210;
+      if (song.duration) {
+        const parts = song.duration.split(':').map(Number);
+        if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+          targetSec = Math.max(30, parts[0] * 60 + parts[1]);
+        }
       }
+      const intervalMs = 50;
+      scrollIntervalRef.current = window.setInterval(() => {
+        const docScrollable = Math.max(300, document.documentElement.scrollHeight - window.innerHeight);
+        const pxPerSec = (docScrollable / targetSec) * scrollSpeed;
+        const step = Math.max(0.4, (pxPerSec * intervalMs) / 1000);
+        window.scrollBy({ top: step });
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+          setIsAutoScrolling(false);
+        }
+      }, intervalMs);
+    } else if (scrollIntervalRef.current) {
+      clearInterval(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
     }
     return () => {
       if (scrollIntervalRef.current) {
         clearInterval(scrollIntervalRef.current);
       }
     };
-  }, [isAutoScrolling, scrollSpeed]);
+  }, [isAutoScrolling, scrollSpeed, song.duration]);
 
-  // Direct Audio player ref
+  // Audio player refs (PitchShiftPlayer + HTML5 audio fallback)
   const audioRef = useRef<HTMLAudioElement>(null);
+  const dspPlayerRef = useRef<PitchShiftPlayer | null>(null);
+  const [useDspPlayer, setUseDspPlayer] = useState<boolean>(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [showConfirmDeleteAudio, setShowConfirmDeleteAudio] = useState(false);
-  const [audioDeleteFeedback, setAudioDeleteFeedback] = useState<string | null>(null);
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+  const [eqMode, setEqMode] = useState<AudioEqMode>('normal');
+  const [loopStart, setLoopStart] = useState<number | null>(null);
+  const [loopEnd, setLoopEnd] = useState<number | null>(null);
+  const [syncAudioPitch, setSyncAudioPitch] = useState<boolean>(true);
 
   // Private demo / Google Drive resolution states
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string>('');
   const [isLoadingDriveAudio, setIsLoadingDriveAudio] = useState<boolean>(false);
   const [driveAudioError, setDriveAudioError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      dspPlayerRef.current?.dispose();
+      dspPlayerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -191,10 +229,18 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   useEffect(() => {
     setSemitones(0);
+    setCapoFret(0);
+    setActiveChordDiagram(null);
     setIsAutoScrolling(false);
     setIsPlayingAudio(false);
     setIsExportingPdf(false);
     setCurrentTime(0);
+    setLoopStart(null);
+    setLoopEnd(null);
+    setPlaybackRate(1.0);
+    setEqMode('normal');
+    dspPlayerRef.current?.pause();
+    dspPlayerRef.current?.clearLoop();
 
     const sourceText = song.lrc || (isLrcContent(song.lyrics) ? song.lyrics : (song.id === 'si-me-pierdo' ? SAMPLE_LRC_TEXT : ''));
     if (sourceText) {
@@ -208,6 +254,60 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
       setCustomLrcText('');
     }
   }, [song.id, song.lrc, song.lyrics]);
+
+  // Decode resolved audio into PitchShiftPlayer when available
+  useEffect(() => {
+    let cancelled = false;
+    setUseDspPlayer(false);
+
+    if (!resolvedAudioUrl || !isAuthor) {
+      dspPlayerRef.current?.pause();
+      return;
+    }
+
+    const loadDspBuffer = async () => {
+      try {
+        const res = await fetch(resolvedAudioUrl);
+        if (!res.ok) return;
+        const arrBuf = await res.arrayBuffer();
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const tempCtx = new AudioCtx();
+        const decoded = await tempCtx.decodeAudioData(arrBuf);
+        void tempCtx.close().catch(() => {});
+        if (cancelled) return;
+
+        if (!dspPlayerRef.current) {
+          dspPlayerRef.current = new PitchShiftPlayer({
+            preserveTempo: true,
+            semitones: syncAudioPitch ? semitones : 0,
+            playbackRate,
+            eqMode,
+            onTimeUpdate: (t) => setCurrentTime(t),
+            onEnded: () => setIsPlayingAudio(false),
+            onStateChange: (playing) => setIsPlayingAudio(playing)
+          });
+        }
+        dspPlayerRef.current.setBuffer(decoded);
+        setDuration(decoded.duration);
+        setUseDspPlayer(true);
+      } catch {
+        // Fallback smoothly to HTML5 <audio> for cross-origin URLs without CORS headers
+        if (!cancelled) setUseDspPlayer(false);
+      }
+    };
+
+    void loadDspBuffer();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedAudioUrl, isAuthor]);
+
+  // Sync PitchShiftPlayer pitch with lyric transposition when enabled
+  useEffect(() => {
+    if (useDspPlayer && dspPlayerRef.current) {
+      dspPlayerRef.current.setPitch(syncAudioPitch ? semitones : 0);
+    }
+  }, [semitones, syncAudioPitch, useDspPlayer]);
 
   // Find linked album if any
   const linkedAlbum = React.useMemo(() => {
@@ -245,21 +345,30 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   // Keyboard navigation & spacebar to play audio
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+      if (isStageModeOpen || isTunerOpen || isVisualizerOpen) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
         return;
       }
       if (e.key === 'Escape') {
         goBack({ name: 'catalog' });
-      } else if (e.key === ' ' && song.audioUrl) {
+      } else if (e.key === ' ' && (resolvedAudioUrl || song.audioUrl)) {
         e.preventDefault();
         togglePlayAudio();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [song.audioUrl, isPlayingAudio, goBack]);
+  }, [song.audioUrl, resolvedAudioUrl, isPlayingAudio, useDspPlayer, isStageModeOpen, isTunerOpen, isVisualizerOpen, goBack]);
 
   const togglePlayAudio = () => {
+    if (useDspPlayer && dspPlayerRef.current) {
+      if (dspPlayerRef.current.isPlaying) {
+        dspPlayerRef.current.pause();
+      } else {
+        dspPlayerRef.current.play();
+      }
+      return;
+    }
     if (!audioRef.current) return;
     if (isPlayingAudio) {
       audioRef.current.pause();
@@ -274,23 +383,73 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   };
 
   const handleTimeUpdate = () => {
+    if (useDspPlayer) return;
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const t = audioRef.current.currentTime;
+      if (loopStart !== null && loopEnd !== null && loopEnd > loopStart && t >= loopEnd) {
+        audioRef.current.currentTime = loopStart;
+        setCurrentTime(loopStart);
+      } else {
+        setCurrentTime(t);
+      }
     }
   };
 
   const handleLoadedMetadata = () => {
-    if (audioRef.current) {
+    if (audioRef.current && !useDspPlayer) {
       setDuration(audioRef.current.duration);
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
+  const seekAudio = (time: number) => {
     setCurrentTime(time);
-    if (audioRef.current) {
+    if (useDspPlayer && dspPlayerRef.current) {
+      dspPlayerRef.current.seek(time);
+    } else if (audioRef.current) {
       audioRef.current.currentTime = time;
     }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    seekAudio(parseFloat(e.target.value));
+  };
+
+  const handleSpeedChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (useDspPlayer && dspPlayerRef.current) {
+      dspPlayerRef.current.setPlaybackRate(rate);
+    } else if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
+
+  const handleEqModeChange = (mode: AudioEqMode) => {
+    setEqMode(mode);
+    if (useDspPlayer && dspPlayerRef.current) {
+      dspPlayerRef.current.setEqMode(mode);
+    }
+  };
+
+  const handleSetLoopA = () => {
+    const a = currentTime;
+    const b = loopEnd !== null && loopEnd > a + 0.25 ? loopEnd : null;
+    setLoopStart(a);
+    setLoopEnd(b);
+    dspPlayerRef.current?.setLoop(a, b);
+  };
+
+  const handleSetLoopB = () => {
+    const a = loopStart ?? Math.max(0, currentTime - 4);
+    const b = Math.max(a + 0.5, currentTime);
+    setLoopStart(a);
+    setLoopEnd(b);
+    dspPlayerRef.current?.setLoop(a, b);
+  };
+
+  const handleClearLoop = () => {
+    setLoopStart(null);
+    setLoopEnd(null);
+    dspPlayerRef.current?.clearLoop();
   };
 
   const formatAudioTime = (seconds: number): string => {
@@ -357,8 +516,35 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   const currentKey = transposeChord(song.key || 'Am', semitones, accidentalPreference);
   const transposedLyrics = transposeLyrics(song.lyrics, semitones, accidentalPreference);
-  const youtubeEmbedUrl = getYouTubeEmbedUrl(song.youtubeUrl);
-  const spotifyEmbedUrl = getSpotifyEmbedUrl(song.spotifyUrl);
+  const uniqueSongChords = useMemo(
+    () => extractUniqueChordsFromLyrics(transposedLyrics),
+    [transposedLyrics]
+  );
+
+  const formatDisplayedChord = (soundingChord: string): string => {
+    if (notationView !== 'chords') {
+      return chordToFunctionalSymbol(soundingChord, currentKey, notationView);
+    }
+    if (capoFret > 0 && instrument !== 'piano') {
+      return chordShapeWithCapo(soundingChord, capoFret, accidentalPreference);
+    }
+    return soundingChord;
+  };
+
+  const handleInlineChordClick = (soundingChord: string) => {
+    setActiveChordDiagram(soundingChord);
+    playChordPreview(soundingChord, instrument, song.tuning);
+  };
+
+  const stageItems = useMemo(() => {
+    if (songs.length === 0) return [{ song }];
+    return songs.map(s => ({ song: s }));
+  }, [songs, song]);
+
+  const stageInitialIndex = useMemo(() => {
+    const idx = stageItems.findIndex(item => item.song.id === song.id);
+    return idx >= 0 ? idx : 0;
+  }, [stageItems, song.id]);
 
   const renderLyrics = () => {
     const lines = transposedLyrics.split('\n');
@@ -387,11 +573,21 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               {segments.map((segment, sIdx) => {
                 const chord = segment.chord;
                 const text = segment.text;
+                const displayChord = chord ? formatDisplayedChord(chord) : '';
                 return (
                   <span key={sIdx} className="inline-flex flex-col mr-1">
-                    <span className="text-xs font-bold text-[var(--accent-primary)] select-none h-4">
-                      {chord || '\u00A0'}
-                    </span>
+                    {chord ? (
+                      <button
+                        type="button"
+                        onClick={() => handleInlineChordClick(chord)}
+                        className="text-left text-xs font-bold text-[var(--accent-primary)] hover:underline select-none h-4 cursor-pointer"
+                        title={`Oír y ver diagrama de ${chord}`}
+                      >
+                        {displayChord}
+                      </button>
+                    ) : (
+                      <span className="text-xs font-bold select-none h-4">{'\u00A0'}</span>
+                    )}
                     <span className={`font-serif text-[var(--text-primary)] leading-normal ${
                       fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
                     }`}>
@@ -411,12 +607,15 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               if (part.startsWith('[') && part.endsWith(']')) {
                 const chordSymbol = part.slice(1, -1);
                 return (
-                  <span
+                  <button
                     key={pIdx}
-                    className="inline-block px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-mono font-semibold text-xs border border-[var(--accent-border)] -translate-y-1 mx-0.5 select-none"
+                    type="button"
+                    onClick={() => handleInlineChordClick(chordSymbol)}
+                    className="inline-block px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] font-mono font-semibold text-xs border border-[var(--accent-border)] -translate-y-1 mx-0.5 select-none cursor-pointer transition-colors"
+                    title={`Oír y ver diagrama de ${chordSymbol}`}
                   >
-                    {chordSymbol}
-                  </span>
+                    {formatDisplayedChord(chordSymbol)}
+                  </button>
                 );
               }
               return (
@@ -461,7 +660,27 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </button>
 
         {/* Quick author & export actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsTunerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            title="Abrir afinador cromático por micrófono"
+          >
+            <Sliders className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+            <span>Afinador</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsStageModeOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            title="Modo Escenario a pantalla completa con WakeLock y soporte para pedal"
+          >
+            <Maximize2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+            <span>Modo Escenario</span>
+          </button>
+
           {isAuthor && (
             <>
               {onViewHistory && (
@@ -475,7 +694,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               )}
               <button
                 onClick={() => onEdit(song)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors whitespace-nowrap cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Editar Canción</span>
@@ -483,7 +702,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
               <button
                 onClick={() => setIsVisualizerOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors whitespace-nowrap cursor-pointer shadow-xs"
                 title="Generar vídeo para YouTube con letra sincronizada (1080p / 720p / 360p)"
               >
                 <Youtube className="w-3.5 h-3.5" />
@@ -703,18 +922,20 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </div>
       )}
 
-      {/* Author Audio Player Bar (when resolved audio URL is available) */}
+      {/* Author Audio Player Bar with PitchShiftPlayer, Speed, A-B Loop & EQ Isolation */}
       {isAuthor && resolvedAudioUrl && (
         <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm space-y-3">
-          <div className="flex items-center justify-between text-xs pb-1 border-b border-[var(--border-subtle)]">
-            <div className="flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-blue-500" />
-              <span className="font-semibold text-[var(--text-primary)]">
-                {song.driveFileName || 'Maqueta Acústica Privada (Google Drive)'}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs pb-2 border-b border-[var(--border-subtle)]">
+            <div className="flex items-center gap-2 min-w-0">
+              <Cloud className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+              <span className="font-semibold text-[var(--text-primary)] truncate">
+                {song.driveFileName || 'Pista de Ensayo'}
               </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold">
-                Google Drive
-              </span>
+              {useDspPlayer && (
+                <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                  · DSP Web Audio {syncAudioPitch && semitones !== 0 ? `(${semitones > 0 ? `+${semitones}` : semitones} st)` : ''}
+                </span>
+              )}
             </div>
             <button
               onClick={() => onEdit(song)}
@@ -727,14 +948,16 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
           <audio
             ref={audioRef}
-            src={resolvedAudioUrl}
+            src={!useDspPlayer ? resolvedAudioUrl : undefined}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlayingAudio(false)}
             onError={(e) => {
-              console.warn('Error en la reproducción de audio en SongDetailPage:', e);
-              setIsPlayingAudio(false);
-              setDriveAudioError('No se pudo reproducir la pista de audio.');
+              if (!useDspPlayer) {
+                console.warn('Error en la reproducción de audio en SongDetailPage:', e);
+                setIsPlayingAudio(false);
+                setDriveAudioError('No se pudo reproducir la pista de audio.');
+              }
             }}
           />
 
@@ -750,15 +973,117 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 type="range"
                 min="0"
                 max={duration || 100}
+                step="0.05"
                 value={currentTime}
                 onChange={handleSeek}
                 className="w-full accent-[var(--accent-primary)] cursor-pointer"
               />
               <div className="flex justify-between text-[11px] font-mono tabular-nums text-[var(--text-muted)]">
                 <span>{formatAudioTime(currentTime)}</span>
+                {loopStart !== null && (
+                  <span className="text-[var(--accent-primary)] font-semibold">
+                    Bucle A-B: {formatAudioTime(loopStart)} → {loopEnd !== null ? formatAudioTime(loopEnd) : '...'}
+                  </span>
+                )}
                 <span>{formatAudioTime(duration)}</span>
               </div>
             </div>
+          </div>
+
+          {/* Rehearsal DSP Bar: Speed, A-B Loop, Sync Pitch & Mid-Side/EQ */}
+          <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            {/* Speed / Time-Stretching */}
+            <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)] font-mono">
+              <span className="text-[11px] text-[var(--text-muted)] px-1.5">Velocidad:</span>
+              {[0.6, 0.75, 0.85, 1.0, 1.15, 1.25].map(rate => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => handleSpeedChange(rate)}
+                  className={`px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors ${
+                    playbackRate === rate
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-bold'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+
+            {/* A-B Loop */}
+            <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)] font-mono">
+              <Repeat className="w-3 h-3 text-[var(--accent-primary)] ml-1.5" />
+              <button
+                type="button"
+                onClick={handleSetLoopA}
+                className={`px-2 py-0.5 rounded text-[11px] cursor-pointer ${
+                  loopStart !== null ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-bold' : 'text-[var(--text-secondary)]'
+                }`}
+                title="Marcar punto A del bucle en el tiempo actual"
+              >
+                {loopStart !== null ? `A ${formatAudioTime(loopStart)}` : 'Marcar A'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSetLoopB}
+                className={`px-2 py-0.5 rounded text-[11px] cursor-pointer ${
+                  loopEnd !== null ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-bold' : 'text-[var(--text-secondary)]'
+                }`}
+                title="Marcar punto B del bucle en el tiempo actual"
+              >
+                {loopEnd !== null ? `B ${formatAudioTime(loopEnd)}` : 'Marcar B'}
+              </button>
+              {(loopStart !== null || loopEnd !== null) && (
+                <button
+                  type="button"
+                  onClick={handleClearLoop}
+                  className="px-1.5 py-0.5 rounded text-[11px] text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                  title="Limpiar bucle A-B"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Mid-Side & EQ Isolation (when DSP player is active) */}
+            {useDspPlayer && (
+              <div className="flex flex-wrap items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+                {(
+                  [
+                    { id: 'normal', label: 'Normal' },
+                    { id: 'vocal_cut', label: 'Atenuar voz' },
+                    { id: 'bass_isolate', label: 'Solo bajo' },
+                    { id: 'guitar_focus', label: 'Guitarra' }
+                  ] as const
+                ).map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleEqModeChange(item.id)}
+                    className={`px-2 py-0.5 rounded text-[11px] whitespace-nowrap cursor-pointer transition-colors ${
+                      eqMode === item.id
+                        ? 'bg-[var(--bg-surface)] text-[var(--accent-primary)] font-semibold shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSyncAudioPitch(v => !v)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono whitespace-nowrap cursor-pointer border ${
+                    syncAudioPitch
+                      ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
+                      : 'border-transparent text-[var(--text-muted)]'
+                  }`}
+                  title="Sincronizar tono del audio con la transposición de la letra"
+                >
+                  {syncAudioPitch ? 'Tono ligado' : 'Audio original'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -917,24 +1242,45 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               ))}
             </div>
 
+            {/* Metronome & Tap Tempo */}
+            <MetronomeWidget
+              bpm={song.tempo || 96}
+              timeSignature={song.timeSignature || '4/4'}
+              compact
+            />
+
             {/* Auto-scroll rehearsal button */}
-            <button
-              onClick={() => setIsAutoScrolling(!isAutoScrolling)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                isAutoScrolling
-                  ? 'bg-emerald-500 text-white border-emerald-600 animate-pulse'
-                  : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-              }`}
-              title="Desplazamiento automático para leer la letra y tocar en atril"
-            >
-              <ScrollText className="w-3.5 h-3.5" />
-              <span>{isAutoScrolling ? 'Pausar Desplazamiento' : 'Autodesplazamiento'}</span>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsAutoScrolling(!isAutoScrolling)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
+                  isAutoScrolling
+                    ? 'bg-emerald-600 text-white border-emerald-700'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                }`}
+                title="Desplazamiento automático para leer la letra y tocar en atril"
+              >
+                <ScrollText className="w-3.5 h-3.5" />
+                <span>{isAutoScrolling ? 'Pausar Scroll' : 'Auto-Scroll'}</span>
+              </button>
+              {isAutoScrolling && (
+                <select
+                  value={scrollSpeed}
+                  onChange={(e) => setScrollSpeed(Number(e.target.value))}
+                  className="px-1.5 py-1 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] cursor-pointer"
+                  aria-label="Velocidad de autodesplazamiento"
+                >
+                  <option value={0.7}>0.7x</option>
+                  <option value={1}>1x</option>
+                  <option value={1.3}>1.3x</option>
+                </select>
+              )}
+            </div>
 
             {/* Copy lyrics */}
             <button
               onClick={handleCopyLyrics}
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors whitespace-nowrap cursor-pointer"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copiada' : 'Copiar letra'}</span>
@@ -942,6 +1288,24 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Dynamic SVG Chord Diagrams, Capo Calculator & Roman/Nashville View */}
+      {activeTab === 'lyrics' && showChords && uniqueSongChords.length > 0 && (
+        <SongChordsBar
+          chords={uniqueSongChords}
+          soundingKey={currentKey}
+          tuning={song.tuning}
+          capoFret={capoFret}
+          onCapoChange={setCapoFret}
+          instrument={instrument}
+          onInstrumentChange={setInstrument}
+          notationView={notationView}
+          onNotationViewChange={setNotationView}
+          accidentalPreference={accidentalPreference}
+          activeChord={activeChordDiagram}
+          onChordSelect={setActiveChordDiagram}
+        />
+      )}
 
       {/* Main Tab Views */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 sm:p-10 shadow-sm min-h-[450px]">
@@ -960,10 +1324,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               currentTime={currentTime}
               duration={duration}
               isPlaying={isPlayingAudio}
-              onSeek={(time) => {
-                if (audioRef.current) audioRef.current.currentTime = time;
-                setCurrentTime(time);
-              }}
+              onSeek={seekAudio}
               onTogglePlay={togglePlayAudio}
               metadata={lrcMetadata}
               songTitle={song.title}
@@ -1040,6 +1401,29 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         <SongVideoVisualizerModal
           song={song}
           onClose={() => setIsVisualizerOpen(false)}
+        />
+      )}
+
+      {/* Chromatic YIN Microphone Tuner Modal */}
+      {isTunerOpen && (
+        <ChromaticTunerModal
+          initialTuning={song.tuning}
+          initialA4Hz={song.audioAnalysis?.referenceA4Hz || 440}
+          onClose={() => setIsTunerOpen(false)}
+        />
+      )}
+
+      {/* Fullscreen Stage / Atril Mode Overlay */}
+      {isStageModeOpen && (
+        <StageModeOverlay
+          items={stageItems}
+          initialIndex={stageInitialIndex}
+          initialSemitones={semitones}
+          initialCapoFret={capoFret}
+          initialInstrument={instrument}
+          initialNotationView={notationView}
+          accidentalPreference={accidentalPreference}
+          onClose={() => setIsStageModeOpen(false)}
         />
       )}
     </div>

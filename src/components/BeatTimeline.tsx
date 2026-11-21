@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders, Maximize2, Minimize2, Repeat } from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
 import { TimeSignature } from '../lib/audio/meter';
 import { MusicalSection, MusicalSectionType } from '../lib/audio/structure';
+import type { AudioEqMode } from '../lib/audio/pitchShiftPlayer';
 
 export interface BeatTimelineProps {
   audioBuffer?: AudioBuffer | null;
@@ -32,6 +33,16 @@ export interface BeatTimelineProps {
   meter?: TimeSignature;
   downbeats?: number[];
   onMeterChange?: (meter: TimeSignature) => void;
+  // Time-stretching, A-B Loop & EQ isolation props
+  playbackRate?: number;
+  onPlaybackRateChange?: (rate: number) => void;
+  loopStart?: number | null;
+  loopEnd?: number | null;
+  onSetLoopA?: () => void;
+  onSetLoopB?: () => void;
+  onClearLoop?: () => void;
+  eqMode?: AudioEqMode;
+  onEqModeChange?: (mode: AudioEqMode) => void;
   className?: string;
 }
 
@@ -112,6 +123,15 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   meter = '4/4',
   downbeats,
   onMeterChange,
+  playbackRate = 1.0,
+  onPlaybackRateChange,
+  loopStart = null,
+  loopEnd = null,
+  onSetLoopA,
+  onSetLoopB,
+  onClearLoop,
+  eqMode = 'normal',
+  onEqModeChange,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -444,6 +464,39 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       ctx.fillText(hoverLabel, boxX + 4, height - 15);
     }
 
+    // 7b. A-B Rehearsal Loop region overlay
+    if (loopStart !== null && totalDuration > 0) {
+      const xA = (Math.max(0, Math.min(loopStart, totalDuration)) / totalDuration) * width;
+      if (loopEnd !== null && loopEnd > loopStart) {
+        const xB = (Math.max(0, Math.min(loopEnd, totalDuration)) / totalDuration) * width;
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+        ctx.fillRect(xA, 0, Math.max(2, xB - xA), height);
+
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(xB, 0);
+        ctx.lineTo(xB, height);
+        ctx.stroke();
+
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('B', Math.max(12, xB - 3), 10);
+      }
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(xA, 0);
+      ctx.lineTo(xA, height);
+      ctx.stroke();
+
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('A', Math.min(width - 10, xA + 3), 10);
+    }
+
     // 8. Playhead / Current Position
     const playheadX = (currentTime / totalDuration) * width;
     ctx.strokeStyle = '#f59e0b';
@@ -463,7 +516,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.fill();
 
     ctx.restore();
-  }, [audioBuffer, beatAnalysis, chords, sections, currentTime, duration, hasChords, hasSections, hoverTime, showBeats, showChords, showOnsets, showSections, accidentalPreference, isTallWaveform, getTimelineHeight, meter, downbeats]);
+  }, [audioBuffer, beatAnalysis, chords, sections, currentTime, duration, hasChords, hasSections, hoverTime, showBeats, showChords, showOnsets, showSections, accidentalPreference, isTallWaveform, getTimelineHeight, meter, downbeats, loopStart, loopEnd]);
 
   useEffect(() => {
     let animId: number;
@@ -589,7 +642,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               </span>
             )}
             {currentChord && (
-              <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1 animate-pulse">
+              <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1">
                 <Music className="w-3 h-3 text-purple-400" />
                 <span>Acorde: {accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord}</span>
                 <span className="text-[9px] text-purple-400/80">({Math.round((currentChord.confidence ?? currentChord.strength ?? 0.8) * 100)}%)</span>
@@ -834,6 +887,96 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             >
               <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
             </button>
+          )}
+
+          {/* Selector de velocidad (Time-stretching sin alterar el tono) */}
+          {onPlaybackRateChange && (
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
+              <span className="px-1.5 text-[var(--text-muted)] font-semibold hidden sm:inline">Vel:</span>
+              {[0.75, 0.85, 1.0, 1.15].map(rate => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => onPlaybackRateChange(rate)}
+                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors whitespace-nowrap ${
+                    Math.abs(playbackRate - rate) < 0.02
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                  }`}
+                  title={`Velocidad ${rate.toFixed(2)}x`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Bucle A-B de ensayo */}
+          {onSetLoopA && onSetLoopB && (
+            <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
+              <span className="px-1 text-[var(--text-muted)] flex items-center gap-1">
+                <Repeat className="w-2.5 h-2.5 text-emerald-500" />
+              </span>
+              <button
+                type="button"
+                onClick={onSetLoopA}
+                className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold whitespace-nowrap ${
+                  loopStart !== null
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
+                }`}
+                title="Marcar punto A en el tiempo actual"
+              >
+                {loopStart !== null ? `A ${formatTime(loopStart)}` : 'A'}
+              </button>
+              <button
+                type="button"
+                onClick={onSetLoopB}
+                className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold whitespace-nowrap ${
+                  loopEnd !== null
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
+                }`}
+                title="Marcar punto B en el tiempo actual"
+              >
+                {loopEnd !== null ? `B ${formatTime(loopEnd)}` : 'B'}
+              </button>
+              {(loopStart !== null || loopEnd !== null) && onClearLoop && (
+                <button
+                  type="button"
+                  onClick={onClearLoop}
+                  className="px-1.5 py-0.5 rounded cursor-pointer text-[var(--text-muted)] hover:text-red-500"
+                  title="Quitar bucle A-B"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Aislamiento Mid-Side / EQ para sacar partes de oído */}
+          {onEqModeChange && (
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
+              {([
+                { id: 'normal', label: 'Normal' },
+                { id: 'vocal_cut', label: 'Sin voz' },
+                { id: 'bass_isolate', label: 'Bajo' },
+                { id: 'guitar_focus', label: 'Guitarra' }
+              ] as const).map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onEqModeChange(opt.id)}
+                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors whitespace-nowrap ${
+                    eqMode === opt.id
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Selector interactivo de compás (2/4, 3/4, 4/4, 6/8) */}

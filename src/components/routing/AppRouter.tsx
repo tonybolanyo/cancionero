@@ -137,6 +137,7 @@ export const AppRouter: React.FC<AppRouterProps> = ({
       return activeDetailSong ? (
         <SongDetailPage
           song={activeDetailSong}
+          songs={songs}
           albums={albums}
           onEdit={onOpenEditSong}
           onDownloadMd={onDownloadMd}

@@ -1,41 +1,21 @@
 import { Song } from '../types/song';
 import { transposeChord } from './markdownParser';
+import { buildHarmonicPalette, MusicalMode } from '../lib/music/harmonyEngine';
 
 /**
- * Common diatonic and secondary chords for popular songwriting keys
+ * Returns the most natural chord palette for any musical key and optional mode
+ * using the dynamic interval-based harmony engine.
  */
-const DIATONIC_CHORDS_MAP: Record<string, string[]> = {
-  'Am': ['Am', 'C', 'Dm', 'Em', 'F', 'G', 'E7', 'A7'],
-  'Em': ['Em', 'G', 'Am', 'Bm', 'C', 'D', 'B7', 'E7'],
-  'Dm': ['Dm', 'F', 'Gm', 'Am', 'Bb', 'C', 'A7', 'D7'],
-  'Bm': ['Bm', 'D', 'Em', 'F#m', 'G', 'A', 'F#7', 'B7'],
-  'C#m': ['C#m', 'E', 'F#m', 'G#m', 'A', 'B', 'G#7', 'C#7'],
-  'F#m': ['F#m', 'A', 'Bm', 'C#m', 'D', 'E', 'C#7', 'F#7'],
-  'C': ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'G7', 'C7'],
-  'G': ['G', 'Am', 'Bm', 'C', 'D', 'Em', 'D7', 'G7'],
-  'D': ['D', 'Em', 'F#m', 'G', 'A', 'Bm', 'A7', 'D7'],
-  'A': ['A', 'Bm', 'C#m', 'D', 'E', 'F#m', 'E7', 'A7'],
-  'E': ['E', 'F#m', 'G#m', 'A', 'B', 'C#m', 'B7', 'E7'],
-  'F': ['F', 'Gm', 'Am', 'Bb', 'C', 'Dm', 'C7', 'F7'],
-  'Bb': ['Bb', 'Cm', 'Dm', 'Eb', 'F', 'Gm', 'F7', 'Bb7'],
-  'Eb': ['Eb', 'Fm', 'Gm', 'Ab', 'Bb', 'Cm', 'Bb7', 'Eb7']
-};
+export function getDiatonicChordsForKey(key: string, mode?: MusicalMode): string[] {
+  const palette = buildHarmonicPalette(key || 'Am', mode);
+  const baseTriads = palette.diatonicTriads.slice(0, 6).map(entry => entry.chord);
+  const dominant7 = palette.secondaryDominants[0]?.chord;
+  const tonic7 = palette.diatonicSevenths[4]?.chord;
 
-/**
- * Returns the most natural chord palette for any musical key
- */
-export function getDiatonicChordsForKey(key: string): string[] {
-  const cleanKey = (key || 'Am').trim();
-  if (DIATONIC_CHORDS_MAP[cleanKey]) {
-    return DIATONIC_CHORDS_MAP[cleanKey];
-  }
-
-  // Fallback: if key is minor, transpose from Am; if major, transpose from C
-  const isMinor = cleanKey.endsWith('m') && !cleanKey.endsWith('maj7');
-  const baseKey = isMinor ? 'Am' : 'C';
-  const baseChords = DIATONIC_CHORDS_MAP[baseKey];
-
-  return baseChords;
+  const unique = new Set<string>(baseTriads);
+  if (dominant7) unique.add(dominant7);
+  if (tonic7) unique.add(tonic7);
+  return Array.from(unique);
 }
 
 export interface SongwritingStep {

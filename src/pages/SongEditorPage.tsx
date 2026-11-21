@@ -48,6 +48,9 @@ import {
   FolderGit2,
   Cpu,
   ShieldCheck,
+  Volume2,
+  Hand,
+  Sliders,
   Key
 } from 'lucide-react';
 import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
@@ -91,11 +94,21 @@ import {
 } from '../lib/audio/mp3Metadata';
 import { Mp3MetadataComparisonModal } from '../components/Mp3MetadataComparisonModal';
 import {
-  getDiatonicChordsForKey,
   calculateSongCompleteness,
   SONGWRITING_TEMPLATES
 } from '../utils/songwriterHelper';
 import { exportSongToPdf } from '../utils/pdfGenerator';
+import {
+  MusicalMode,
+  MUSICAL_MODE_LABELS,
+  buildHarmonicPalette,
+  suggestNextChords,
+  findLastChordBeforeCursor,
+  HarmonicChordEntry
+} from '../lib/music/harmonyEngine';
+import { playChordPreview } from '../lib/audio/chordSynth';
+import { TapTempoTracker } from '../lib/audio/metronome';
+import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
 
 interface SongEditorPageProps {
   song: Song | null;
@@ -218,9 +231,17 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [commitMessage, setCommitMessage] = useState('');
   const [isPushing, setIsPushing] = useState(false);
 
-  // Cursor tracking in Lyrics Editor for Status Bar
+  // Cursor tracking in Lyrics Editor for Status Bar & Contextual Next-Chord Suggestions
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
+  const [cursorOffset, setCursorOffset] = useState<number>(0);
   const lyricsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Harmonic Theory & Tuner & Tap Tempo states
+  const [musicalMode, setMusicalMode] = useState<MusicalMode | 'auto'>('auto');
+  const [chordPaletteTab, setChordPaletteTab] = useState<HarmonicChordEntry['category']>('diatonic');
+  const [isTunerOpen, setIsTunerOpen] = useState<boolean>(false);
+  const [tapCount, setTapCount] = useState<number>(0);
+  const tapTrackerRef = useRef<TapTempoTracker>(new TapTempoTracker());
 
   // Initialize fields on load or change
   useEffect(() => {
@@ -351,10 +372,36 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
-  // Dynamic Diatonic Chords for the current key
-  const availableChords = useMemo(() => {
-    return getDiatonicChordsForKey(key);
-  }, [key]);
+  // Dynamic Harmonic Palette & Contextual Next-Chord Suggestions
+  const harmonicPalette = useMemo(() => {
+    return buildHarmonicPalette(key, musicalMode === 'auto' ? undefined : musicalMode);
+  }, [key, musicalMode]);
+
+  const activeCategoryChords = useMemo<HarmonicChordEntry[]>(() => {
+    switch (chordPaletteTab) {
+      case 'seventh':
+        return harmonicPalette.diatonicSevenths;
+      case 'secondary_dominant':
+        return harmonicPalette.secondaryDominants;
+      case 'modal_interchange':
+        return harmonicPalette.modalInterchange;
+      case 'diatonic':
+      default:
+        return harmonicPalette.diatonicTriads;
+    }
+  }, [harmonicPalette, chordPaletteTab]);
+
+  const lastChordBeforeCursor = useMemo(() => {
+    return findLastChordBeforeCursor(lyrics, cursorOffset || lyrics.length);
+  }, [lyrics, cursorOffset]);
+
+  const contextualNextChords = useMemo(() => {
+    return suggestNextChords(
+      lastChordBeforeCursor,
+      key,
+      musicalMode === 'auto' ? undefined : musicalMode
+    );
+  }, [lastChordBeforeCursor, key, musicalMode]);
 
   // Calculate completeness progress
   const completeness = useMemo(() => {
@@ -384,10 +431,20 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     const textarea = lyricsTextareaRef.current;
     if (!textarea) return;
     const start = textarea.selectionStart;
+    setCursorOffset(start);
     const linesBefore = textarea.value.substring(0, start).split('\n');
     const curLine = linesBefore.length;
     const curCol = linesBefore[linesBefore.length - 1].length + 1;
     setCursorPos({ line: curLine, col: curCol });
+  };
+
+  const handleTapTempo = () => {
+    const res = tapTrackerRef.current.tap();
+    setTapCount(res.tapCount);
+    if (res.bpm !== null) {
+      setTempo(String(res.bpm));
+      showFeedback(`Tempo marcado: ${res.bpm} BPM`);
+    }
   };
 
   // Insert Chord at cursor position in Lyrics Textarea
@@ -1488,7 +1545,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               </button>
             </div>
 
-            {/* Tempo (BPM) */}
+            {/* Tempo (BPM) + Tap Tempo */}
             <div className="flex items-center bg-[var(--bg-surface-subtle)] rounded-md border border-[var(--border-subtle)] px-2 py-1 gap-1">
               <span className="text-[11px] text-[var(--text-muted)] font-medium">BPM:</span>
               <input
@@ -1498,6 +1555,15 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 className="w-11 font-mono text-xs bg-transparent text-[var(--text-primary)] text-center focus:outline-none"
                 placeholder="96"
               />
+              <button
+                type="button"
+                onClick={handleTapTempo}
+                className="ml-0.5 px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[10px] font-mono font-semibold text-[var(--accent-primary)] flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Pulsa al ritmo del tema para medir el BPM (Tap Tempo)"
+              >
+                <Hand className="w-2.5 h-2.5" />
+                <span>Tap{tapCount > 1 ? ` ${tapCount}` : ''}</span>
+              </button>
             </div>
 
             {/* Compás */}
@@ -1510,6 +1576,17 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 <option key={ts} value={ts}>{ts}</option>
               ))}
             </select>
+
+            {/* Chromatic Tuner */}
+            <button
+              type="button"
+              onClick={() => setIsTunerOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--accent-primary)] whitespace-nowrap cursor-pointer"
+              title="Abrir afinador cromático YIN"
+            >
+              <Sliders className="w-3 h-3" />
+              <span>Afinador</span>
+            </button>
           </div>
 
           {/* Group 3: Audio Transport Quick Player (when audio is loaded) */}
@@ -1783,120 +1860,195 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                ----------------------------------------------------------------------- */}
             {activeTab === 'lyrics.md' && (
               <div className="flex-1 flex flex-col">
-                {/* Diatonic Chord Toolbar + Quick Section Anchors */}
-                <div className="bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  {/* Left: Diatonic Chord Buttons */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold text-[var(--text-primary)] mr-1 flex items-center gap-1">
-                      <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                      <span>Acordes en [{key}]:</span>
-                    </span>
-                    {availableChords.map(c => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => handleInsertChordAtCursor(c)}
-                        className="px-2 py-1 text-xs font-mono font-bold rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer shadow-2xs active:scale-95"
-                        title={`Insertar acorde [${c}] en la posición del cursor`}
-                      >
-                        [{c}]
-                      </button>
-                    ))}
+                {/* Dynamic Harmonic Palette + Contextual Next-Chord Suggestions + Section Anchors */}
+                <div className="bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-4 py-2.5 space-y-2 text-xs">
+                  {/* Top row: Mode selector + Harmonic Category tabs + Chord buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-[var(--text-primary)] mr-1 flex items-center gap-1">
+                        <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        <span>Armonía [{key}]:</span>
+                      </span>
 
-                    {/* Custom Chord input */}
-                    <div className="flex items-center gap-1 pl-1">
-                      <input
-                        type="text"
-                        value={customChordInput}
-                        onChange={(e) => setCustomChordInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCustomChord();
+                      <select
+                        value={musicalMode}
+                        onChange={(e) => setMusicalMode(e.target.value as MusicalMode | 'auto')}
+                        className="px-2 py-1 text-[11px] font-medium rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] cursor-pointer"
+                        title="Seleccionar modo o escala armónica"
+                      >
+                        <option value="auto">Modo automático</option>
+                        {(Object.keys(MUSICAL_MODE_LABELS) as MusicalMode[]).map(m => (
+                          <option key={m} value={m}>{MUSICAL_MODE_LABELS[m]}</option>
+                        ))}
+                      </select>
+
+                      <div className="flex items-center bg-[var(--bg-surface-subtle)] p-0.5 rounded border border-[var(--border-subtle)]">
+                        {(
+                          [
+                            { id: 'diatonic', label: 'Diatónicos' },
+                            { id: 'seventh', label: '7ª' },
+                            { id: 'secondary_dominant', label: 'Dom. Sec.' },
+                            { id: 'modal_interchange', label: 'Int. Modal' }
+                          ] as const
+                        ).map(tab => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setChordPaletteTab(tab.id)}
+                            className={`px-2 py-0.5 rounded text-[11px] whitespace-nowrap cursor-pointer transition-colors ${
+                              chordPaletteTab === tab.id
+                                ? 'bg-[var(--bg-surface)] text-[var(--accent-primary)] font-semibold shadow-2xs'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {activeCategoryChords.map(entry => (
+                        <div
+                          key={`${entry.category}-${entry.chord}`}
+                          className="inline-flex items-center rounded bg-[var(--accent-subtle)] border border-[var(--accent-border)] overflow-hidden"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleInsertChordAtCursor(entry.chord)}
+                            className="px-2 py-1 text-xs font-mono font-bold text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] transition-colors cursor-pointer"
+                            title={`Insertar [${entry.chord}] (${entry.roman} · ${entry.functionLabel})`}
+                          >
+                            {entry.chord}
+                            <span className="ml-1 text-[9px] font-normal opacity-75">{entry.roman}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => playChordPreview(entry.chord, 'guitar', tuning)}
+                            className="px-1.5 py-1 text-[var(--text-muted)] hover:text-[var(--accent-primary)] border-l border-[var(--accent-border)]/50 cursor-pointer"
+                            title={`Escuchar ${entry.chord}`}
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Custom Chord input */}
+                      <div className="flex items-center gap-1 pl-1">
+                        <input
+                          type="text"
+                          value={customChordInput}
+                          onChange={(e) => setCustomChordInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomChord();
+                            }
+                          }}
+                          placeholder="ej. B7, D/F#"
+                          className="w-20 px-1.5 py-0.5 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomChord}
+                          disabled={!customChordInput.trim()}
+                          className="px-1.5 py-0.5 text-xs font-semibold rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--accent-primary)] cursor-pointer disabled:opacity-40"
+                          title="Insertar acorde personalizado"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right: Section Anchors & Songwriting Templates */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] text-[var(--text-muted)] font-medium mr-1">Sección:</span>
+                      {(['Intro', 'Estrofa 1', 'Estrofa 2', 'Estribillo', 'Puente', 'Coda'] as const).map(sec => (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => handleInsertSection(sec)}
+                          className="px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)] text-[11px] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                        >
+                          + {sec}
+                        </button>
+                      ))}
+
+                      <div className="h-4 w-px bg-[var(--border-subtle)] mx-1" />
+
+                      {/* Templates dropdown */}
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleApplyTemplate(e.target.value);
+                            e.target.value = '';
                           }
                         }}
-                        placeholder="ej. B7, D/F#"
-                        className="w-16 px-1.5 py-0.5 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
-                      />
+                        className="text-[11px] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-[var(--text-secondary)] focus:outline-none cursor-pointer"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Plantillas...</option>
+                        {SONGWRITING_TEMPLATES.map(t => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))}
+                      </select>
+
+                      {(savedAudioAnalysis?.chords?.length || detectedChords.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() => handleInsertDetectedChords()}
+                          className="px-2.5 py-1 text-xs font-semibold rounded bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                          title="Insertar acordes detectados automáticamente en las sílabas exactas de la letra"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Insertar en sílabas ({savedAudioAnalysis?.chords?.length || detectedChords.length})</span>
+                        </button>
+                      )}
+
+                      {lyricsUndoHistory !== null && (
+                        <button
+                          type="button"
+                          onClick={handleUndoChordInsertion}
+                          className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          title="Deshacer la inserción de acordes y restaurar la letra anterior"
+                        >
+                          <Undo2 className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Deshacer</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={handleAddCustomChord}
-                        disabled={!customChordInput.trim()}
-                        className="px-1.5 py-0.5 text-xs font-semibold rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:text-[var(--accent-primary)] cursor-pointer disabled:opacity-40"
-                        title="Insertar acorde personalizado"
+                        onClick={handleStripChords}
+                        className="p-1 rounded text-[var(--text-muted)] hover:text-rose-500 hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                        title="Eliminar todos los acordes [C] para dejar solo la poesía"
                       >
-                        +
+                        <Eraser className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Right: Section Anchors & Songwriting Templates */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] text-[var(--text-muted)] font-medium mr-1">Sección:</span>
-                    {(['Intro', 'Estrofa 1', 'Estrofa 2', 'Estribillo', 'Puente', 'Coda'] as const).map(sec => (
+                  {/* Contextual Next-Chord Suggestions Bar */}
+                  <div className="pt-1.5 border-t border-[var(--border-subtle)]/70 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="text-[var(--text-muted)] font-medium">
+                      {lastChordBeforeCursor
+                        ? `Tras [${lastChordBeforeCursor}], próximo acorde probable:`
+                        : 'Sugerencia armónica inicial:'}
+                    </span>
+                    {contextualNextChords.map(sug => (
                       <button
-                        key={sec}
+                        key={`sug-${sug.chord}-${sug.reason}`}
                         type="button"
-                        onClick={() => handleInsertSection(sec)}
-                        className="px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)] text-[11px] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                        onClick={() => handleInsertChordAtCursor(sug.chord)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          playChordPreview(sug.chord, 'guitar', tuning);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] text-[var(--text-primary)] transition-colors cursor-pointer"
+                        title={`Insertar [${sug.chord}] · ${sug.reason} (clic derecho para escuchar)`}
                       >
-                        + {sec}
+                        <strong className="font-mono text-[var(--accent-primary)]">{sug.chord}</strong>
+                        <span className="text-[10px] text-[var(--text-muted)]">{sug.reason}</span>
                       </button>
                     ))}
-
-                    <div className="h-4 w-px bg-[var(--border-subtle)] mx-1" />
-
-                    {/* Templates dropdown */}
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleApplyTemplate(e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                      className="text-[11px] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-[var(--text-secondary)] focus:outline-none cursor-pointer"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Plantillas de estructura...</option>
-                      {SONGWRITING_TEMPLATES.map(t => (
-                        <option key={t.id} value={t.id}>{t.title}</option>
-                      ))}
-                    </select>
-
-                    <div className="h-4 w-px bg-[var(--border-subtle)] mx-1" />
-
-                    {(savedAudioAnalysis?.chords?.length || detectedChords.length > 0) && (
-                      <button
-                        type="button"
-                        onClick={() => handleInsertDetectedChords()}
-                        className="px-2.5 py-1 text-xs font-semibold rounded bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                        title="Insertar acordes detectados automáticamente en las sílabas exactas de la letra"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Insertar en sílabas ({savedAudioAnalysis?.chords?.length || detectedChords.length})</span>
-                      </button>
-                    )}
-
-                    {lyricsUndoHistory !== null && (
-                      <button
-                        type="button"
-                        onClick={handleUndoChordInsertion}
-                        className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                        title="Deshacer la inserción de acordes y restaurar la letra anterior"
-                      >
-                        <Undo2 className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Deshacer</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleStripChords}
-                      className="p-1 rounded text-[var(--text-muted)] hover:text-rose-500 hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                      title="Eliminar todos los acordes [C] para dejar solo la poesía"
-                    >
-                      <Eraser className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
 
@@ -2868,6 +3020,15 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
             albumTitle: albums?.find(a => a.id === selectedAlbumId)?.title
           }}
           onApplyFields={handleApplyMp3Fields}
+        />
+      )}
+
+      {/* Chromatic YIN Tuner Modal */}
+      {isTunerOpen && (
+        <ChromaticTunerModal
+          initialTuning={tuning}
+          initialA4Hz={savedAudioAnalysis?.referenceA4Hz || 440}
+          onClose={() => setIsTunerOpen(false)}
         />
       )}
     </div>

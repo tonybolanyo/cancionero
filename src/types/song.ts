@@ -13,6 +13,8 @@ export interface SavedAudioAnalysis {
   scale?: string;
   timeSignature?: string;
   tuning?: string;
+  detuningCents?: number;
+  referenceA4Hz?: number;
   durationSeconds?: number;
   chordProgression?: string;
   chords?: Array<{

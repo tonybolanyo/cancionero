@@ -68,14 +68,15 @@ export interface ChromaOptions {
   bassMaxFrequency?: number;  // default: 180 Hz
   midMinFrequency?: number;   // default: 180 Hz
   midMaxFrequency?: number;   // default: 1200 Hz
+  referenceA4Hz?: number;     // default: 440 Hz (tuning calibration)
 }
 
-const A4_HZ = 440.0;
+const DEFAULT_A4_HZ = 440.0;
 const MIN_MIDI = 27; // ~38.89 Hz (covers 40 Hz bass fundamental)
 const MAX_MIDI = 87; // ~1244.5 Hz (covers 1200 Hz upper mid)
 
-function midiToFreq(midi: number): number {
-  return A4_HZ * Math.pow(2, (midi - 69) / 12);
+function midiToFreq(midi: number, referenceA4Hz: number = DEFAULT_A4_HZ): number {
+  return referenceA4Hz * Math.pow(2, (midi - 69) / 12);
 }
 
 /**
@@ -89,7 +90,8 @@ function computeMidiBandPowers(
   sampleRate: number,
   minFreq: number,
   maxFreq: number,
-  targetEffectiveSamples: number = 2048
+  targetEffectiveSamples: number = 2048,
+  referenceA4Hz: number = DEFAULT_A4_HZ
 ): { midiNotes: number[]; powers: Float64Array; maxPower: number } {
   const N = frameData.length;
   if (N === 0 || sampleRate <= 0) {
@@ -120,7 +122,7 @@ function computeMidiBandPowers(
 
   const midiNotes: number[] = [];
   for (let midi = MIN_MIDI; midi <= MAX_MIDI; midi++) {
-    const f = midiToFreq(midi);
+    const f = midiToFreq(midi, referenceA4Hz);
     if (f >= minFreq && f <= maxFreq && f < effectiveSampleRate * 0.48) {
       midiNotes.push(midi);
     }
@@ -130,7 +132,7 @@ function computeMidiBandPowers(
   let maxPower = 0;
 
   for (let idx = 0; idx < midiNotes.length; idx++) {
-    const f = midiToFreq(midiNotes[idx]);
+    const f = midiToFreq(midiNotes[idx], referenceA4Hz);
     const omega = (2 * Math.PI * f) / effectiveSampleRate;
     const coeff = 2 * Math.cos(omega);
 
@@ -172,11 +174,12 @@ export function computeFrameChroma(
   frameData: Float32Array,
   sampleRate: number,
   minFreq: number = 65,
-  maxFreq: number = 1100
+  maxFreq: number = 1100,
+  referenceA4Hz: number = DEFAULT_A4_HZ
 ): number[] {
   if (frameData.length === 0) return new Array(12).fill(0);
 
-  const { midiNotes, powers } = computeMidiBandPowers(frameData, sampleRate, minFreq, maxFreq, 2048);
+  const { midiNotes, powers } = computeMidiBandPowers(frameData, sampleRate, minFreq, maxFreq, 2048, referenceA4Hz);
   const chroma = new Float64Array(12);
 
   for (let i = 0; i < midiNotes.length; i++) {
@@ -200,12 +203,14 @@ export function computeDualBandFrameChroma(
     bassMaxFrequency?: number;
     midMinFrequency?: number;
     midMaxFrequency?: number;
+    referenceA4Hz?: number;
   } = {}
 ): DualBandFrameChroma {
   const bassMin = options.bassMinFrequency ?? 40;
   const bassMax = options.bassMaxFrequency ?? 180;
   const midMin = options.midMinFrequency ?? 180;
   const midMax = options.midMaxFrequency ?? 1200;
+  const refA4 = options.referenceA4Hz ?? DEFAULT_A4_HZ;
 
   if (frameData.length === 0 || sampleRate <= 0) {
     return {
@@ -221,8 +226,8 @@ export function computeDualBandFrameChroma(
     };
   }
 
-  const bassRes = computeMidiBandPowers(frameData, sampleRate, bassMin, bassMax, 1024);
-  const midRes = computeMidiBandPowers(frameData, sampleRate, midMin, midMax, 2400);
+  const bassRes = computeMidiBandPowers(frameData, sampleRate, bassMin, bassMax, 1024, refA4);
+  const midRes = computeMidiBandPowers(frameData, sampleRate, midMin, midMax, 2400, refA4);
 
   const bassRaw = new Float64Array(12);
   const midRaw = new Float64Array(12);
@@ -311,7 +316,7 @@ export function computeDualBandFrameChroma(
         pitchName: PITCH_CLASSES[chosenPc],
         confidence,
         energyRatio,
-        lowestFrequencyHz: Number(midiToFreq(chosenMidi).toFixed(2))
+        lowestFrequencyHz: Number(midiToFreq(chosenMidi, refA4).toFixed(2))
       };
     }
   }
@@ -361,7 +366,8 @@ export function computeWindowedChromagrams(
         bassMinFrequency: options.bassMinFrequency,
         bassMaxFrequency: options.bassMaxFrequency,
         midMinFrequency: options.midMinFrequency,
-        midMaxFrequency: options.midMaxFrequency
+        midMaxFrequency: options.midMaxFrequency,
+        referenceA4Hz: options.referenceA4Hz
       });
       return {
         startTime,
@@ -374,7 +380,13 @@ export function computeWindowedChromagrams(
       };
     }
 
-    const chroma = computeFrameChroma(slice, sampleRate, options.minFrequency, options.maxFrequency);
+    const chroma = computeFrameChroma(
+      slice,
+      sampleRate,
+      options.minFrequency,
+      options.maxFrequency,
+      options.referenceA4Hz
+    );
     return { startTime, endTime, chroma, rmsEnergy };
   };
 
