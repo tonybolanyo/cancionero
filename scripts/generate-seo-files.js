@@ -4,7 +4,7 @@
  * Se ejecuta durante el build en GitHub Actions
  * 
  * Ambiente:
- * - DOMAIN: Dominio del sitio (ej: cancionero.example.com)
+ * - DOMAIN: Dominio del sitio (ej: tonygb.com)
  * - GOOGLE_ANALYTICS_ID: ID de Google Analytics (opcional)
  */
 
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, '../dist');
-const domain = process.env.DOMAIN || 'cancionero.example.com';
+const domain = process.env.DOMAIN || 'tonygb.com';
 const gaId = process.env.GOOGLE_ANALYTICS_ID || '';
 
 console.log(`📝 Generando archivos SEO...`);
@@ -27,30 +27,32 @@ if (!fs.existsSync(distDir)) {
 }
 
 // ============================================================================
-// 1. Generar robots.txt
+// 1. Generar robots.txt mejorado
 // ============================================================================
 const robotsTxt = `# Robots.txt - ${domain}
-# Generado automáticamente por GitHub Actions
+# Generado automáticamente durante el build
 
 User-agent: *
 Allow: /
-Allow: /sitemap.xml
-
 Disallow: /admin
 Disallow: /.git
 Disallow: /.github
 Disallow: /node_modules
+Disallow: /*?*sort=
+Disallow: /*?*page=
 
-# Velocidad de rastreo
-Crawl-delay: 1
+# Crawl-delay (respetar con 2 segundos)
+Crawl-delay: 2
 
-# Sitemaps
+# Sitemaps para facilitar indexación
+Sitemap: https://${domain}/sitemap-index.xml
 Sitemap: https://${domain}/sitemap.xml
+Sitemap: https://${domain}/cancionero/sitemap.xml
 
-# Canonical
-# Nota: Agregar canonical en cada página HTML individualmente
+# Google Search Console verification
+# Agregar meta tag de verificación en index.html
 
-# Social Media Crawlers
+# Social Media Crawlers (permitir acceso completo)
 User-agent: facebookexternalhit
 Allow: /
 
@@ -62,138 +64,72 @@ Allow: /
 
 User-agent: WhatsApp
 Allow: /
+
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 2
 `;
 
 fs.writeFileSync(path.join(distDir, 'robots.txt'), robotsTxt);
 console.log('✅ robots.txt generado');
 
 // ============================================================================
-// 2. Generar sitemap.xml
+// 2. Generar sitemap.xml de páginas principales (homepage)
 // ============================================================================
 
-// Leer estructura de directorios para generar URLs dinámicas
-function getAllPages(dir, baseUrl, relativePath = '') {
-  const pages = [];
-  const files = fs.readdirSync(dir);
-
-  files.forEach(file => {
-    const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
-    const fileName = path.basename(file);
-
-    // Ignorar archivos y carpetas privadas
-    if (fileName.startsWith('.') || fileName === 'node_modules') {
-      return;
+function generateMainSitemap() {
+  // URLs principales que siempre deben estar indexadas
+  const mainPages = [
+    {
+      url: `https://${domain}/`,
+      priority: 1.0,
+      changefreq: 'daily',
+      description: 'Homepage'
+    },
+    {
+      url: `https://${domain}/cancionero/`,
+      priority: 0.95,
+      changefreq: 'daily',
+      description: 'Cancionero'
     }
+  ];
 
-    // Ignorar archivos no relevantes para SEO
-    if (['.map', '.css.map', '.js.map'].some(ext => fileName.endsWith(ext))) {
-      return;
-    }
-
-    const urlPath = relativePath ? `${relativePath}/${fileName}` : fileName;
-
-    if (stat.isDirectory()) {
-      // Recursivamente procesar subdirectorios
-      pages.push(...getAllPages(filePath, baseUrl, urlPath));
-    } else if (['index.html', 'songs', 'schedule', 'programming'].some(keyword => 
-      file.includes(keyword) || urlPath.includes(keyword))) {
-      // Procesar archivos HTML y directorios relevantes
-      let url = `${baseUrl}/${urlPath}`;
-      
-      // Limpiar URL para archivos index.html
-      url = url.replace(/\/index\.html$/, '').replace(/\.html$/, '');
-      if (url.endsWith('/')) {
-        url = url.slice(0, -1);
-      }
-
-      const mtime = stat.mtime;
-      const lastmod = mtime.toISOString().split('T')[0];
-
-      // Prioridad según tipo de página
-      let priority = 0.5;
-      let changefreq = 'weekly';
-
-      if (urlPath === 'index.html' || urlPath === '') {
-        priority = 1.0;
-        changefreq = 'daily';
-      } else if (urlPath.includes('songs') || urlPath.includes('canciones')) {
-        priority = 0.9;
-        changefreq = 'daily';
-      } else if (urlPath.includes('schedule') || urlPath.includes('programming')) {
-        priority = 0.8;
-        changefreq = 'weekly';
-      }
-
-      pages.push({
-        url,
-        lastmod,
-        priority,
-        changefreq
-      });
-    }
-  });
-
-  return pages;
-}
-
-// Generar páginas desde dist
-let pages = getAllPages(distDir, `https://${domain}`);
-
-// Agregar URLs principales si no existen
-const mainUrls = [
-  {
-    url: `https://${domain}`,
-    priority: 1.0,
-    changefreq: 'daily'
-  },
-  {
-    url: `https://${domain}/songs`,
-    priority: 0.9,
-    changefreq: 'daily'
-  },
-  {
-    url: `https://${domain}/schedule`,
-    priority: 0.8,
-    changefreq: 'weekly'
-  }
-];
-
-// Merge manteniendo prioridades correctas
-pages = [
-  ...mainUrls,
-  ...pages.filter(p => !mainUrls.some(m => m.url === p.url))
-];
-
-// Remover duplicados
-pages = Array.from(new Map(pages.map(p => [p.url, p])).values());
-
-// Limitar a 50,000 URLs (límite de sitemap.xml)
-pages = pages.slice(0, 50000);
-
-// Generar XML
-let sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 `;
 
-pages.forEach(page => {
-  const lastmod = page.lastmod || new Date().toISOString().split('T')[0];
-  sitemapXml += `  <url>
+  const now = new Date().toISOString().split('T')[0];
+
+  mainPages.forEach(page => {
+    // Validar que la URL sea válida
+    try {
+      new URL(page.url);
+      xml += `  <url>
     <loc>${page.url}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <priority>${page.priority || 0.5}</priority>
-    <changefreq>${page.changefreq || 'monthly'}</changefreq>
+    <lastmod>${now}</lastmod>
+    <priority>${page.priority}</priority>
+    <changefreq>${page.changefreq}</changefreq>
   </url>
 `;
-});
+    } catch (e) {
+      console.warn(`⚠️  URL inválida ignorada: ${page.url}`);
+    }
+  });
 
-sitemapXml += `</urlset>`;
+  xml += `</urlset>`;
+  return xml;
+}
 
-fs.writeFileSync(path.join(distDir, 'sitemap.xml'), sitemapXml);
-console.log(`✅ sitemap.xml generado (${pages.length} URLs)`);
+const mainSitemapXml = generateMainSitemap();
+fs.writeFileSync(path.join(distDir, 'sitemap.xml'), mainSitemapXml);
+console.log('✅ sitemap.xml (páginas principales) generado');
 
 // ============================================================================
-// 3. Inyectar Google Analytics en index.html
+// 3. Inyectar Google Analytics en index.html con validaciones
 // ============================================================================
 
 const indexPath = path.join(distDir, 'index.html');
@@ -203,8 +139,12 @@ if (fs.existsSync(indexPath)) {
   // Crear script de Google Analytics si el ID está configurado
   let gaScript = '';
   if (gaId) {
+    // Validar que sea un ID válido de GA4 (formato: G-XXXXXXXXXX)
+    if (!/^G-[A-Z0-9]{10}$/.test(gaId)) {
+      console.warn(`⚠️  Google Analytics ID parece inválido: ${gaId}`);
+    }
     gaScript = `
-    <!-- Google Analytics -->
+    <!-- Google Analytics (GA4) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=${gaId}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -212,20 +152,21 @@ if (fs.existsSync(indexPath)) {
       gtag('js', new Date());
       gtag('config', '${gaId}', {
         'page_path': window.location.pathname,
-        'anonymize_ip': true
+        'anonymize_ip': true,
+        'allow_google_signals': false
       });
     </script>
-    <!-- End Google Analytics -->
-`;
+    <!-- End Google Analytics -->`;
   } else {
     gaScript = `
-    <!-- Google Analytics: No configurado (agrega GOOGLE_ANALYTICS_ID en secrets) -->
-`;
+    <!-- Google Analytics: No configurado (agrega GOOGLE_ANALYTICS_ID en secrets) -->`;
   }
 
-  // Inyectar antes de </head>
+  // Inyectar antes de </head> (evitar duplicados)
   if (htmlContent.includes('</head>')) {
-    htmlContent = htmlContent.replace('</head>', `${gaScript}</head>`);
+    // Remover gaScript antiguo si existe (evitar duplicados)
+    htmlContent = htmlContent.replace(/\s*<!-- Google Analytics.*?End Google Analytics -->/s, '');
+    htmlContent = htmlContent.replace('</head>', `${gaScript}\n</head>`);
     fs.writeFileSync(indexPath, htmlContent);
     console.log(`✅ Google Analytics inyectado${gaId ? ` (ID: ${gaId})` : ' (placeholder)'}`);
   } else {
@@ -241,10 +182,14 @@ if (fs.existsSync(indexPath)) {
 
 const seoConfig = {
   domain,
+  buildDate: new Date().toISOString(),
   googleAnalyticsId: gaId ? gaId : null,
-  generatedAt: new Date().toISOString(),
-  pages: pages.length,
-  urls: pages.slice(0, 10).map(p => p.url) // Primeras 10 URLs como muestra
+  sitemaps: [
+    `https://${domain}/sitemap-index.xml`,
+    `https://${domain}/sitemap.xml`,
+    `https://${domain}/cancionero/sitemap.xml`
+  ],
+  robots: `https://${domain}/robots.txt`
 };
 
 fs.writeFileSync(
@@ -254,3 +199,4 @@ fs.writeFileSync(
 console.log('✅ .seo-config.json generado (archivo interno)');
 
 console.log('\n🎉 Archivos SEO generados exitosamente!');
+

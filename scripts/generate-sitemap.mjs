@@ -25,6 +25,19 @@ if (!fs.existsSync(distDir)) {
 }
 
 /**
+ * Valida y sanitiza URLs para evitar caracteres inválidos
+ */
+function sanitizeUrl(url) {
+  try {
+    new URL(url);
+    return url;
+  } catch {
+    console.warn(`⚠️  URL inválida ignorada: ${url}`);
+    return null;
+  }
+}
+
+/**
  * Extrae metadata del frontmatter markdown
  */
 function extractMetadata(content) {
@@ -51,7 +64,7 @@ function extractMetadata(content) {
 }
 
 /**
- * Obtiene todas las canciones
+ * Obtiene todas las canciones publicadas
  */
 function getSongs() {
   const songs = [];
@@ -76,14 +89,22 @@ function getSongs() {
     if (metadata.status !== 'published') return;
 
     const id = metadata.id || file.replace('.md', '');
+    
+    // Sanitizar el ID para que sea URL-safe
+    const safeId = encodeURIComponent(id.toLowerCase().replace(/\s+/g, '-'));
+    
     const lastmod = metadata.updatedAt
       ? new Date(metadata.updatedAt).toISOString().split('T')[0]
       : new Date(fs.statSync(filePath).mtime).toISOString().split('T')[0];
 
+    const url = `https://${domain}${basePath}/song/${safeId}`;
+    
+    if (!sanitizeUrl(url)) return;
+
     songs.push({
       id,
       title: metadata.title || id,
-      url: `https://${domain}${basePath}/song/${id}`,
+      url,
       lastmod,
       priority: 0.8,
       changefreq: 'monthly'
@@ -94,7 +115,7 @@ function getSongs() {
 }
 
 /**
- * Genera el sitemap XML
+ * Genera el sitemap XML con validación
  */
 function generateSitemap(songs) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -102,23 +123,28 @@ function generateSitemap(songs) {
 `;
 
   // Agregar página principal del cancionero
-  xml += `  <url>
-    <loc>https://${domain}${basePath}/</loc>
+  const mainUrl = `https://${domain}${basePath}/`;
+  if (sanitizeUrl(mainUrl)) {
+    xml += `  <url>
+    <loc>${mainUrl}</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
     <priority>0.9</priority>
     <changefreq>weekly</changefreq>
   </url>
 `;
+  }
 
-  // Agregar cada canción
+  // Agregar cada canción (validado)
   songs.forEach(song => {
-    xml += `  <url>
+    if (sanitizeUrl(song.url)) {
+      xml += `  <url>
     <loc>${song.url}</loc>
     <lastmod>${song.lastmod}</lastmod>
     <priority>${song.priority}</priority>
     <changefreq>${song.changefreq}</changefreq>
   </url>
 `;
+    }
   });
 
   xml += `</urlset>`;
@@ -129,9 +155,15 @@ try {
   const songs = getSongs();
   const sitemapXml = generateSitemap(songs);
 
-  // Escribir sitemap.xml
-  fs.writeFileSync(path.join(distDir, 'sitemap.xml'), sitemapXml);
-  console.log(`✅ sitemap.xml generado (${songs.length + 1} URLs)`);
+  // Crear carpeta cancionero si no existe
+  const cancioneroDir = path.join(distDir, 'cancionero');
+  if (!fs.existsSync(cancioneroDir)) {
+    fs.mkdirSync(cancioneroDir, { recursive: true });
+  }
+
+  // Escribir sitemap.xml en la carpeta cancionero
+  fs.writeFileSync(path.join(cancioneroDir, 'sitemap.xml'), sitemapXml);
+  console.log(`✅ sitemap.xml generado en /cancionero/ (${songs.length + 1} URLs válidas)`);
 
   // Información de debugging (opcional)
   if (process.env.DEBUG) {

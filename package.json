@@ -11,8 +11,9 @@
     "generate-changelog": "node scripts/generate-changelog.js",
     "generate-catalog": "node scripts/generate-catalog.mjs",
     "generate-sitemap": "node scripts/generate-sitemap.mjs",
-    "generate-robots": "node scripts/generate-robots.mjs",
-    "build": "npm run generate-version && npm run generate-catalog && vite build && npm run generate-robots && npm run generate-sitemap",
+    "generate-sitemap-index": "node scripts/generate-sitemap-index.mjs",
+    "generate-robots": "node scripts/generate-seo-files.js",
+    "build": "npm run generate-version && npm run generate-catalog && vite build && npm run generate-robots && npm run generate-sitemap && npm run generate-sitemap-index",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
