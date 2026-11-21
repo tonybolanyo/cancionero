@@ -1,12 +1,12 @@
 // Auto-generated version file - DO NOT EDIT
-// Generated at 2026-11-12T08:12:39.306Z
+// Generated at 2026-11-21T19:29:23.461Z
 // Managed by release-please with conventional commits analysis
 
-export const APP_VERSION = '0.12.1';
+export const APP_VERSION = '0.17.1';
 export const BUILD_NUMBER = 1;
-export const COMMIT_HASH = '52e7f6e';
-export const BUILD_BRANCH = 'special-tribble';
-export const BUILD_TIMESTAMP = '2026-11-12T08:12:39.306Z';
+export const COMMIT_HASH = '3cefa3e';
+export const BUILD_BRANCH = 'ideal-eureka';
+export const BUILD_TIMESTAMP = '2026-11-21T19:29:23.461Z';
 
 /**
  * Version string including build metadata

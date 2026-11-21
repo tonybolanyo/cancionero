@@ -52,6 +52,16 @@ jobs:
           VITE_BASE_URL: ${{ steps.pages.outputs.base_path || '/cancionero/' }}
           VITE_GITHUB_ALLOWED_USER: ${{ vars.VITE_GITHUB_ALLOWED_USER || 'tonygb' }}
           DOMAIN: tonygb.com
+          DEBUG: false
+
+      - name: Verify SEO files generated
+        run: |
+          echo "🔍 Verificando archivos SEO generados..."
+          ls -lh dist/sitemap*.xml dist/robots.txt 2>/dev/null || echo "⚠️ Algunos archivos SEO pueden faltar"
+          if [ -f dist/.seo-config.json ]; then
+            echo "📋 Configuración SEO:"
+            cat dist/.seo-config.json | head -10
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
