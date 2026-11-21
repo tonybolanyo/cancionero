@@ -113,6 +113,11 @@ jobs:
           git add package.json package-lock.json CHANGELOG.md
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          
+          # Fetch latest changes and rebase to handle concurrent pushes
+          git fetch origin $(git rev-parse --abbrev-ref HEAD)
+          git rebase origin/$(git rev-parse --abbrev-ref HEAD)
+          
           git push origin $(git rev-parse --abbrev-ref HEAD)
           git push origin "v${{ steps.version.outputs.version }}"
           echo "tag_created=true" >> $GITHUB_OUTPUT
