@@ -4,11 +4,13 @@ import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
 import { TimeSignature } from '../lib/audio/meter';
+import { MusicalSection, MusicalSectionType } from '../lib/audio/structure';
 
 export interface BeatTimelineProps {
   audioBuffer?: AudioBuffer | null;
   beatAnalysis?: BeatAnalysis | null;
   chords?: ChordSegment[] | null;
+  sections?: MusicalSection[] | null;
   currentTime: number;
   duration: number;
   isPlaying?: boolean;
@@ -33,10 +35,65 @@ export interface BeatTimelineProps {
   className?: string;
 }
 
+const SECTION_STYLE_MAP: Record<
+  MusicalSectionType,
+  { bg: string; activeBg: string; border: string; activeBorder: string; text: string; line: string }
+> = {
+  Intro: {
+    bg: 'rgba(6, 182, 212, 0.16)',
+    activeBg: 'rgba(6, 182, 212, 0.38)',
+    border: 'rgba(34, 211, 238, 0.35)',
+    activeBorder: '#22d3ee',
+    text: '#a5f3fc',
+    line: 'rgba(34, 211, 238, 0.25)'
+  },
+  Estrofa: {
+    bg: 'rgba(59, 130, 246, 0.18)',
+    activeBg: 'rgba(59, 130, 246, 0.42)',
+    border: 'rgba(96, 165, 250, 0.38)',
+    activeBorder: '#60a5fa',
+    text: '#bfdbfe',
+    line: 'rgba(96, 165, 250, 0.25)'
+  },
+  Estribillo: {
+    bg: 'rgba(244, 63, 94, 0.22)',
+    activeBg: 'rgba(244, 63, 94, 0.48)',
+    border: 'rgba(251, 113, 133, 0.45)',
+    activeBorder: '#fb7185',
+    text: '#fecdd3',
+    line: 'rgba(251, 113, 133, 0.32)'
+  },
+  Puente: {
+    bg: 'rgba(16, 185, 129, 0.18)',
+    activeBg: 'rgba(16, 185, 129, 0.42)',
+    border: 'rgba(52, 211, 153, 0.40)',
+    activeBorder: '#34d399',
+    text: '#a7f3d0',
+    line: 'rgba(52, 211, 153, 0.28)'
+  },
+  Instrumental: {
+    bg: 'rgba(245, 158, 11, 0.18)',
+    activeBg: 'rgba(245, 158, 11, 0.42)',
+    border: 'rgba(251, 191, 36, 0.40)',
+    activeBorder: '#fbbf24',
+    text: '#fde68a',
+    line: 'rgba(251, 191, 36, 0.28)'
+  },
+  Outro: {
+    bg: 'rgba(148, 163, 184, 0.18)',
+    activeBg: 'rgba(148, 163, 184, 0.40)',
+    border: 'rgba(148, 163, 184, 0.38)',
+    activeBorder: '#cbd5e1',
+    text: '#e2e8f0',
+    line: 'rgba(148, 163, 184, 0.25)'
+  }
+};
+
 export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   audioBuffer,
   beatAnalysis,
   chords,
+  sections,
   currentTime,
   duration,
   isPlaying = false,
@@ -64,6 +121,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   const [showOnsets, setShowOnsets] = useState<boolean>(true);
   const [showBeats, setShowBeats] = useState<boolean>(true);
   const [showChords, setShowChords] = useState<boolean>(true);
+  const [showSections, setShowSections] = useState<boolean>(true);
   const [isTallWaveform, setIsTallWaveform] = useState<boolean>(false);
 
   // Precomputed waveform peaks cache (high fidelity 1600 buckets for 4K / Retina)
@@ -94,23 +152,28 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     peaksRef.current = peaks;
   }, [audioBuffer]);
 
+  const hasSections = Boolean(showSections && sections && sections.length > 0);
   const hasChords = Boolean(showChords && chords && chords.length > 0);
+  const currentSection = sections?.find(
+    s => currentTime >= s.startTime && currentTime < s.endTime
+  );
   const currentChord = chords?.find(
     c => currentTime >= c.startTime && currentTime < c.endTime
   );
 
   // Dynamic height calculation adapted to screen resolution and studio expand mode
-  const getTimelineHeight = useCallback((w: number, chordsActive: boolean, tall: boolean) => {
+  const getTimelineHeight = useCallback((w: number, chordsActive: boolean, sectionsActive: boolean, tall: boolean) => {
+    const extraSec = sectionsActive ? 22 : 0;
     if (w >= 1600) {
       // 4K and Ultra-wide monitors
-      return tall ? (chordsActive ? 280 : 240) : (chordsActive ? 180 : 150);
+      return (tall ? (chordsActive ? 280 : 240) : (chordsActive ? 180 : 150)) + extraSec;
     }
     if (w <= 640) {
       // Mobile screens
-      return tall ? (chordsActive ? 170 : 150) : (chordsActive ? 124 : 104);
+      return (tall ? (chordsActive ? 170 : 150) : (chordsActive ? 124 : 104)) + extraSec;
     }
     // Standard desktop and laptop
-    return tall ? (chordsActive ? 220 : 190) : (chordsActive ? 144 : 124);
+    return (tall ? (chordsActive ? 220 : 190) : (chordsActive ? 144 : 124)) + extraSec;
   }, []);
 
   // Main Canvas render function
@@ -121,7 +184,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     const rect = container.getBoundingClientRect();
     const width = Math.floor(rect.width);
-    const height = getTimelineHeight(width, hasChords, isTallWaveform);
+    const height = getTimelineHeight(width, hasChords, hasSections, isTallWaveform);
 
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
@@ -144,14 +207,63 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
 
-    // 2. Chords Lane (Essentia ChordsDetection frame-by-frame)
-    if (hasChords && chords) {
-      const blockY = 15;
-      const blockH = 22;
+    // 1b. Musical Structure Lane (SSM Intro / Estrofa / Estribillo / Puente / Instrumental)
+    if (hasSections && sections) {
+      const secY = 14;
+      const secH = 18;
 
+      sections.forEach((sec) => {
+        if (sec.endTime < 0 || sec.startTime > totalDuration) return;
+        const xStart = (Math.max(0, sec.startTime) / totalDuration) * width;
+        const xEnd = (Math.min(totalDuration, sec.endTime) / totalDuration) * width;
+        const segWidth = Math.max(1, xEnd - xStart);
+        const isActive = currentTime >= sec.startTime && currentTime < sec.endTime;
+        const style = SECTION_STYLE_MAP[sec.type] || SECTION_STYLE_MAP.Estrofa;
+
+        ctx.fillStyle = isActive ? style.activeBg : style.bg;
+        ctx.fillRect(xStart, secY, segWidth, secH);
+
+        ctx.strokeStyle = isActive ? style.activeBorder : style.border;
+        ctx.lineWidth = isActive ? 1.5 : 1;
+        ctx.strokeRect(xStart, secY, segWidth, secH);
+
+        // Structural transition vertical marker across waveform
+        if (sec.startTime > 0.2) {
+          ctx.save();
+          ctx.strokeStyle = isActive ? style.activeBorder : style.line;
+          ctx.lineWidth = 1.25;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(xStart, secY + secH);
+          ctx.lineTo(xStart, height - 12);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Section label text
+        if (segWidth > 28) {
+          ctx.fillStyle = isActive ? '#ffffff' : style.text;
+          ctx.font = `bold ${segWidth > 68 ? '10px' : '9px'} sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const textX = xStart + segWidth / 2;
+          const textY = secY + secH / 2;
+          const maxChars = Math.max(3, Math.floor((segWidth - 6) / 6));
+          const displayLabel = sec.label.length > maxChars
+            ? `${sec.label.slice(0, maxChars - 1)}…`
+            : sec.label;
+          ctx.fillText(displayLabel, textX, textY);
+        }
+      });
+    }
+
+    // 2. Chords Lane (Essentia ChordsDetection frame-by-frame)
+    const chordsY = hasSections ? 34 : 15;
+    const chordsH = 22;
+    if (hasChords && chords) {
       // Draw faint background lane for chords
       ctx.fillStyle = 'rgba(139, 92, 246, 0.05)';
-      ctx.fillRect(0, blockY, width, blockH);
+      ctx.fillRect(0, chordsY, width, chordsH);
 
       chords.forEach((c) => {
         if (c.endTime < 0 || c.startTime > totalDuration) return;
@@ -164,12 +276,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.fillStyle = isActive
           ? 'rgba(168, 85, 247, 0.45)' // Bright violet highlight
           : 'rgba(139, 92, 246, 0.16)';
-        ctx.fillRect(xStart, blockY, segWidth, blockH);
+        ctx.fillRect(xStart, chordsY, segWidth, chordsH);
 
         // Border
         ctx.strokeStyle = isActive ? '#c084fc' : 'rgba(168, 85, 247, 0.32)';
         ctx.lineWidth = isActive ? 1.5 : 1;
-        ctx.strokeRect(xStart, blockY, segWidth, blockH);
+        ctx.strokeRect(xStart, chordsY, segWidth, chordsH);
 
         // Dotted transition line continuing downwards into the waveform
         ctx.save();
@@ -177,7 +289,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 4]);
         ctx.beginPath();
-        ctx.moveTo(xStart, blockY + blockH);
+        ctx.moveTo(xStart, chordsY + chordsH);
         ctx.lineTo(xStart, height - 12);
         ctx.stroke();
         ctx.restore();
@@ -189,19 +301,23 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           const textX = xStart + segWidth / 2;
-          const textY = blockY + blockH / 2;
+          const textY = chordsY + chordsH / 2;
           const displayedChord = accidentalPreference ? respellChord(c.chord, accidentalPreference) : c.chord;
           ctx.fillText(displayedChord, textX, textY);
         }
       });
     }
 
+    const waveformTopY = 14 + (hasSections ? 22 : 0) + (hasChords ? 24 : 0);
+    const waveformBottomY = height - 12;
+    const waveformRegionH = Math.max(30, waveformBottomY - waveformTopY);
+
     // 3. Waveform representation
     const peaks = peaksRef.current;
     if (peaks.length > 0) {
       const barWidth = width / peaks.length;
-      const centerY = hasChords ? 82 : height * 0.52;
-      const maxAvailableHeight = hasChords ? height * 0.55 : height * 0.65;
+      const centerY = waveformTopY + waveformRegionH * 0.5;
+      const maxAvailableHeight = waveformRegionH * 0.85;
 
       for (let i = 0; i < peaks.length; i++) {
         const barHeight = Math.max(2, peaks[i] * maxAvailableHeight);
@@ -221,7 +337,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     // 4. Beat Grid Lines (Regular rhythm grid from @audio/beat and estimated downbeats)
     if (showBeats && beatAnalysis && beatAnalysis.beats.length > 0) {
-      const topY = hasChords ? 39 : 14;
+      const topY = waveformTopY;
 
       beatAnalysis.beats.forEach((beatTime, idx) => {
         if (beatTime < 0 || beatTime > totalDuration) return;
@@ -307,14 +423,16 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
       const hMins = Math.floor(hoverTime / 60);
       const hSecs = (hoverTime % 60).toFixed(2);
+      const hoverSec = sections?.find(s => hoverTime >= s.startTime && hoverTime < s.endTime);
       const hoverChord = chords?.find(c => hoverTime >= c.startTime && hoverTime < c.endTime);
       const hoverChordName = hoverChord
         ? (accidentalPreference ? respellChord(hoverChord.chord, accidentalPreference) : hoverChord.chord)
         : null;
 
-      const hoverLabel = hoverChordName
-        ? `${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs} · ${hoverChordName}`
-        : `${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs}`;
+      const labelParts = [`${hMins}:${Number(hSecs) < 10 ? '0' : ''}${hSecs}`];
+      if (hoverSec) labelParts.push(hoverSec.label);
+      if (hoverChordName) labelParts.push(hoverChordName);
+      const hoverLabel = labelParts.join(' · ');
 
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px monospace';
@@ -322,7 +440,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       const boxX = Math.max(4, Math.min(width - textWidth - 10, hx - textWidth / 2 - 4));
       ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
       ctx.fillRect(boxX, height - 26, textWidth + 8, 15);
-      ctx.fillStyle = hoverChord ? '#c084fc' : '#f59e0b';
+      ctx.fillStyle = hoverChord ? '#c084fc' : hoverSec ? '#38bdf8' : '#f59e0b';
       ctx.fillText(hoverLabel, boxX + 4, height - 15);
     }
 
@@ -345,7 +463,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.fill();
 
     ctx.restore();
-  }, [audioBuffer, beatAnalysis, chords, currentTime, duration, hasChords, hoverTime, showBeats, showChords, showOnsets, accidentalPreference, isTallWaveform, getTimelineHeight]);
+  }, [audioBuffer, beatAnalysis, chords, sections, currentTime, duration, hasChords, hasSections, hoverTime, showBeats, showChords, showOnsets, showSections, accidentalPreference, isTallWaveform, getTimelineHeight, meter, downbeats]);
 
   useEffect(() => {
     let animId: number;
@@ -464,6 +582,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">
               (@audio/beat + Essentia Chords)
             </span>
+            {currentSection && (
+              <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-500/40 text-sky-600 dark:text-sky-300 font-mono text-[11px] font-bold flex items-center gap-1">
+                <Layers className="w-3 h-3 text-sky-400" />
+                <span>{currentSection.label}</span>
+              </span>
+            )}
             {currentChord && (
               <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1 animate-pulse">
                 <Music className="w-3 h-3 text-purple-400" />
@@ -490,6 +614,22 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             {isTallWaveform ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             <span className="hidden sm:inline">{isTallWaveform ? 'Onda compacta' : 'Onda estudio'}</span>
           </button>
+
+          {sections && sections.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSections(!showSections)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                showSections
+                  ? 'bg-sky-500/15 border-sky-500/30 text-sky-600 dark:text-sky-400 font-semibold'
+                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
+              }`}
+              title="Mostrar/Ocultar estructura musical detectada por Matriz de Autosimilitud (Intro / Estrofa / Estribillo / Puente)"
+            >
+              <span className="w-2 h-2 rounded-full bg-sky-400" />
+              <span>Estructura ({sections.length})</span>
+            </button>
+          )}
 
           {chords && chords.length > 0 && (
             <button
@@ -579,7 +719,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ref={containerRef}
         className="relative w-full rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[#0f1117] select-none cursor-pointer shadow-inner transition-all duration-150 touch-none"
         style={{
-          minHeight: hasChords ? (isTallWaveform ? 170 : 124) : (isTallWaveform ? 150 : 104)
+          minHeight: (hasChords ? (isTallWaveform ? 170 : 124) : (isTallWaveform ? 150 : 104)) + (hasSections ? 22 : 0)
         }}
       >
         <canvas

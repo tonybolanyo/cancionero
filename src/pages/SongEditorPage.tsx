@@ -70,6 +70,7 @@ import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
 import { AudioAnalyzerSection } from '../components/AudioAnalyzerSection';
 import { GoogleDriveService } from '../services/googleDriveService';
 import { ChordSegment, insertChordsIntoLyrics, getCleanChordSequence } from '../lib/audio/chords';
+import type { MusicalSection } from '../lib/audio/structure';
 import { insertChordsIntoSyllables } from '../lib/lyrics/lyricsChordIntegration';
 import {
   parseLrc,
@@ -675,7 +676,10 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     setTimeout(() => setAudioAnalysisNotice(null), 5000);
   };
 
-  const handleInsertDetectedChords = (chordsOverride?: ChordSegment[]) => {
+  const handleInsertDetectedChords = (
+    chordsOverride?: ChordSegment[],
+    sectionsOverride?: MusicalSection[]
+  ) => {
     const list = chordsOverride || savedAudioAnalysis?.chords || detectedChords;
     if (!list || list.length === 0) {
       showFeedback('No hay acordes detectados disponibles');
@@ -688,11 +692,13 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     const updated = insertChordsIntoSyllables(lyrics, list, {
       lrcText: lrc || undefined,
       audioDuration: audioDuration || savedAudioAnalysis?.durationSeconds,
-      tempo: tempo ? parseInt(tempo, 10) : savedAudioAnalysis?.tempo || 96
+      tempo: tempo ? parseInt(tempo, 10) : savedAudioAnalysis?.tempo || 96,
+      tempoOffset: savedAudioAnalysis?.tempoOffset,
+      sections: sectionsOverride || savedAudioAnalysis?.sections
     });
 
     setLyrics(updated);
-    showFeedback(`¡${list.length} acordes insertados en las sílabas exactas!`);
+    showFeedback(`¡${list.length} acordes insertados en introducción, partes cantadas e instrumentales!`);
   };
 
   const handleUndoChordInsertion = () => {

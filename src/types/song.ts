@@ -21,6 +21,17 @@ export interface SavedAudioAnalysis {
     chord: string;
     confidence?: number;
   }>;
+  sections?: Array<{
+    id: string;
+    type: 'Intro' | 'Estrofa' | 'Estribillo' | 'Puente' | 'Instrumental' | 'Outro';
+    label: string;
+    startTime: number;
+    endTime: number;
+    confidence: number;
+    avgRms: number;
+    repetitionGroup?: number;
+    isVocal?: boolean;
+  }>;
   musicalNotes?: string;
 }
 

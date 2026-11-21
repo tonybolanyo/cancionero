@@ -6,7 +6,11 @@
  */
 
 import { analyzeTempo } from '../lib/audio/tempo';
-import { analyzeChordsDSP, getCleanChordSequence } from '../lib/audio/chords';
+import { analyzeChordsDSP, detectChordsFromChromagram, defaultChordRecognizer, getCleanChordSequence } from '../lib/audio/chords';
+import { computeWindowedChromagrams } from '../lib/audio/chroma';
+import { extractMonoChannelData } from '../lib/audio/bufferUtils';
+import { MusicalSection } from '../lib/audio/structure';
+import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
 
 export interface DetectedChord {
   timestamp: string;
@@ -27,6 +31,7 @@ export interface AudioAnalysisResult {
   durationSeconds: number;
   chordProgression: string;
   chords: DetectedChord[];
+  sections?: MusicalSection[];
   musicalNotes?: string;
   suggestedLyricsChords?: string;
   source: 'gemini_ai' | 'client_dsp';
@@ -296,14 +301,43 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     const { key, scale, harmonicChords } = detectKey(audioBuffer);
     const duration = Math.round(audioBuffer.duration);
 
-    // Detect real chord progression via dual-band chromagrams + key-weighted Viterbi smoothing
-    const dspSegments = analyzeChordsDSP(audioBuffer, {
-      keyContext: {
-        key,
-        scale: scale === 'Menor' ? 'minor' : 'major',
-        confidence: 0.75
-      }
+    // Compute dual-band windowed chromagrams + RMS energy once and reuse for both chords & SSM structure
+    const channelData = extractMonoChannelData(audioBuffer);
+    const windowedChroma = computeWindowedChromagrams(channelData, audioBuffer.sampleRate, {
+      windowDurationSec: 1.5,
+      hopDurationSec: 0.75,
+      dualBand: true
     });
+
+    // Detect real chord progression via dual-band chromagrams + key-weighted Viterbi smoothing
+    const dspSegments = detectChordsFromChromagram(
+      windowedChroma,
+      defaultChordRecognizer,
+      undefined,
+      {
+        keyContext: {
+          key,
+          scale: scale === 'Menor' ? 'minor' : 'major',
+          confidence: 0.75
+        }
+      }
+    );
+
+    // Detect real musical structure (Intro / Estrofa / Estribillo / Puente / Instrumental / Outro)
+    // using a Self-Similarity Matrix (Chroma + RMS) inside a Web Worker
+    let detectedSections: MusicalSection[] = [];
+    try {
+      const structureRes = await analyzeStructureWithWorker({
+        windowedChroma,
+        options: {
+          chords: dspSegments,
+          duration: audioBuffer.duration
+        }
+      });
+      detectedSections = structureRes.sections;
+    } catch (structErr) {
+      console.warn('SSM structure analysis warning:', structErr);
+    }
 
     const formatTimestamp = (sec: number) => {
       const whole = Math.max(0, Math.floor(sec));
@@ -312,11 +346,21 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       return `${mins}:${remSec < 10 ? '0' : ''}${remSec}`;
     };
 
+    const assignedSectionIds = new Set<string>();
+    const findSectionStartForTime = (t: number): string | undefined => {
+      const match = detectedSections.find(s => t >= s.startTime - 0.05 && t < s.endTime);
+      if (match && !assignedSectionIds.has(match.id)) {
+        assignedSectionIds.add(match.id);
+        return match.label;
+      }
+      return undefined;
+    };
+
     const chordTimeline: DetectedChord[] = [];
     if (dspSegments.length > 0) {
-      dspSegments.forEach((seg, idx) => {
+      dspSegments.forEach((seg) => {
         const sec = Number(seg.startTime.toFixed(1));
-        const section = idx === 0 ? 'Intro' : idx === 2 ? 'Estrofa' : idx === Math.floor(dspSegments.length * 0.6) ? 'Estribillo' : undefined;
+        const section = findSectionStartForTime(seg.startTime);
         chordTimeline.push({
           timestamp: formatTimestamp(seg.startTime),
           seconds: sec,
@@ -330,7 +374,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       for (let i = 0; i < Math.min(8, Math.floor(duration / intervalSec)); i++) {
         const sec = i * intervalSec;
         const chord = fallbackProg[i % fallbackProg.length];
-        const section = i === 0 ? 'Intro' : i === 2 ? 'Estrofa' : i === 5 ? 'Estribillo' : undefined;
+        const section = findSectionStartForTime(sec);
         chordTimeline.push({ timestamp: formatTimestamp(sec), seconds: sec, chord, section });
       }
     }
@@ -338,6 +382,42 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
     const cleanSeq = getCleanChordSequence(chordTimeline.map(c => c.chord));
     const mainProg = (cleanSeq.length > 0 ? cleanSeq : harmonicChords).slice(0, 8);
     const progressionStr = mainProg.slice(0, 6).join(' - ');
+
+    // Build suggested lyrics skeleton directly from real detected SSM sections
+    const suggestedLyricsBlocks: string[] = [];
+    if (detectedSections.length > 0) {
+      for (const sec of detectedSections) {
+        const secChords = getCleanChordSequence(
+          dspSegments.filter(c => c.endTime > sec.startTime && c.startTime < sec.endTime)
+        );
+        const chordLine = (secChords.length > 0 ? secChords : mainProg.slice(0, 4))
+          .slice(0, 4)
+          .map(c => `[${c}]`)
+          .join('  ');
+
+        if (sec.type === 'Intro' || sec.type === 'Instrumental' || sec.type === 'Outro') {
+          suggestedLyricsBlocks.push(`## ${sec.label}\n${chordLine} (${sec.type === 'Intro' ? 'Introducción instrumental' : sec.type === 'Outro' ? 'Cierre instrumental' : 'Parte instrumental'})`);
+        } else {
+          const c0 = secChords[0] || mainProg[0] || 'Am';
+          const c1 = secChords[1] || mainProg[1] || c0;
+          const line1 = sec.type === 'Estribillo'
+            ? `[${c0}] El estribillo asciende aquí`
+            : sec.type === 'Puente'
+            ? `[${c0}] Puente de transición armónica`
+            : `[${c0}] Primer verso de la maqueta...`;
+          const line2 = `[${c1}] Continuación melódica`;
+          suggestedLyricsBlocks.push(`## ${sec.label}\n${line1}\n${line2}`);
+        }
+      }
+    } else {
+      suggestedLyricsBlocks.push(
+        `## Estrofa\n[${mainProg[0] || 'Am'}] Primer verso de la maqueta...\n[${mainProg[1] || 'C'}] Segundo verso con melodía\n\n## Estribillo\n[${mainProg[2] || 'G'}] El estribillo asciende aquí\n[${mainProg[3] || 'F'}] Resolviendo en cadencia`
+      );
+    }
+
+    const structureSummary = detectedSections.length > 0
+      ? ` Estructura detectada (SSM): ${detectedSections.map(s => s.label).join(' → ')}.`
+      : '';
 
     return {
       tempo: bpm,
@@ -351,8 +431,9 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       durationSeconds: duration,
       chordProgression: progressionStr,
       chords: chordTimeline,
-      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.`,
-      suggestedLyricsChords: `## Estrofa\n[${mainProg[0] || 'Am'}] Primer verso de la maqueta...\n[${mainProg[1] || 'C'}] Segundo verso con melodía\n\n## Estribillo\n[${mainProg[2] || 'G'}] El estribillo asciende aquí\n[${mainProg[3] || 'F'}] Resolviendo en cadencia`,
+      sections: detectedSections.length > 0 ? detectedSections : undefined,
+      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.${structureSummary}`,
+      suggestedLyricsChords: suggestedLyricsBlocks.join('\n\n'),
       source: 'client_dsp'
     };
   } finally {

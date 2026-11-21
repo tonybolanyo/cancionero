@@ -35,6 +35,8 @@ import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExpor
 import { PitchShiftPlayer } from '../lib/audio/pitchShiftPlayer';
 import { AccidentalPreference, respellChord, isValidPlayableAudioUrl } from '../utils/markdownParser';
 import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } from '../lib/audio/meter';
+import type { MusicalSection, StructureAnalysisResult } from '../lib/audio/structure';
+import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -52,7 +54,7 @@ interface AudioAnalyzerSectionProps {
     chords?: ChordSegment[];
     audioAnalysis?: SavedAudioAnalysis;
   }) => void;
-  onInsertChordsIntoLyrics?: (chords: ChordSegment[]) => void;
+  onInsertChordsIntoLyrics?: (chords: ChordSegment[], sections?: MusicalSection[]) => void;
   canUndoInsertChords?: boolean;
   onUndoInsertChords?: () => void;
   savedAudioAnalysis?: SavedAudioAnalysis;
@@ -131,6 +133,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   // Meter & Downbeats estimation state
   const [meterAnalysis, setMeterAnalysis] = useState<MeterAnalysis | null>(null);
 
+  // Musical Structure Analysis (Self-Similarity Matrix in Web Worker)
+  const [structureAnalysis, setStructureAnalysis] = useState<StructureAnalysisResult | null>(null);
+  const [isAnalyzingStructure, setIsAnalyzingStructure] = useState<boolean>(false);
+
   useEffect(() => {
     return () => {
       playerRef.current?.dispose();
@@ -152,22 +158,53 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     }
   }, [decodedAudioBuffer]);
 
-  // Refine meter estimation when chords become available from keyAnalysis
+  // Refine meter estimation and SSM structure when chords become available from keyAnalysis
   useEffect(() => {
     if (decodedAudioBuffer && beatAnalysis && beatAnalysis.beats.length > 0) {
-      if (meterAnalysis?.confidence === 1.0) return; // Preserve manual adjustment
-      try {
-        const refined = estimateMeter({
-          beats: beatAnalysis.beats,
-          onsets: beatAnalysis.onsets,
-          audioBuffer: decodedAudioBuffer,
-          bpm: beatAnalysis.tempo,
-          chords: keyAnalysis?.chords
-        });
-        setMeterAnalysis(refined);
-      } catch (err) {
-        console.warn('Refined meter error:', err);
+      if (meterAnalysis?.confidence !== 1.0) {
+        try {
+          const refined = estimateMeter({
+            beats: beatAnalysis.beats,
+            onsets: beatAnalysis.onsets,
+            audioBuffer: decodedAudioBuffer,
+            bpm: beatAnalysis.tempo,
+            chords: keyAnalysis?.chords
+          });
+          setMeterAnalysis(refined);
+        } catch (err) {
+          console.warn('Refined meter error:', err);
+        }
       }
+    }
+
+    if (decodedAudioBuffer && keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+      let cancelled = false;
+      setIsAnalyzingStructure(true);
+      analyzeStructureWithWorker({
+        audioBuffer: decodedAudioBuffer,
+        options: {
+          beats: beatAnalysis?.beats,
+          downbeats: meterAnalysis?.downbeats,
+          chords: keyAnalysis.chords,
+          duration: decodedAudioBuffer.duration
+        }
+      })
+        .then(structRes => {
+          if (!cancelled) {
+            setStructureAnalysis(structRes);
+          }
+        })
+        .catch(err => {
+          console.warn('Refined structure analysis warning:', err);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsAnalyzingStructure(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [keyAnalysis?.chords]);
 
@@ -239,6 +276,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
       // 2. Analyze onsets and beat grid with @audio/beat via Web Worker
       let detectedBeats: number[] | undefined;
+      let detectedDownbeats: number[] | undefined;
       try {
         const beats = await analyzeBeatsAndOnsets(audioBuffer, {
           minBpm: minT,
@@ -256,6 +294,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
             bpm: beats.tempo
           });
           setMeterAnalysis(estimatedMeter);
+          detectedDownbeats = estimatedMeter.downbeats;
         } catch (meterErr: any) {
           console.warn('Meter estimation warning:', meterErr);
         }
@@ -265,6 +304,26 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
       // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker (con beats para alineación armónica)
       void analyzeKey(audioBuffer, detectedBeats);
+
+      // 4. Analyze real Musical Structure (SSM + Checkerboard Novelty) via Web Worker
+      setIsAnalyzingStructure(true);
+      void analyzeStructureWithWorker({
+        audioBuffer,
+        options: {
+          beats: detectedBeats,
+          downbeats: detectedDownbeats,
+          duration: audioBuffer.duration
+        }
+      })
+        .then(structRes => {
+          setStructureAnalysis(structRes);
+        })
+        .catch(structErr => {
+          console.warn('Structure analysis warning:', structErr);
+        })
+        .finally(() => {
+          setIsAnalyzingStructure(false);
+        });
     } catch (err: any) {
       setTempoError(err.message || 'Error al calcular tempo y offset del primer beat.');
     } finally {
@@ -313,6 +372,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setDecodedAudioBuffer(null);
     setBeatAnalysis(null);
     setMeterAnalysis(null);
+    setStructureAnalysis(null);
+    setIsAnalyzingStructure(false);
     resetKeyAnalysis();
     setCurrentTime(0);
     if (playerRef.current) {
@@ -369,6 +430,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       });
 
       setAnalysisResult(result);
+      if (result.sections && result.sections.length > 0 && !structureAnalysis) {
+        setStructureAnalysis({
+          sections: result.sections,
+          noveltyCurve: [],
+          boundaries: result.sections.map(s => s.startTime),
+          algorithm: 'Self-Similarity Matrix (SSM) + Checkerboard Novelty'
+        });
+      }
       if (result.tempoOffset !== undefined) {
         setTempoAnalysis({
           bpm: result.tempo,
@@ -472,6 +541,11 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       confidence: 0.85
     })) : undefined);
 
+    const effectiveSections =
+      structureAnalysis?.sections && structureAnalysis.sections.length > 0
+        ? structureAnalysis.sections
+        : analysisResult?.sections;
+
     const completeAudioAnalysis: SavedAudioAnalysis = {
       analyzedAt: new Date().toISOString(),
       source: analysisResult?.source || (keyAnalysis ? 'essentia_wasm' : 'client_dsp'),
@@ -486,6 +560,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       durationSeconds: duration || analysisResult?.durationSeconds,
       chordProgression: getChordProgressionSummary(),
       chords: chordsList,
+      sections: effectiveSections,
       musicalNotes: analysisResult?.musicalNotes || (keyAnalysis ? `Tonalidad ${getEffectiveKey()} analizada con Essentia WASM.` : undefined)
     };
 
@@ -603,9 +678,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               {onInsertChordsIntoLyrics && savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => onInsertChordsIntoLyrics(savedAudioAnalysis.chords!)}
+                  onClick={() => onInsertChordsIntoLyrics(savedAudioAnalysis.chords!, savedAudioAnalysis.sections)}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Insertar automáticamente los acordes detectados en las sílabas de la letra"
+                  title="Insertar automáticamente los acordes detectados en las sílabas y secciones de la letra"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Insertar acordes en sílabas</span>
@@ -691,6 +766,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   setFile(null);
                   setAudioUrl('');
                   setAnalysisResult(null);
+                  setStructureAnalysis(null);
                   resetKeyAnalysis();
                   if (audioRef.current) audioRef.current.pause();
                 }}
@@ -814,18 +890,19 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         />
       )}
 
-      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets, Beat Grid y Acordes en Canvas) */}
+      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets, Beat Grid, Estructura SSM y Acordes en Canvas) */}
       {file && (
         <BeatTimeline
           audioBuffer={decodedAudioBuffer}
           beatAnalysis={beatAnalysis}
           chords={keyAnalysis?.chords}
+          sections={structureAnalysis?.sections ?? analysisResult?.sections ?? savedAudioAnalysis?.sections ?? null}
           currentTime={currentTime}
           duration={duration || (decodedAudioBuffer?.duration ?? 0)}
           isPlaying={isPlaying}
           onSeek={handleSeek}
           onTogglePlay={togglePlayback}
-          isLoading={isAnalyzingBeats || isAnalyzingKey}
+          isLoading={isAnalyzingBeats || isAnalyzingKey || isAnalyzingStructure}
           onRecalculate={() => handleCalculateTempo(file)}
           onExportJSON={handleExportChordsJSON}
           onExportCSV={handleExportChordsCSV}
@@ -1360,9 +1437,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => onInsertChordsIntoLyrics(keyAnalysis.chords!)}
+                              onClick={() =>
+                                onInsertChordsIntoLyrics(
+                                  keyAnalysis.chords!,
+                                  structureAnalysis?.sections ?? analysisResult?.sections
+                                )
+                              }
                               className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                              title="Insertar esta progresión de acordes automáticamente en las sílabas correspondientes de la letra"
+                              title="Insertar esta progresión de acordes automáticamente en las sílabas y secciones correspondientes de la letra"
                             >
                               <Sparkles className="w-2.5 h-2.5" />
                               <span>Insertar en sílabas</span>
@@ -1404,6 +1486,60 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                             {Math.floor(chordSeg.startTime / 60)}:{(chordSeg.startTime % 60).toFixed(0).padStart(2, '0')}
                           </span>
                           <strong className="text-xs">{displayedChord}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Estructura Musical Detectada (Matriz de Autosimilitud SSM) */}
+              {structureAnalysis?.sections && structureAnalysis.sections.length > 0 && (
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
+                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5 text-teal-500" />
+                      <span>Estructura Musical Detectada (Matriz de Autosimilitud)</span>
+                    </span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      {structureAnalysis.sections.length} secciones
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    {structureAnalysis.sections.map((sec) => {
+                      const isActive = currentTime >= sec.startTime && currentTime < sec.endTime;
+                      const badgeTone =
+                        sec.type === 'Intro'
+                          ? 'border-indigo-400/50 text-indigo-600 dark:text-indigo-300'
+                          : sec.type === 'Estribillo'
+                          ? 'border-amber-400/60 text-amber-600 dark:text-amber-300'
+                          : sec.type === 'Puente'
+                          ? 'border-pink-400/60 text-pink-600 dark:text-pink-300'
+                          : sec.type === 'Instrumental' || sec.type === 'Outro'
+                          ? 'border-slate-400/60 text-slate-600 dark:text-slate-300'
+                          : 'border-teal-400/50 text-teal-600 dark:text-teal-300';
+                      const fmt = (s: number) =>
+                        `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+                      return (
+                        <button
+                          key={sec.id}
+                          type="button"
+                          onClick={() => handleSeek(sec.startTime)}
+                          className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border ${
+                            isActive
+                              ? 'bg-teal-600 text-white border-teal-500 shadow-xs scale-105'
+                              : `bg-[var(--bg-modal)] ${badgeTone} hover:bg-[var(--bg-surface)]`
+                          }`}
+                          title={`${sec.label} (${fmt(sec.startTime)} - ${fmt(sec.endTime)}) · Confianza ${Math.round(sec.confidence * 100)}%`}
+                        >
+                          <span className="text-[9px] opacity-75">
+                            {fmt(sec.startTime)}–{fmt(sec.endTime)}
+                          </span>
+                          <strong>{sec.label}</strong>
+                          {sec.isVocal === false && (
+                            <span className="text-[9px] opacity-80 font-normal">· Inst.</span>
+                          )}
                         </button>
                       );
                     })}
@@ -1459,7 +1595,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                         chordsToInsert.push(...keyAnalysis.chords);
                       }
                       if (chordsToInsert.length > 0) {
-                        onInsertChordsIntoLyrics(chordsToInsert);
+                        onInsertChordsIntoLyrics(
+                          chordsToInsert,
+                          analysisResult.sections ?? structureAnalysis?.sections
+                        );
                       }
                     }}
                     className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-purple-600 hover:bg-purple-700 text-white shadow-xs"

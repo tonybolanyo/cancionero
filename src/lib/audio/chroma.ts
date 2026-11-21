@@ -54,6 +54,8 @@ export interface WindowedChroma {
   bassChroma?: number[];
   midChroma?: number[];
   bassEstimate?: BassPitchEstimate;
+  /** Root-mean-square acoustic energy of this audio window (0..1) */
+  rmsEnergy?: number;
 }
 
 export interface ChromaOptions {
@@ -323,8 +325,21 @@ export function computeDualBandFrameChroma(
 }
 
 /**
+ * Computes root-mean-square (RMS) acoustic energy for a signal slice.
+ */
+export function computeRmsEnergy(frameData: Float32Array): number {
+  if (!frameData || frameData.length === 0) return 0;
+  let sumSq = 0;
+  for (let i = 0; i < frameData.length; i++) {
+    const s = frameData[i];
+    sumSq += s * s;
+  }
+  return Number(Math.sqrt(sumSq / frameData.length).toFixed(6));
+}
+
+/**
  * Slices an audio signal into windows of 1-2 seconds with overlap and computes
- * a temporal chromagram sequence (including dual-band bass/mid profiles by default).
+ * a temporal chromagram sequence (including dual-band bass/mid profiles and RMS energy by default).
  */
 export function computeWindowedChromagrams(
   channelData: Float32Array,
@@ -339,6 +354,8 @@ export function computeWindowedChromagrams(
   const hopSamples = Math.floor(hopDurationSec * sampleRate);
 
   const computeWindow = (slice: Float32Array, startTime: number, endTime: number): WindowedChroma => {
+    const rmsEnergy = computeRmsEnergy(slice);
+
     if (useDualBand) {
       const dual = computeDualBandFrameChroma(slice, sampleRate, {
         bassMinFrequency: options.bassMinFrequency,
@@ -352,12 +369,13 @@ export function computeWindowedChromagrams(
         chroma: dual.chroma,
         bassChroma: dual.bassChroma,
         midChroma: dual.midChroma,
-        bassEstimate: dual.bassEstimate
+        bassEstimate: dual.bassEstimate,
+        rmsEnergy
       };
     }
 
     const chroma = computeFrameChroma(slice, sampleRate, options.minFrequency, options.maxFrequency);
-    return { startTime, endTime, chroma };
+    return { startTime, endTime, chroma, rmsEnergy };
   };
 
   if (channelData.length < windowSamples || hopSamples <= 0) {
