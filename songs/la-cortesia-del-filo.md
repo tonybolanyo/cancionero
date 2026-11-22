@@ -13,14 +13,14 @@ timeSignature: "4/4"
 tuning: "Estándar (EADGBE)"
 spotifyUrl: "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk"
 isPrivateDemo: true
-notes: "Del disco 'Cartas sin sello' de Tony Bolaño\nÁlbum original: Cartas sin sello (2025)\nÁlbum original: Cartas sin sello (2025)\nÁlbum original: Cartas sin sello (2025)"
+notes: "Del disco 'Cartas sin sello' de Tony Bolaño\nÁlbum original: Cartas sin sello (2025)\nÁlbum original: Cartas sin sello (2025)\nÁlbum original: Cartas sin sello (2025)\nÁlbum original: Cartas sin sello (2025)"
 lrc: "[00:18.04]Hoy traes la voz envuelta en terciopelo,\n[00:23.62]un “perdón” de bolsillo,\n[00:26.36]por si acaso el viento gira.\n[00:30.82]Pero yo conozco el juego de tus dedos,\n[00:36.01]la moneda en el aire\n[00:38.26]que nunca termina.\n\n[00:42.67]Y me dices “lo siento”\n[00:45.20]como quien cruza un puente\n[00:48.64]sin mirar el río.\n[00:51.23]Pero yo, que he visto\n[00:54.98]la danza de tus pasos,\n[00:58.08]ya no me lo creo,\n[01:00.93]ya no, ya no me fío.\n\n[01:05.95]Hay un arte en tu modo de inclinar la cabeza,\n[01:10.93]en la pausa precisa\n[01:13.76]que parece ternura.\n[01:17.57]Pero bajo la mesa\n[01:20.43]se asoma la fiera,\n[01:23.49]y el perdón es un filo\n[01:26.62]que nunca se cura.\n\n[01:30.16]Y me dices “lo siento”\n[01:32.85]como quien cruza un puente\n[01:36.06]sin mojarse el alma.\n[01:39.01]Pero yo, que he visto\n[01:42.38]la sombra en tu palabra,\n[01:45.44]ya no me lo creo,\n[01:48.31]ya no, no me desarma.\n\n[01:53.23]Quizás aprendí de tus gestos\n[01:55.69]la ciencia del disimulo,\n[01:59.31]la flor que se da con espinas,\n[02:02.27]el abrazo que es nudo.\n\n[02:05.50]Así que guarda el “perdón” en tu bolsillo de siempre,\n[02:10.77]que yo ya no lo cambio\n[02:13.86]por promesas de humo.\n[02:17.95]He leído tus cartas,\n[02:20.46]he contado tus dados,\n[02:23.58]y en la ruleta del miedo\n[02:26.13]ya no apuesto ninguno.\n\n[02:30.14]Y me dices “lo siento”\n[02:32.69]como quien cruza un puente\n[02:36.00]sin dejar huella.\n[02:39.00]Pero yo, que he visto\n[02:42.38]el mapa de tus rutas,\n[02:45.41]ya no me lo creo,\n[02:48.13]ya no, ya no me resulta."
 tags: ["cartas-sin-sello", "acústico"]
 createdAt: "2026-11-01T00:17:35.091Z"
-updatedAt: "2026-11-22T08:38:12.928Z"
+updatedAt: "2026-11-22T17:09:23.718Z"
 ---
 ## Intro
-[G]  [G/E]  [C/E]  [C]  [D]  [C/B]  [G/B]  [G/E]  [G]  [F/D]  [C/D]  [Am/D]
+[G]  [G/E]  [C/E]  [C]  [D]  [C/B]  [G/B]  [G/E]  [G]  [F/D]  [C/D]  [Am/D]  [C/D]
 
 [G] Hoy traes la voz envuel[G/E]ta en [Am/E]tercio[G/D]pelo,
 [G/D] un “per[C]dón” de bolsi[C/B]llo,
@@ -41,7 +41,7 @@ updatedAt: "2026-11-22T08:38:12.928Z"
 [Bb/D] en la [C]pausa preci[G/B]sa
 [G/B] que pa[C/A]rece ter[C/D]nura.
 [C/D] Pero ba[G]jo la me[Am/F#]sa
-[G/F#] se a[G/E]soma la [G/D]fiera,
+[G/F#] se aso[G/E]ma la [G/D]fiera,
 [G/D] y el [Bb/D]perdón es un [Bb/C#]fi[G/C#]lo
 [G/C#] que [Am/D]nunca se cura.
 
