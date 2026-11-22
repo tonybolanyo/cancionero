@@ -605,6 +605,11 @@ export function resolveSlashChord(
     return baseChord;
   }
 
+  // Mejora C: Validate bass with temporal information
+  if (!isValidBassPitch(bassEstimate, parsed.rootIndex, parsed.pitchMask)) {
+    return baseChord;
+  }
+
   // Root-position bass matches the chord root -> no slash suffix needed
   if (bassEstimate.pitchClass === parsed.rootIndex) {
     return parsed.baseChord;
@@ -653,6 +658,49 @@ export function resolveSlashChord(
   }
 
   return parsed.baseChord;
+}
+
+/**
+ * Validates whether a bass note is a real chord note or a passing tone.
+ * Used for Mejora C: distinguishes held bass notes from rapid passing notes.
+ * @param bassEstimate The bass pitch estimate (should include temporal info)
+ * @param chordRootIndex The root pitch class of the chord (0–11)
+ * @param chordPitchMask Bitmask of pitch classes in this chord (12 bits)
+ * @return true if the bass note is musically valid for this chord context
+ */
+export function isValidBassPitch(
+  bassEstimate: BassPitchEstimate | undefined,
+  chordRootIndex: number,
+  chordPitchMask: number
+): boolean {
+  if (!bassEstimate || bassEstimate.pitchClass < 0) {
+    return false;
+  }
+
+  const bassPc = bassEstimate.pitchClass;
+
+  // 1. Bass must be present (energy ratio > threshold)
+  if (bassEstimate.energyRatio < 0.08 && bassEstimate.confidence < 0.5) {
+    return false;
+  }
+
+  // 2. Bass must be part of chord OR a valid extension
+  const isChordTone = (chordPitchMask & (1 << bassPc)) !== 0;
+  if (!isChordTone) {
+    // Allow very weak confidence for non-chord tones (likely passing notes)
+    if (bassEstimate.confidence < 0.65) {
+      return false;
+    }
+  }
+
+  // 3. If this is an EnhancedBassPitchEstimate with temporal info, check duration
+  const enhanced = bassEstimate as any;
+  if (enhanced.isTransient && enhanced.estimatedDurationMs < 100) {
+    // Very short notes (< 100ms) are likely passing tones, not chord bass
+    return false;
+  }
+
+  return true;
 }
 
 /**
