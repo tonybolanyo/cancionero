@@ -57,6 +57,8 @@ export interface ViterbiOptions {
   hopDurationSec?: number;
   /** Whether to resolve 40–180 Hz bass inversions into slash chords (default: true) */
   enableSlashChords?: boolean;
+  /** NEW: Detected BPM for tempo-adaptive templating (Mejora D) */
+  detectedTempo?: number;
 }
 
 export interface RawChordFrame {
@@ -66,6 +68,7 @@ export interface RawChordFrame {
   confidence: number;
   bassEstimate?: BassPitchEstimate;
   midChroma?: number[];
+  highChroma?: number[]; // NEW: Triple-band high-frequency (600–2000 Hz) for guitar harmonics
 }
 
 /**
@@ -602,6 +605,11 @@ export function resolveSlashChord(
     return baseChord;
   }
 
+  // Mejora C: Validate bass with temporal information
+  if (!isValidBassPitch(bassEstimate, parsed.rootIndex, parsed.pitchMask)) {
+    return baseChord;
+  }
+
   // Root-position bass matches the chord root -> no slash suffix needed
   if (bassEstimate.pitchClass === parsed.rootIndex) {
     return parsed.baseChord;
@@ -650,6 +658,49 @@ export function resolveSlashChord(
   }
 
   return parsed.baseChord;
+}
+
+/**
+ * Validates whether a bass note is a real chord note or a passing tone.
+ * Used for Mejora C: distinguishes held bass notes from rapid passing notes.
+ * @param bassEstimate The bass pitch estimate (should include temporal info)
+ * @param chordRootIndex The root pitch class of the chord (0–11)
+ * @param chordPitchMask Bitmask of pitch classes in this chord (12 bits)
+ * @return true if the bass note is musically valid for this chord context
+ */
+export function isValidBassPitch(
+  bassEstimate: BassPitchEstimate | undefined,
+  chordRootIndex: number,
+  chordPitchMask: number
+): boolean {
+  if (!bassEstimate || bassEstimate.pitchClass < 0) {
+    return false;
+  }
+
+  const bassPc = bassEstimate.pitchClass;
+
+  // 1. Bass must be present (energy ratio > threshold)
+  if (bassEstimate.energyRatio < 0.08 && bassEstimate.confidence < 0.5) {
+    return false;
+  }
+
+  // 2. Bass must be part of chord OR a valid extension
+  const isChordTone = (chordPitchMask & (1 << bassPc)) !== 0;
+  if (!isChordTone) {
+    // Allow very weak confidence for non-chord tones (likely passing notes)
+    if (bassEstimate.confidence < 0.65) {
+      return false;
+    }
+  }
+
+  // 3. If this is an EnhancedBassPitchEstimate with temporal info, check duration
+  const enhanced = bassEstimate as any;
+  if (enhanced.isTransient && enhanced.estimatedDurationMs < 100) {
+    // Very short notes (< 100ms) are likely passing tones, not chord bass
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -783,7 +834,6 @@ export function smoothChordsWithViterbi(
 ): ChordSegment[] {
   if (rawFrames.length === 0) return [];
 
-  const minDurationSec = options.minDurationSec ?? 0.5;
   const keyWeight = options.keyWeight ?? 1.0;
   const enableSlashChords = options.enableSlashChords ?? true;
 
@@ -797,10 +847,37 @@ export function smoothChordsWithViterbi(
     }
   }
 
-  // Calibrate switch penalty inversely with hop duration so short hops require sustained evidence
-  const switchPenalty =
-    options.switchPenalty ??
-    Math.max(1.8, Math.min(5.8, 2.2 * Math.pow(0.5 / Math.max(0.03, hopDurationSec), 0.35)));
+  // NEW: Tempo-adaptive templating (Mejora D)
+  // Auto-adjust Viterbi parameters (minDurationSec, switchPenalty) based on detected BPM
+  let minDurationSec = options.minDurationSec ?? 0.5;
+  let switchPenalty: number;
+
+  if (options.detectedTempo && options.detectedTempo > 0) {
+    const bpm = options.detectedTempo;
+    // Slow (BPM < 70): Longer segments, higher switch penalty (resist chord changes)
+    if (bpm < 70) {
+      minDurationSec = 1.0; // Expect longer chord segments in slow music
+      switchPenalty = options.switchPenalty ?? 4.5; // Higher penalty to resist changes
+    }
+    // Fast (BPM > 130): Shorter segments, lower switch penalty (allow rapid changes)
+    else if (bpm > 130) {
+      minDurationSec = 0.3; // Allow shorter chord segments in fast music
+      switchPenalty = options.switchPenalty ?? 1.8; // Lower penalty to allow changes
+    }
+    // Normal (70 ≤ BPM ≤ 130): default behavior
+    else {
+      minDurationSec = options.minDurationSec ?? 0.5;
+      switchPenalty =
+        options.switchPenalty ??
+        Math.max(1.8, Math.min(5.8, 2.2 * Math.pow(0.5 / Math.max(0.03, hopDurationSec), 0.35)));
+    }
+  } else {
+    // Default behavior if no tempo provided
+    minDurationSec = options.minDurationSec ?? 0.5;
+    switchPenalty =
+      options.switchPenalty ??
+      Math.max(1.8, Math.min(5.8, 2.2 * Math.pow(0.5 / Math.max(0.03, hopDurationSec), 0.35)));
+  }
 
   // Build state vocabulary: 24 standard Major & Minor triads + any extra observed chords
   const stateSet = new Set<string>();
@@ -874,6 +951,12 @@ export function smoothChordsWithViterbi(
       frame.midChroma.length === 12 &&
       frame.midChroma.some(v => v > 0.05);
 
+    // NEW: Check for high-frequency chroma (600–2000 Hz) for guitar harmonics validation
+    const hasHighChroma =
+      Array.isArray(frame.highChroma) &&
+      frame.highChroma.length === 12 &&
+      frame.highChroma.some(v => v > 0.05);
+
     if (obsParsed.isNoChord) {
       // Unpitched / silence frame: flat emission so Viterbi holds current chord
       out.fill(0);
@@ -905,6 +988,19 @@ export function smoothChordsWithViterbi(
       if (hasMidChroma && frame.midChroma) {
         const midSim = cosineSimilarity(frame.midChroma, stateMeta[s].vector);
         score = 0.62 * score + 0.38 * (6.5 * midSim);
+      }
+
+      // NEW: High-chroma weighting (Mejora B)
+      // If high-chroma is available, use it as secondary validator:
+      // 60% mid-band + 40% high-band weighting for guitar harmonic confirmation
+      if (hasHighChroma && frame.highChroma) {
+        const highSim = cosineSimilarity(frame.highChroma, stateMeta[s].vector);
+        if (hasMidChroma && frame.midChroma) {
+          const midSim = cosineSimilarity(frame.midChroma, stateMeta[s].vector);
+          score = 0.6 * score + 0.4 * (6.5 * highSim);
+        } else {
+          score = 0.5 * score + 0.5 * (6.5 * highSim);
+        }
       }
 
       out[s] = score;
@@ -1005,7 +1101,6 @@ export function recognizeChordsWithViterbi(
   const N = templates.length;
   const T = windowedChroma.length;
 
-  const minDurationSec = options.minDurationSec ?? 0.75;
   const baseTemp = options.emissionTemperature ?? 10.0;
   const keyWeight = options.keyWeight ?? 1.0;
   const enableSlashChords = options.enableSlashChords ?? true;
@@ -1018,9 +1113,30 @@ export function recognizeChordsWithViterbi(
         : Math.max(0.5, windowedChroma[0].endTime - windowedChroma[0].startTime);
   }
 
-  const switchPenalty =
-    options.switchPenalty ??
-    Math.max(1.4, Math.min(4.5, 1.85 * Math.pow(0.75 / Math.max(0.05, hopDurationSec), 0.35)));
+  // NEW: Tempo-adaptive templating (Mejora D)
+  let minDurationSec = options.minDurationSec ?? 0.75;
+  let switchPenalty: number;
+
+  if (options.detectedTempo && options.detectedTempo > 0) {
+    const bpm = options.detectedTempo;
+    if (bpm < 70) {
+      minDurationSec = 1.0;
+      switchPenalty = options.switchPenalty ?? 3.5;
+    } else if (bpm > 130) {
+      minDurationSec = 0.4;
+      switchPenalty = options.switchPenalty ?? 1.4;
+    } else {
+      minDurationSec = options.minDurationSec ?? 0.75;
+      switchPenalty =
+        options.switchPenalty ??
+        Math.max(1.4, Math.min(4.5, 1.85 * Math.pow(0.75 / Math.max(0.05, hopDurationSec), 0.35)));
+    }
+  } else {
+    minDurationSec = options.minDurationSec ?? 0.75;
+    switchPenalty =
+      options.switchPenalty ??
+      Math.max(1.4, Math.min(4.5, 1.85 * Math.pow(0.75 / Math.max(0.05, hopDurationSec), 0.35)));
+  }
 
   const stateMeta = templates.map(tmpl => {
     const parsed = parseChordSymbol(tmpl.chord);
@@ -1268,6 +1384,7 @@ export function detectChordsFromChromagram(
     enableViterbi?: boolean;
     enableSlashChords?: boolean;
     minDurationSec?: number;
+    detectedTempo?: number; // NEW: Tempo for adaptive templating
   } = {}
 ): ChordSegment[] {
   if (windowedChroma.length === 0) return [];
@@ -1279,7 +1396,8 @@ export function detectChordsFromChromagram(
     smoothed = recognizeChordsWithViterbi(windowedChroma, {
       keyContext: options.keyContext,
       enableSlashChords: options.enableSlashChords ?? true,
-      minDurationSec: options.minDurationSec ?? 0.75
+      minDurationSec: options.minDurationSec ?? 0.75,
+      detectedTempo: options.detectedTempo // NEW: Pass tempo
     });
   } else if (useViterbi) {
     const rawFrames: RawChordFrame[] = windowedChroma.map(w => {
@@ -1291,13 +1409,15 @@ export function detectChordsFromChromagram(
         chord: res.chord,
         confidence: res.confidence,
         bassEstimate: w.bassEstimate,
-        midChroma: w.midChroma
+        midChroma: w.midChroma,
+        highChroma: w.highChroma // NEW: Include triple-band high chroma
       };
     });
     smoothed = smoothChordsWithViterbi(rawFrames, {
       keyContext: options.keyContext,
       enableSlashChords: options.enableSlashChords ?? true,
-      minDurationSec: options.minDurationSec ?? 0.75
+      minDurationSec: options.minDurationSec ?? 0.75,
+      detectedTempo: options.detectedTempo // NEW: Pass tempo
     });
   } else {
     const windowPredictions = windowedChroma.map(w => {

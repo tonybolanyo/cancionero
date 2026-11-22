@@ -312,7 +312,10 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       windowDurationSec: 1.5,
       hopDurationSec: 0.75,
       dualBand: true,
-      referenceA4Hz: calibratedA4
+      tripleBand: true, // Phase 1: Enable high-band extraction (600–2000 Hz) for guitar harmonics
+      referenceA4Hz: calibratedA4,
+      suppressOnsets: true, // Phase 2 Mejora E: Mask percussion onsets before chromagram computation
+      onsetSilenceWindowMs: 80 // Attenuate 80ms windows around percussion attacks
     });
 
     // Detect real chord progression via dual-band chromagrams + key-weighted Viterbi smoothing
@@ -325,7 +328,8 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
           key,
           scale: scale === 'Menor' ? 'minor' : 'major',
           confidence: 0.75
-        }
+        },
+        detectedTempo: bpm // NEW: Pass detected BPM for tempo-adaptive templating
       }
     );
 
