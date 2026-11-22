@@ -1,6 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronDown, Music, AlertCircle, ChevronUp } from 'lucide-react';
 import { ScaleFretboard } from '../components/ScaleFretboard';
+import { BaseNoteSelector } from '../components/BaseNoteSelector';
+import { ScaleSuggestions } from '../components/ScaleSuggestions';
+import { ScaleQuiz } from '../components/ScaleQuiz';
 import { 
   loadScaleDictionary, 
   getAllScales,
@@ -14,9 +17,11 @@ export const ScaleDictionaryPage: React.FC = () => {
   const [allScales, setAllScales] = useState<string[]>([]);
   const [selectedScale, setSelectedScale] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<number>(0);
+  const [baseNote, setBaseNote] = useState<string>('C');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedScales, setExpandedScales] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'explorer' | 'suggestions' | 'quiz'>('explorer');
 
   useEffect(() => {
     const initializeDictionary = async () => {
@@ -58,6 +63,10 @@ export const ScaleDictionaryPage: React.FC = () => {
 
   const selectedScaleData = selectedScale ? getScaleEntry(selectedScale) : null;
 
+  const handleTabChange = useCallback((tab: 'explorer' | 'suggestions' | 'quiz') => {
+    setActiveTab(tab);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -97,7 +106,52 @@ export const ScaleDictionaryPage: React.FC = () => {
         )}
 
         {!isLoading && !error && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <>
+            {/* Tabs Navigation */}
+            <div className="flex gap-2 border-b border-[var(--border-color)] overflow-x-auto">
+              <button
+                onClick={() => handleTabChange('explorer')}
+                className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors border-b-2 ${
+                  activeTab === 'explorer'
+                    ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                📚 Explorador de Escalas
+              </button>
+              <button
+                onClick={() => handleTabChange('suggestions')}
+                className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors border-b-2 ${
+                  activeTab === 'suggestions'
+                    ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                💡 Sugerencias Inteligentes
+              </button>
+              <button
+                onClick={() => handleTabChange('quiz')}
+                className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors border-b-2 ${
+                  activeTab === 'quiz'
+                    ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                🧠 Quiz Interactivo
+              </button>
+            </div>
+
+            {/* Explorer Tab */}
+            {activeTab === 'explorer' && (
+            <div className="space-y-6">
+              {/* Base Note Selector - Quick Access */}
+              <BaseNoteSelector
+                selectedNote={baseNote}
+                onNoteChange={setBaseNote}
+                showSharps={true}
+              />
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Panel - Scale List */}
             <div className="lg:col-span-1">
               <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden sticky top-4">
@@ -235,8 +289,77 @@ export const ScaleDictionaryPage: React.FC = () => {
                   )}
                 </>
               )}
+              </div>
             </div>
-          </div>
+            </div>
+            )}
+
+            {/* Suggestions Tab */}
+            {activeTab === 'suggestions' && (
+              <div className="space-y-6">
+                {/* Base Note Selector */}
+                <BaseNoteSelector
+                  selectedNote={baseNote}
+                  onNoteChange={setBaseNote}
+                  showSharps={true}
+                />
+
+                {/* Scale Suggestions for the selected base note */}
+                <ScaleSuggestions
+                  sourceType="key"
+                  sourceValue={baseNote}
+                  onSelectScale={(scaleId) => {
+                    handleScaleSelect(`${baseNote}-${scaleId}`);
+                    handleTabChange('explorer');
+                  }}
+                  maxSuggestions={5}
+                />
+
+                {/* Quick Reference for Common Progressions */}
+                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-6 border border-amber-200 dark:border-amber-800">
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">
+                    📋 Progresiones de Acordes Comunes
+                  </h3>
+                  <div className="space-y-3">
+                    {[
+                      { progression: ['C', 'F', 'G'], name: 'Pop/Rock Clásico' },
+                      { progression: ['Am', 'F', 'C', 'G'], name: 'Indie/Alternativo' },
+                      { progression: ['Em', 'Am', 'D', 'G'], name: 'Folk/Acústico' },
+                      { progression: ['Dm', 'F', 'C', 'G'], name: 'Clásico Español' }
+                    ].map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          handleScaleSelect('minor');
+                        }}
+                        className="w-full p-4 bg-white dark:bg-[var(--bg-primary)] rounded-lg border border-amber-300 dark:border-amber-700 hover:shadow-md transition-all text-left"
+                      >
+                        <div className="font-semibold text-[var(--text-primary)]">{item.name}</div>
+                        <div className="text-sm text-[var(--text-secondary)] mt-1">
+                          {item.progression.join(' - ')}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quiz Tab */}
+            {activeTab === 'quiz' && (
+              <div className="py-6">
+                <ScaleQuiz
+                  onScaleSelect={(scaleId, position) => {
+                    handleScaleSelect(scaleId);
+                    if (position !== undefined) {
+                      setSelectedPosition(position);
+                    }
+                    handleTabChange('explorer');
+                  }}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

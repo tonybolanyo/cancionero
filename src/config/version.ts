@@ -1,12 +1,12 @@
 // Auto-generated version file - DO NOT EDIT
-// Generated at 2026-11-22T15:15:21.318Z
+// Generated at 2026-11-22T15:29:02.561Z
 // Managed by release-please with conventional commits analysis
 
-export const APP_VERSION = '0.28.1';
+export const APP_VERSION = '0.1.0';
 export const BUILD_NUMBER = 1;
-export const COMMIT_HASH = 'f2b0c1a';
-export const BUILD_BRANCH = 'automatic-enigma';
-export const BUILD_TIMESTAMP = '2026-11-22T15:15:21.318Z';
+export const COMMIT_HASH = 'fe50b82';
+export const BUILD_BRANCH = 'studious-spork';
+export const BUILD_TIMESTAMP = '2026-11-22T15:29:02.561Z';
 
 /**
  * Version string including build metadata
