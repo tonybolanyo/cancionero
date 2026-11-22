@@ -8,6 +8,7 @@ import { ChordSegment } from '../audio/chords';
 import {
   syllabifyLine,
   mapChordsToSyllables,
+  reconstructLineWithChords,
   SyllableizedLine,
   Syllable
 } from './syllableAnalysis';
@@ -195,53 +196,6 @@ export function mapChordsToSyllablesInWindow(
   }
 
   return chordMap;
-}
-
-/**
- * Reconstructs the lyric line with chords positioned at syllable boundaries
- * Uses the imported function from syllableAnalysis which preserves whitespace
- */
-function reconstructLineWithChords(
-  syllabized: SyllableizedLine,
-  chordMap: Map<number, string>
-): string {
-  if (syllabized.syllables.length === 0) {
-    return syllabized.text;
-  }
-
-  // Use the imported function which preserves whitespace
-  const originalText = syllabized.text;
-  const syllables = syllabized.syllables;
-  const result: string[] = [];
-
-  let lastEndChar = 0;
-
-  for (let i = 0; i < syllables.length; i++) {
-    const syl = syllables[i];
-    
-    // Add any whitespace/punctuation between last syllable and this one
-    if (syl.startChar > lastEndChar) {
-      const gap = originalText.substring(lastEndChar, syl.startChar);
-      result.push(gap);
-    }
-
-    // Add chord if present
-    const chord = chordMap.get(i);
-    if (chord) {
-      result.push(`[${chord}]`);
-    }
-
-    // Add syllable text
-    result.push(syl.text);
-    lastEndChar = syl.endChar;
-  }
-
-  // Add any remaining text after last syllable
-  if (lastEndChar < originalText.length) {
-    result.push(originalText.substring(lastEndChar));
-  }
-
-  return result.join('');
 }
 
 /**

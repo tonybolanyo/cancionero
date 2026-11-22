@@ -261,4 +261,80 @@ y el viento empezó a silbar`;
 
     assert.equal(currentLyrics, originalLyrics, 'Restores exact original text on undo');
   });
+
+  it('preserves quotes, punctuation, and spaces without duplicating letters during syllable chord insertion', async () => {
+    const { syllabifyLine, reconstructLineWithChords } = await import('../src/lib/lyrics/syllableAnalysis');
+
+    const verse1 = 'un “perdón de bolsillo';
+    const syl1 = syllabifyLine(verse1);
+    assert.deepEqual(
+      syl1.syllables.map(s => s.text),
+      ['un', 'per', 'dón', 'de', 'bol', 'si', 'llo']
+    );
+    const out1 = reconstructLineWithChords(syl1, new Map([[0, 'G/D'], [2, 'C'], [4, 'C/B']]));
+    assert.equal(out1, '[G/D] un “per[C]dón de [C/B]bolsillo');
+
+    const verse2 = 'Así que guarda el “perdón" en tu bolsillo de siempre,';
+    const syl2 = syllabifyLine(verse2);
+    assert.deepEqual(
+      syl2.syllables.map(s => s.text),
+      ['A', 'sí', 'que', 'guar', 'da', 'el', 'per', 'dón', 'en', 'tu', 'bol', 'si', 'llo', 'de', 'siem', 'pre']
+    );
+    const out2 = reconstructLineWithChords(
+      syl2,
+      new Map([[0, 'D'], [2, 'C/G'], [3, 'C/F#'], [13, 'G/E'], [14, 'Bb/D']])
+    );
+    assert.equal(out2, '[D] Así [C/G]que [C/F#]guarda el “perdón" en tu bolsillo [G/E]de [Bb/D]siempre,');
+
+    // Full pipeline with insertChordsIntoSyllables must never duplicate characters or drop spaces
+    const inserted = insertChordsIntoSyllables(
+      `${verse1}\n${verse2}`,
+      [
+        { startTime: 0, endTime: 1.5, chord: 'G/D' },
+        { startTime: 1.5, endTime: 3.0, chord: 'C' },
+        { startTime: 3.0, endTime: 4.5, chord: 'C/B' },
+        { startTime: 4.5, endTime: 6.0, chord: 'D' },
+        { startTime: 6.0, endTime: 7.5, chord: 'C/G' },
+        { startTime: 7.5, endTime: 9.0, chord: 'G/E' }
+      ],
+      { audioDuration: 9.0 }
+    );
+    const stripped = inserted
+      .split('\n')
+      .map(l => l.replace(/\[[^\]]+\]\s*/g, (m, offset) => (offset === 0 ? '' : '')).replace(/\[[^\]]+\]/g, '').trim())
+      .join('\n');
+    // Stripping chords from each reconstructed line must match original verses modulo leading chord space
+    const insertedLines = inserted.split('\n');
+    assert.equal(insertedLines.length, 2);
+    assert.equal(insertedLines[0].replace(/\[[^\]]+\]\s?/, '').replace(/\[[^\]]+\]/g, ''), verse1);
+    assert.equal(insertedLines[1].replace(/\[[^\]]+\]\s?/, '').replace(/\[[^\]]+\]/g, ''), verse2);
+    void stripped;
+  });
+
+  it('handles leading Spanish punctuation, ellipses, parentheses, and English contractions losslessly', async () => {
+    const { syllabifyLine, reconstructLineWithChords } = await import('../src/lib/lyrics/syllableAnalysis');
+
+    const lines = [
+      '¿Dónde está el sol... y el país?',
+      '¡Qué día (tan frío) y tan simple!',
+      "Don't stop believing in the moonlight, baby"
+    ];
+
+    for (const line of lines) {
+      const syl = syllabifyLine(line);
+      assert.equal(reconstructLineWithChords(syl, new Map()), line);
+
+      // Every syllable span must slice the exact original text
+      for (const s of syl.syllables) {
+        assert.equal(line.slice(s.startChar, s.endChar), s.text);
+      }
+    }
+
+    const qLine = syllabifyLine('¿Dónde está el sol?');
+    assert.equal(
+      reconstructLineWithChords(qLine, new Map([[0, 'Am'], [3, 'G']])),
+      '[Am] ¿Dónde es[G]tá el sol?'
+    );
+  });
 });
+

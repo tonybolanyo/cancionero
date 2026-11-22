@@ -16,194 +16,302 @@ export interface SyllableizedLine {
   syllableCount: number;
 }
 
+const SPANISH_INSEPARABLE_ONSETS = new Set([
+  'bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'tr',
+  'ch', 'll', 'rr', 'qu', 'gu'
+]);
+
+const ENGLISH_INSEPARABLE_ONSETS_2 = new Set([
+  'bl', 'br', 'ch', 'cl', 'cr', 'dr', 'dw', 'fl', 'fr', 'gh', 'gl', 'gr',
+  'kn', 'ph', 'pl', 'pr', 'qu', 'sc', 'sh', 'sk', 'sl', 'sm', 'sn', 'sp',
+  'sq', 'st', 'sw', 'th', 'tr', 'tw', 'wh', 'wr'
+]);
+
+const ENGLISH_INSEPARABLE_ONSETS_3 = new Set([
+  'scr', 'shr', 'spl', 'spr', 'str', 'squ', 'thr'
+]);
+
 /**
- * Spanish syllabification rules using common patterns
- * Conservative approach: uses vowel groups and common consonant clusters
- * Improved with better handling of Spanish-specific patterns
+ * Nucleus-based Spanish syllabification.
+ * Slices the original word directly so `syllables.join('') === word` always holds.
  */
 function syllabifySpanish(word: string): string[] {
-  if (!word || word.length === 0) return [];
+  if (!word) return [];
 
-  const syllables: string[] = [];
-  const vowels = /[aeiouáéíóúü]/i;
-  const consonants = /[bcdfghjklmnñprstvwxyz]/i;
-  
-  // Spanish consonant clusters that stay with the following vowel
-  const inseparableClusterStarts = new Set([
-    'bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'tr',
-    'ch', 'll', 'rr', 'ñ', // Already single char (ñ)
-  ]);
+  const w = word.toLowerCase();
+  const n = w.length;
+  const isBaseVowel = (ch: string) => /[aeiouáéíóúü]/.test(ch);
+  const isStrong = (ch: string) => /[aeoáéíóú]/.test(ch);
+  const isWeak = (ch: string) => /[iuü]/.test(ch);
 
-  let current = '';
+  // Determine which positions act as vowel nuclei characters
+  const isVowelPos = new Array<boolean>(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    const ch = w[i];
+    if (isBaseVowel(ch)) {
+      // Silent 'u' in qu + [e/i/é/í] or gu + [e/i/é/í] belongs to the consonant onset
+      if (
+        ch === 'u' &&
+        i > 0 &&
+        (w[i - 1] === 'q' || w[i - 1] === 'g') &&
+        i + 1 < n &&
+        /[eiéí]/.test(w[i + 1])
+      ) {
+        isVowelPos[i] = false;
+      } else {
+        isVowelPos[i] = true;
+      }
+    } else if (ch === 'y') {
+      // 'y' acts as vowel when standalone, at end of diphthong, or not followed by a vowel
+      const prevIsVowel = i > 0 && isVowelPos[i - 1];
+      const nextIsBaseVowel = i + 1 < n && isBaseVowel(w[i + 1]);
+      if (!nextIsBaseVowel && (prevIsVowel || n === 1 || (i > 0 && !isBaseVowel(w[i - 1])))) {
+        isVowelPos[i] = true;
+      }
+    }
+  }
+
+  // Group vowel positions into syllable nuclei respecting Spanish diphthongs, triphthongs, and hiatus
+  const nuclei: Array<{ start: number; end: number }> = [];
   let i = 0;
+  while (i < n) {
+    if (!isVowelPos[i]) {
+      i++;
+      continue;
+    }
 
-  while (i < word.length) {
-    const char = word[i];
-    const nextChar = word[i + 1];
-    const nextnextChar = word[i + 2];
+    const start = i;
+    let hasStrong = isStrong(w[i]);
+    let hadWeakAfterStrong = false;
+    i++;
 
-    current += char;
+    while (i < n && isVowelPos[i]) {
+      const ch = w[i];
+      const chStrong = isStrong(ch);
+      const chWeak = isWeak(ch) || ch === 'y';
 
-    // Syllable break detection at vowel boundaries
-    if (vowels.test(char) && nextChar) {
-      const isNextConsonant = consonants.test(nextChar);
-      const isNextVowel = vowels.test(nextChar);
-
-      if (isNextConsonant) {
-        // Check for inseparable clusters (should stay with next vowel)
-        const cluster = (nextChar + (nextnextChar || '')).toLowerCase();
-        const isInseparable = inseparableClusterStarts.has(cluster.slice(0, 2));
-
-        if (!isInseparable) {
-          // Break after single consonant
-          if (word[i + 2] && !vowels.test(word[i + 2])) {
-            // Next position is also consonant, so current consonant closes this syllable
-            current += word[i + 1];
-            syllables.push(current);
-            current = '';
-            i += 2;
-            continue;
-          } else {
-            // Single consonant before vowel - break here
-            syllables.push(current);
-            current = '';
-          }
+      if (chStrong) {
+        if (hasStrong || hadWeakAfterStrong) {
+          // Hiatus: two strong vowels or rising vowel after falling diphthong
+          break;
         }
-      } else if (isNextVowel && word[i + 2] && consonants.test(word[i + 2])) {
-        // Vowel + vowel + consonant pattern: break between vowels
-        syllables.push(current);
-        current = '';
+        hasStrong = true;
+        i++;
+      } else if (chWeak) {
+        if (hasStrong) {
+          hadWeakAfterStrong = true;
+        }
+        i++;
+      } else {
+        break;
       }
     }
 
-    i++;
+    nuclei.push({ start, end: i });
   }
 
-  if (current) {
-    syllables.push(current);
+  if (nuclei.length <= 1) {
+    return [word];
   }
 
-  return syllables.filter(s => s.length > 0);
+  // Determine exact split indices between consecutive nuclei
+  const splits: number[] = [0];
+  for (let k = 0; k < nuclei.length - 1; k++) {
+    const cStart = nuclei[k].end;
+    const cEnd = nuclei[k + 1].start;
+    const cluster = w.slice(cStart, cEnd);
+    const cLen = cluster.length;
+
+    let splitAt = cStart;
+    if (cLen === 0 || cLen === 1) {
+      splitAt = cStart;
+    } else if (cLen === 2) {
+      splitAt = SPANISH_INSEPARABLE_ONSETS.has(cluster) ? cStart : cStart + 1;
+    } else if (cLen === 3) {
+      splitAt = SPANISH_INSEPARABLE_ONSETS.has(cluster.slice(1)) ? cStart + 1 : cStart + 2;
+    } else {
+      splitAt = SPANISH_INSEPARABLE_ONSETS.has(cluster.slice(-2)) ? cStart + cLen - 2 : cStart + cLen - 1;
+    }
+
+    splits.push(splitAt);
+  }
+  splits.push(n);
+
+  const syllables: string[] = [];
+  for (let s = 0; s < splits.length - 1; s++) {
+    const part = word.slice(splits[s], splits[s + 1]);
+    if (part.length > 0) {
+      syllables.push(part);
+    }
+  }
+
+  return syllables.length > 0 ? syllables : [word];
 }
 
 /**
- * English syllabification using vowel group detection
- * Improved algorithm that handles common English syllable patterns
- * Based on consonant-vowel transitions and common syllable endings
+ * Nucleus-based English syllabification.
+ * Slices the original word directly so `syllables.join('') === word` always holds.
  */
 function syllabifyEnglish(word: string): string[] {
-  if (!word || word.length === 0) return [];
+  if (!word) return [];
 
-  const vowels = /[aeiouy]/i;
-  const consonants = /[bcdfghjklmnpqrstvwxz]/i;
-  const syllables: string[] = [];
-  let current = '';
+  const w = word.toLowerCase();
+  const n = w.length;
+  const isBaseVowel = (ch: string) => /[aeiou]/.test(ch);
 
+  const isVowelPos = new Array<boolean>(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    const ch = w[i];
+    if (isBaseVowel(ch)) {
+      // 'qu' before another vowel keeps 'u' as part of the onset glide
+      if (ch === 'u' && i > 0 && w[i - 1] === 'q' && i + 1 < n && isBaseVowel(w[i + 1])) {
+        isVowelPos[i] = false;
+      } else {
+        isVowelPos[i] = true;
+      }
+    } else if (ch === 'y') {
+      // 'y' is a consonant at word start before a vowel, otherwise vowel when not followed by vowel
+      const nextIsVowel = i + 1 < n && isBaseVowel(w[i + 1]);
+      if (i > 0 && !nextIsVowel) {
+        isVowelPos[i] = true;
+      }
+    }
+  }
+
+  const nuclei: Array<{ start: number; end: number }> = [];
   let i = 0;
-  while (i < word.length) {
-    const char = word[i];
-    const nextChar = word[i + 1];
-    const nextnextChar = word[i + 2];
-    const nextthirdChar = word[i + 3];
+  while (i < n) {
+    if (!isVowelPos[i]) {
+      i++;
+      continue;
+    }
+    const start = i;
+    while (i < n && isVowelPos[i]) {
+      i++;
+    }
+    nuclei.push({ start, end: i });
+  }
 
-    current += char;
+  // Handle silent trailing '-e' (except syllabic C + 'le' endings like "simple", "table")
+  if (nuclei.length > 1) {
+    const last = nuclei[nuclei.length - 1];
+    const prev = nuclei[nuclei.length - 2];
+    if (last.end === n && last.end - last.start === 1 && w[last.start] === 'e') {
+      const cLen = last.start - prev.end;
+      const isSyllabicLe = cLen >= 2 && w[last.start - 1] === 'l';
+      if (cLen >= 1 && !isSyllabicLe) {
+        nuclei.pop();
+      }
+    }
+  }
 
-    // When we encounter a consonant after a vowel (potential break point)
-    if (i > 0 && vowels.test(word[i - 1]) && consonants.test(char)) {
-      // Look ahead to decide if we break here
-      if (nextChar) {
-        const nextIsVowel = vowels.test(nextChar);
-        const nextIsConsonant = consonants.test(nextChar);
+  if (nuclei.length <= 1) {
+    return [word];
+  }
 
-        if (nextIsVowel) {
-          // CV pattern: if double consonant, keep both with next syllable
-          if (consonants.test(nextChar)) {
-            // Single consonant before vowel - might break here
-            syllables.push(current);
-            current = '';
-          } else if (
-            nextthirdChar &&
-            consonants.test(nextnextChar) &&
-            vowels.test(nextthirdChar)
-          ) {
-            // CCV pattern: break before the cluster
-            syllables.push(current);
-            current = '';
-          }
-        } else if (nextIsConsonant && !nextChar) {
-          // End of word with consonant cluster
-          current += nextChar;
-          i++;
-        }
+  const splits: number[] = [0];
+  for (let k = 0; k < nuclei.length - 1; k++) {
+    const cStart = nuclei[k].end;
+    const cEnd = nuclei[k + 1].start;
+    const cluster = w.slice(cStart, cEnd);
+    const cLen = cluster.length;
+
+    let splitAt = cStart;
+    if (cLen === 0 || cLen === 1) {
+      splitAt = cStart;
+    } else if (cLen === 2) {
+      splitAt = ENGLISH_INSEPARABLE_ONSETS_2.has(cluster) ? cStart : cStart + 1;
+    } else {
+      if (ENGLISH_INSEPARABLE_ONSETS_3.has(cluster.slice(-3))) {
+        splitAt = cStart + cLen - 3;
+      } else if (ENGLISH_INSEPARABLE_ONSETS_2.has(cluster.slice(-2))) {
+        splitAt = cStart + cLen - 2;
+      } else {
+        splitAt = cStart + cLen - 1;
       }
     }
 
-    i++;
+    splits.push(splitAt);
+  }
+  splits.push(n);
+
+  const syllables: string[] = [];
+  for (let s = 0; s < splits.length - 1; s++) {
+    const part = word.slice(splits[s], splits[s + 1]);
+    if (part.length > 0) {
+      syllables.push(part);
+    }
   }
 
-  if (current) {
-    syllables.push(current);
-  }
-
-  return syllables.filter(s => s.length > 0);
+  return syllables.length > 0 ? syllables : [word];
 }
+
+const SPANISH_WORD_PATTERN = /\b(el|la|los|las|un|una|unos|unas|de|del|al|que|y|o|está|están|estoy|son|es|era|fue|como|cuando|donde|quien|si|no|ni|bien|mal|en|me|te|se|le|lo|nos|os|les|mi|tu|su|mis|tus|sus|con|sin|para|por|sobre|entre|hasta|desde|hacia|más|menos|muy|pero|aunque|porque|también|este|esta|esto|ese|esa|eso|aquel|aquella|aquello|todo|toda|todos|todas|nada|algo|siempre|nunca|ya|hoy|ayer|mañana|yo|tú|él|ella|ellos|ellas|hay|tengo|tiene|guarda|perdón|bolsillo|así|noche|día|luz|sol|mar|cielo|voz|alma|vida|amor|tiempo|verdad|silencio|corazón)\b/gi;
+const ENGLISH_WORD_PATTERN = /\b(the|a|an|and|or|is|are|was|were|been|be|have|has|had|do|does|did|will|would|could|should|can|may|might|must|shall|if|but|what|which|who|where|when|why|how|as|at|by|for|from|in|of|on|to|with|without|about|above|after|before|between|during|through|until|under|over|some|any|all|each|every|both|either|neither|few|many|much|several|such|same|other|more|most|less|least|another|you|your|my|our|their|his|her|its|this|that|these|those|they|we|she|he|it|not|never|always|love|night|time|life|heart|world|light|day|way|here|there|now|then)\b/gi;
 
 /**
  * Detects language (Spanish/English) from text patterns
- * Uses multiple heuristics:
- * 1. Direct character indicators (accents, special letters)
- * 2. Common word patterns
- * 3. Phonetic patterns
  */
 function detectLanguage(text: string): 'es' | 'en' {
   const lowerText = text.toLowerCase();
 
   // Definitive Spanish indicators
-  const spanishIndicators = /[áéíóúñü]/;
-  if (spanishIndicators.test(lowerText)) {
+  if (/[áéíóúñü¿¡]/.test(lowerText)) {
     return 'es';
   }
 
-  // Common word patterns weighted
-  const spanishPattern = /\b(el|la|un|una|de|que|y|o|está|son|como|si|bien|es|en|no|me|te|se|le|nos|os|con|para|por|más|muy|pero|también|ese|ese|eso|este|esto|ese|aquel|aquello)\b/gi;
-  const englishPattern = /\b(the|a|an|and|or|is|are|was|were|been|be|have|has|had|do|does|did|will|would|could|should|can|may|might|must|shall|if|but|what|which|who|where|when|why|how|as|at|by|for|from|in|of|on|to|with|without|about|above|after|before|between|during|through|until|under|over|some|any|all|each|every|both|either|neither|few|many|much|several|such|same|other|more|most|less|least|same|other|another)\b/gi;
+  let esScore = (lowerText.match(SPANISH_WORD_PATTERN) || []).length * 2;
+  let enScore = (lowerText.match(ENGLISH_WORD_PATTERN) || []).length * 2;
 
-  const spanishMatches = (lowerText.match(spanishPattern) || []).length;
-  const englishMatches = (lowerText.match(englishPattern) || []).length;
+  // Orthographic heuristics
+  esScore += (lowerText.match(/(?:ll|rr|qu[ei]|gu[ei]|ci[oó]n|si[oó]n|ando|iendo|mente|illo|illa)/g) || []).length;
+  enScore += (lowerText.match(/(?:th|sh|wh|ck|igh|ough|oo|ee|tion|sion|ing\b|ness\b|ment\b|[wk]|'t\b|'re\b|'ve\b|'ll\b|'m\b)/g) || []).length;
 
-  // If we have significant matches, use ratio
-  if (spanishMatches > 0 || englishMatches > 0) {
-    return englishMatches >= spanishMatches ? 'en' : 'es';
+  if (enScore > esScore) {
+    return 'en';
   }
 
-  // Fallback: check for 'u' before consonant (Spanish tendency) vs other patterns
-  const spanishUPattern = /u[bcdfghjklmnpqrstvwxz]/gi;
-  const spanishUMatches = (lowerText.match(spanishUPattern) || []).length;
+  return 'es';
+}
 
-  return spanishUMatches > 2 ? 'es' : 'en';
+function detectWordLanguage(word: string, lineLanguage: 'es' | 'en'): 'es' | 'en' {
+  const lower = word.toLowerCase();
+  if (/[áéíóúñü]/.test(lower)) {
+    return 'es';
+  }
+  if (/(?:th|sh|wh|ck|igh|ough|oo|ee|tion|sion|ing$|ness$|'t$|'re$|'ve$|'ll$|'m$|[wk])/.test(lower)) {
+    return 'en';
+  }
+  return lineLanguage;
 }
 
 /**
- * Syllabifies a single word using language-specific rules
- * Handles mixed case, accents, and special characters
+ * Syllabifies a single word using language-specific rules.
+ * Preserves original casing and guarantees `syllables.join('') === word` for letter tokens.
  */
 export function syllabifyWord(word: string): string[] {
-  const cleanWord = word.toLowerCase().replace(/[^a-záéíóúñü]/gi, '');
+  if (!word) return [];
+  const trimmed = word.trim();
+  if (!trimmed) return [word];
+
+  // If word contains surrounding punctuation, strip only for analysis if pure word
+  const cleanWord = trimmed.replace(/[^a-záéíóúñü'’]/gi, '');
   if (!cleanWord) return [word];
 
   const language = detectLanguage(cleanWord);
   const syllables = language === 'es' ? syllabifySpanish(cleanWord) : syllabifyEnglish(cleanWord);
 
   if (syllables.length === 0) {
-    return [word];
+    return [cleanWord];
   }
 
   return syllables;
 }
 
 /**
- * Syllabifies a complete line of lyrics
- * Splits by words, syllabifies each word, and tracks character positions
+ * Syllabifies a complete line of lyrics.
+ * Matches word tokens directly by exact character offsets so all whitespace, quotes,
+ * and punctuation are preserved verbatim without character index drift.
  */
 export function syllabifyLine(line: string): SyllableizedLine {
   const text = line.trim();
@@ -215,41 +323,36 @@ export function syllabifyLine(line: string): SyllableizedLine {
     };
   }
 
+  const lineLanguage = detectLanguage(text);
   const syllables: Syllable[] = [];
   let syllableIndex = 0;
-  let charIndex = 0;
 
-  // Split by whitespace and punctuation boundaries
-  const tokens = text.split(/(\s+|[-–—,.:;!?¿¡])/);
+  // Match contiguous letter/number words (including internal apostrophes like "don't")
+  const wordRegex = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
 
-  for (const token of tokens) {
-    if (!token || /^\s+$/.test(token)) {
-      // Track whitespace for position mapping
-      charIndex += token.length;
-      continue;
-    }
+  for (const match of text.matchAll(wordRegex)) {
+    const token = match[0];
+    const tokenStart = match.index ?? 0;
 
-    // Check if token is punctuation
-    if (/^[-–—,.:;!?¿¡]+$/.test(token)) {
-      charIndex += token.length;
-      continue;
-    }
+    // Pure numeric tokens stay as a single syllable
+    const wordSyllables = /^\p{N}+$/u.test(token)
+      ? [token]
+      : (detectWordLanguage(token, lineLanguage) === 'es'
+          ? syllabifySpanish(token)
+          : syllabifyEnglish(token));
 
-    // Syllabify the word
-    const wordSyllables = syllabifyWord(token);
     let tokenOffset = 0;
-
     for (const syl of wordSyllables) {
-      const originalCasedSyl = token.substring(tokenOffset, tokenOffset + syl.length) || syl;
+      if (!syl) continue;
+      const startChar = tokenStart + tokenOffset;
+      const endChar = startChar + syl.length;
       syllables.push({
-        text: originalCasedSyl,
-        index: syllableIndex,
-        startChar: charIndex,
-        endChar: charIndex + originalCasedSyl.length
+        text: syl,
+        index: syllableIndex++,
+        startChar,
+        endChar
       });
-      charIndex += originalCasedSyl.length;
-      tokenOffset += originalCasedSyl.length;
-      syllableIndex++;
+      tokenOffset += syl.length;
     }
   }
 
@@ -341,8 +444,8 @@ export function mapChordsToSyllables(
 
 /**
  * Rebuilds a lyric line with chords positioned at syllables
- * Format: [Chord]syllable[Chord]syllable...
- * Preserves whitespace and punctuation from original text
+ * Format: [Chord] syllable ... [Chord]syllable...
+ * Preserves whitespace and punctuation from original text verbatim
  */
 export function reconstructLineWithChords(
   syllabized: SyllableizedLine,
@@ -360,7 +463,23 @@ export function reconstructLineWithChords(
 
   for (let i = 0; i < syllables.length; i++) {
     const syl = syllables[i];
-    
+    const chord = chordMap.get(i);
+
+    // Handle leading whitespace/opening punctuation before the first syllable
+    if (i === 0 && syl.startChar > lastEndChar) {
+      const leading = originalText.substring(lastEndChar, syl.startChar);
+      if (chord) {
+        const leadingSpaces = leading.match(/^\s*/)?.[0] ?? '';
+        const leadingPunct = leading.slice(leadingSpaces.length);
+        result.push(`${leadingSpaces}[${chord}] ${leadingPunct}`);
+      } else {
+        result.push(leading);
+      }
+      result.push(syl.text);
+      lastEndChar = syl.endChar;
+      continue;
+    }
+
     // Add any whitespace/punctuation between last syllable and this one
     if (syl.startChar > lastEndChar) {
       const gap = originalText.substring(lastEndChar, syl.startChar);
@@ -368,7 +487,6 @@ export function reconstructLineWithChords(
     }
 
     // Add chord if present
-    const chord = chordMap.get(i);
     if (chord) {
       if (i === 0 && lastEndChar === 0) {
         result.push(`[${chord}] `);
@@ -389,3 +507,4 @@ export function reconstructLineWithChords(
 
   return result.join('');
 }
+
