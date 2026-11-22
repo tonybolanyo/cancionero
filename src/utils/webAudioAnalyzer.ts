@@ -312,6 +312,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       windowDurationSec: 1.5,
       hopDurationSec: 0.75,
       dualBand: true,
+      tripleBand: true, // NEW: Enable high-band extraction (600–2000 Hz) for guitar harmonics
       referenceA4Hz: calibratedA4
     });
 
@@ -325,7 +326,8 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
           key,
           scale: scale === 'Menor' ? 'minor' : 'major',
           confidence: 0.75
-        }
+        },
+        detectedTempo: bpm // NEW: Pass detected BPM for tempo-adaptive templating
       }
     );
 
