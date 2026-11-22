@@ -8,6 +8,8 @@ Se ha implementado un **Sistema de Diccionario de Acordes** que permite:
 2. ✅ Permitir que el usuario **seleccione qué posición usar**
 3. ✅ Almacenar posiciones en un **archivo JSON** como base de datos
 4. ✅ Mostrar información de **dificultad** y **descripción** de cada posición
+5. ✅ Soportar **acordes extendidos de jazz** (6ª, 9ª, 13ª, alterados, etc.)
+6. ✅ Incluir **voicings realistas** para guitarra en múltiples inversiones
 
 ## 🏗️ Estructura de Archivos
 
@@ -211,6 +213,80 @@ Proceso:
 5. `generate-robots` - Genera SEO
 6. `generate-sitemap` - Genera sitemap
 
+## 🎼 Acordes Extendidos de Jazz
+
+Desde la v2.0.0, el diccionario incluye **180 nuevos acordes extendidos**, perfectos para jazz, fusion y géneros contemporáneos:
+
+### Categorías Incluidas
+
+#### 1. Acordes de 6ª (Sixths)
+```
+C6, Cm6, C6/9, Cm6/9 (y todas las notas)
+```
+- Sonoridad brillante y abierta
+- Común en soul y jazz
+- Dificultad: Easy-Medium
+
+#### 2. Acordes de 13ª (Thirteenths)
+```
+C13, Cmaj13, Cm13 (y todas las notas)
+```
+- Máxima extensión armónica
+- Muy usado en jazz moderno
+- Dificultad: Hard
+
+#### 3. Acordes Alterados (Alt Chords)
+```
+C7alt, C7#11, C9#11, Cmaj7#11 (y todas las notas)
+```
+- Crean tensión máxima
+- Excelentes para resoluciones
+- Lidia y modos alterados
+- Dificultad: Hard
+
+#### 4. Acordes Suspendidos Extendidos
+```
+C7sus4, C9sus4 (y todas las notas)
+```
+- Flotantes y modernos
+- Perfectos para R&B y neo-soul
+- Dificultad: Hard
+
+#### 5. Half-Diminuidos (m7b5)
+```
+Cm7b5 (y todas las notas)
+```
+- Fundamental en jazz (ii en ii-V-I)
+- Semidisminuido
+- Dificultad: Medium-Hard
+
+**Documentación completa**: Ver [JAZZ_EXTENDED_CHORDS.md](./JAZZ_EXTENDED_CHORDS.md)
+
+**Ejemplos de uso**: Ver [JAZZ_EXTENDED_EXAMPLES.md](./JAZZ_EXTENDED_EXAMPLES.md)
+
+### Búsqueda de Acordes Extendidos
+
+Puedes buscar acordes por:
+- **Nombre exacto**: "Cmaj13", "Am7b5"
+- **Extensión**: "9#11", "maj13", "7alt"
+- **Patrón**: "maj" (encuentra todos los major)
+
+Todos los acordes tienen:
+- ✅ Múltiples posiciones en trastes diferentes
+- ✅ Información de dificultad (Easy/Medium/Hard)
+- ✅ Descripciones de cada posición
+- ✅ Voicings realistas para guitarra
+
+### Estadísticas
+
+| Métrica | Valor |
+|---------|-------|
+| **Total de acordes** | 468 |
+| **Acordes extendidos nuevos** | 180 |
+| **Tipos de extensión** | 15 |
+| **Notas soportadas** | 12 |
+| **Voicings por acorde** | 2-5 |
+
 ## 📱 Responsividad
 
 Los componentes son completamente responsivos:
@@ -244,6 +320,8 @@ Si el diccionario no está disponible o carga falla:
 4. **Base de datos**: Migrar a SQLite o Firebase
 5. **Favoritos**: Guardar posiciones preferidas del usuario
 6. **Videos**: Ligar videos tutoriales a cada posición
+7. **Slash chords**: Acordes con bajos específicos (C/G, etc.)
+8. **Polychords**: Acordes politónicos y complejos
 
 ## 🐛 Troubleshooting
 
@@ -282,10 +360,16 @@ const allChords = getAllChords();
 
 // Colores de dificultad
 const color = getDifficultyColor('medium'); // 'text-yellow-500'
+
+// Buscar acordes extendidos
+const jazzChords = getAllChords().filter(chord => 
+  chord.includes('maj13') || chord.includes('7alt') || chord.includes('m7b5')
+);
 ```
 
 ---
 
-**Versión**: 1.0.0  
+**Versión**: 2.0.0 (con acordes extendidos)  
 **Última actualización**: 2026-11-22  
 **Instrumento**: Guitarra (extensible a otros)
+**Géneros soportados**: Jazz, Fusion, R&B, Neo-soul, Progressive

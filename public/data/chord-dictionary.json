@@ -22751,14 +22751,6494 @@
           "description": "Traste 4 con cejilla (3 notas)"
         }
       ]
+    },
+    "C6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "C13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Cm6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "C6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Cm6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Cmaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Cm13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Cmaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Cmaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#m6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "C#m6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "C#maj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#m13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#maj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "C#maj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "D13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Dm6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "D6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Dm6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Dmaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Dm13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Dmaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Dmaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#m6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "D#m6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "D#maj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#m13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#maj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "D#maj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "E13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Em6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "E6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Em6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Emaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Em13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Emaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "E7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Emaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "F13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Fm6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "F6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Fm6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Fmaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Fm13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Fmaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Fmaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#m6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "F#m6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "F#maj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#m13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#maj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "F#maj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "G13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Gm6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "G6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Gm6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Gmaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Gm13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Gmaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Gmaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#m6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "G#m6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "G#maj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#m13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#maj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "G#maj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "A13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Am6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "A6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Am6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Amaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Am13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Amaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Amaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#m6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "A#m6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "A#maj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#m13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#maj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "A#maj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            6,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "B13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 13 (simplified) (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Bm6": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            1,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "easy",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "medium",
+          "description": "Fret 5 barre (5-6 notas)"
+        },
+        {
+          "name": "Posición 3 (Traste 6)",
+          "frets": [
+            8,
+            7,
+            5,
+            7,
+            6,
+            8
+          ],
+          "baseFret": 6,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 6 position (5-6 notas)"
+        }
+      ]
+    },
+    "B6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            2,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Bm6/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Abierta)",
+          "frets": [
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "baseFret": 0,
+          "barre": null,
+          "difficulty": "medium",
+          "description": "Open position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Fret 5 barre (5-6 notas)"
+        }
+      ]
+    },
+    "Bmaj13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Bm13": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            3,
+            4,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Minor 13 position (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            6,
+            7,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B7alt": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            4,
+            4,
+            5,
+            5,
+            6
+          ],
+          "baseFret": 5,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Alt dominant voicing (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            7,
+            7,
+            8,
+            8,
+            9
+          ],
+          "baseFret": 8,
+          "barre": null,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B9#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 9 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Bmaj7#11": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            4,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 #11 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            7,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B7sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Power chord + 7th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B9sus4": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            5,
+            5,
+            6,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Sus4 with 9th (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "B7/9": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Dominant 7 with 9 (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
+    },
+    "Bmaj7#5": {
+      "positions": [
+        {
+          "name": "Posición 1 (Traste 5)",
+          "frets": [
+            5,
+            5,
+            4,
+            5,
+            5,
+            5
+          ],
+          "baseFret": 5,
+          "barre": 5,
+          "difficulty": "hard",
+          "description": "Major 7 augmented (5-6 notas)"
+        },
+        {
+          "name": "Posición 2 (Traste 8)",
+          "frets": [
+            8,
+            8,
+            7,
+            8,
+            8,
+            8
+          ],
+          "baseFret": 8,
+          "barre": 8,
+          "difficulty": "hard",
+          "description": "Fret 8 position (5-6 notas)"
+        }
+      ]
     }
   },
   "metadata": {
-    "version": "3.0.0",
-    "lastUpdated": "2026-11-22",
+    "version": "2.0.0",
+    "lastUpdated": "2026-11-22T15:00:28.127Z",
     "instrument": "guitar",
     "tuning": "standard",
-    "description": "Diccionario expandido de acordes para guitarra con múltiples posiciones",
+    "description": "Extended chord dictionary with jazz extensions (6th, 9th, 11th, 13th, alt chords)",
     "totalChords": 288,
     "totalPositions": 1440,
     "generated": true,
