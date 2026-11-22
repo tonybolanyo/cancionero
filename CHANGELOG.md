@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-11-22
+
+### 🎉 Features
+
+- integrate triple-band and tempo-adaptive templating in audio analyzer ([6bff30d](../../commit/6bff30d)) - tonybolanyo
+- integrate high-chroma weighting in Viterbi emissions ([9661c3e](../../commit/9661c3e)) - Mejora B) (tonybolanyo
+- implement triple-band chromagram extraction ([a75b3c1](../../commit/a75b3c1)) - Mejora A) (tonybolanyo
+
+### 🔄 Other Changes
+
+- feat ([fb8a263](../../commit/fb8a263)) - BREAKING): upgrade chord detection (Tony G. Bolaño
+- feat ([275b95f](../../commit/275b95f)) - analyzer): Phase 2 Mejora E - Enable percussion onset detection and masking (tonybolanyo
+- feat ([02684d1](../../commit/02684d1)) - chords): Phase 2 Mejora C - Integrate bass temporal validation into slash chord resolution (tonybolanyo
+- feat ([8608528](../../commit/8608528)) - audio): Phase 2 Mejora C - Add bass note temporal validation (tonybolanyo
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.29.0] - 2026-11-22
 
 ### 🎉 Features
