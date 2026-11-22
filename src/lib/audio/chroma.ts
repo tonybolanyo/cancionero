@@ -47,12 +47,18 @@ export interface DualBandFrameChroma {
   bassEstimate: BassPitchEstimate;
 }
 
+export interface TripleBandFrameChroma extends DualBandFrameChroma {
+  /** High-frequency 12-bin chromagram (600–2000 Hz, normalized 0..1) for guitar harmonics */
+  highChroma?: number[];
+}
+
 export interface WindowedChroma {
   startTime: number;
   endTime: number;
   chroma: number[];
   bassChroma?: number[];
   midChroma?: number[];
+  highChroma?: number[];
   bassEstimate?: BassPitchEstimate;
   /** Root-mean-square acoustic energy of this audio window (0..1) */
   rmsEnergy?: number;
@@ -64,10 +70,13 @@ export interface ChromaOptions {
   minFrequency?: number;      // default: 65 Hz (approx C2)
   maxFrequency?: number;      // default: 1100 Hz (approx C6)
   dualBand?: boolean;         // default: true (compute 40-180Hz bass + 180-1200Hz mid)
+  tripleBand?: boolean;       // NEW: default true (compute 600-2000Hz high for guitar harmonics)
   bassMinFrequency?: number;  // default: 40 Hz
   bassMaxFrequency?: number;  // default: 180 Hz
   midMinFrequency?: number;   // default: 180 Hz
   midMaxFrequency?: number;   // default: 1200 Hz
+  highMinFrequency?: number;  // NEW: default: 600 Hz (guitar harmonics)
+  highMaxFrequency?: number;  // NEW: default: 2000 Hz (guitar harmonics)
   referenceA4Hz?: number;     // default: 440 Hz (tuning calibration)
 }
 
@@ -330,6 +339,63 @@ export function computeDualBandFrameChroma(
 }
 
 /**
+ * Computes triple-band chromagram (bass, mid, high) for a frame.
+ * Extends dual-band with high-frequency (600–2000 Hz) for guitar harmonics.
+ */
+export function computeTripleBandFrameChroma(
+  frameData: Float32Array,
+  sampleRate: number,
+  options: {
+    bassMinFrequency?: number;
+    bassMaxFrequency?: number;
+    midMinFrequency?: number;
+    midMaxFrequency?: number;
+    highMinFrequency?: number;
+    highMaxFrequency?: number;
+    referenceA4Hz?: number;
+  } = {}
+): TripleBandFrameChroma {
+  const highMin = options.highMinFrequency ?? 600;
+  const highMax = options.highMaxFrequency ?? 2000;
+
+  // First, get dual-band chroma
+  const dual = computeDualBandFrameChroma(frameData, sampleRate, {
+    bassMinFrequency: options.bassMinFrequency,
+    bassMaxFrequency: options.bassMaxFrequency,
+    midMinFrequency: options.midMinFrequency,
+    midMaxFrequency: options.midMaxFrequency,
+    referenceA4Hz: options.referenceA4Hz
+  });
+
+  if (frameData.length === 0 || sampleRate <= 0) {
+    return {
+      ...dual,
+      highChroma: new Array(12).fill(0)
+    };
+  }
+
+  // Compute high-frequency band (600–2000 Hz) for guitar harmonics
+  const highRes = computeMidiBandPowers(frameData, sampleRate, highMin, highMax, 2048, options.referenceA4Hz ?? DEFAULT_A4_HZ);
+  const highRaw = new Float64Array(12);
+
+  for (let i = 0; i < highRes.midiNotes.length; i++) {
+    const pc = ((highRes.midiNotes[i] % 12) + 12) % 12;
+    const p = highRes.powers[i];
+    highRaw[pc] += p;
+  }
+
+  const highChroma = normalizeChromaVector(highRaw);
+
+  return {
+    chroma: dual.chroma,
+    bassChroma: dual.bassChroma,
+    midChroma: dual.midChroma,
+    highChroma,
+    bassEstimate: dual.bassEstimate
+  };
+}
+
+/**
  * Computes root-mean-square (RMS) acoustic energy for a signal slice.
  */
 export function computeRmsEnergy(frameData: Float32Array): number {
@@ -354,12 +420,36 @@ export function computeWindowedChromagrams(
   const windowDurationSec = options.windowDurationSec ?? 1.5; // 1.5 seconds window
   const hopDurationSec = options.hopDurationSec ?? (windowDurationSec * 0.5); // 50% overlap
   const useDualBand = options.dualBand ?? true;
+  const useTripleBand = options.tripleBand ?? true; // NEW: default true
 
   const windowSamples = Math.floor(windowDurationSec * sampleRate);
   const hopSamples = Math.floor(hopDurationSec * sampleRate);
 
   const computeWindow = (slice: Float32Array, startTime: number, endTime: number): WindowedChroma => {
     const rmsEnergy = computeRmsEnergy(slice);
+
+    // NEW: Try triple-band first (if enabled)
+    if (useTripleBand && useDualBand) {
+      const triple = computeTripleBandFrameChroma(slice, sampleRate, {
+        bassMinFrequency: options.bassMinFrequency,
+        bassMaxFrequency: options.bassMaxFrequency,
+        midMinFrequency: options.midMinFrequency,
+        midMaxFrequency: options.midMaxFrequency,
+        highMinFrequency: options.highMinFrequency,
+        highMaxFrequency: options.highMaxFrequency,
+        referenceA4Hz: options.referenceA4Hz
+      });
+      return {
+        startTime,
+        endTime,
+        chroma: triple.chroma,
+        bassChroma: triple.bassChroma,
+        midChroma: triple.midChroma,
+        highChroma: triple.highChroma,
+        bassEstimate: triple.bassEstimate,
+        rmsEnergy
+      };
+    }
 
     if (useDualBand) {
       const dual = computeDualBandFrameChroma(slice, sampleRate, {
