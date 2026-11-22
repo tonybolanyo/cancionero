@@ -74,6 +74,44 @@ test('chordDiagrams supports guitar tunings, slash chords, ukulele, piano, and o
   const stdG = getGuitarVoicing('G', 'Estándar (EADGBE)');
   assert.deepStrictEqual(stdG.frets, [3, 2, 0, 0, 0, 3]);
 
+  const gSlashE = getGuitarVoicing('G/E', 'Estándar (EADGBE)');
+  assert.notDeepStrictEqual(gSlashE.frets, stdG.frets);
+  assert.strictEqual(Math.min(...gSlashE.midiNotes) % 12, 4); // low E bass
+  assert.deepStrictEqual(gSlashE.frets, [0, 2, 0, 0, 0, 3]);
+
+  const slashChordsToVerify: Array<[string, number]> = [
+    ['G/E', 4],
+    ['G/F#', 6],
+    ['G/D', 2],
+    ['G/C', 0],
+    ['G/B', 11],
+    ['G/A', 9],
+    ['C/E', 4],
+    ['C/B', 11],
+    ['C/D', 2],
+    ['C/F#', 6],
+    ['F/A', 9],
+    ['F/C', 0],
+    ['F/D', 2],
+    ['F/G', 7],
+    ['Am/C', 0],
+    ['Am/F#', 6],
+    ['Bm/D', 2],
+    ['Bm/E', 4],
+    ['Bb/C', 0],
+    ['Bb/C#', 1],
+    ['D/Gb', 6],
+  ];
+  for (const [chord, expectedBassPc] of slashChordsToVerify) {
+    const v = getGuitarVoicing(chord, 'Estándar (EADGBE)');
+    assert.ok(v.midiNotes.length >= 4, `Expected >=4 sounded strings for ${chord}`);
+    assert.strictEqual(
+      Math.min(...v.midiNotes) % 12,
+      expectedBassPc,
+      `Expected bass pc ${expectedBassPc} for ${chord}, got frets ${JSON.stringify(v.frets)}`
+    );
+  }
+
   const dSlashFSharp = getGuitarVoicing('D/F#', 'Estándar (EADGBE)');
   assert.strictEqual(dSlashFSharp.frets[0], 2); // low F# on 6th string
 
@@ -81,14 +119,22 @@ test('chordDiagrams supports guitar tunings, slash chords, ukulele, piano, and o
   assert.strictEqual(dropDC.stringNames[0], 'D');
   assert.ok(dropDC.midiNotes.length >= 4);
 
+  const dropDGSlashE = getGuitarVoicing('G/E', 'Drop D (DADGBE)');
+  assert.strictEqual(Math.min(...dropDGSlashE.midiNotes) % 12, 4);
+
   const dadgadG = getGuitarVoicing('G', 'DADGAD');
   assert.strictEqual(dadgadG.stringNames.join(''), 'DADGAd');
+  assert.strictEqual(Math.min(...dadgadG.midiNotes) % 12, 7);
 
   const ukeC = getUkuleleVoicing('C');
   assert.deepStrictEqual(ukeC.frets, [0, 0, 0, 3]);
 
   const pianoAm = getPianoVoicing('Am');
   assert.deepStrictEqual(pianoAm.pitchClasses, [9, 0, 4]); // A, C, E
+
+  const pianoGSlashE = getPianoVoicing('G/E');
+  assert.strictEqual(pianoGSlashE.bassPitchClass, 4); // E bass
+  assert.deepStrictEqual(pianoGSlashE.pitchClasses, [7, 11, 2]); // G, B, D
 
   const unique = extractUniqueChordsFromLyrics('[F#m]Uno [D]dos [A]tres [E]cuatro [F#m]cinco');
   assert.deepStrictEqual(unique, ['F#m', 'D', 'A', 'E']);

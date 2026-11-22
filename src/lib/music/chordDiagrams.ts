@@ -90,20 +90,36 @@ export function resolveGuitarTuning(tuningStr?: string): GuitarTuningSpec {
 export function parseChordIntervals(chordSymbol: string): {
   rootPc: number;
   bassPc: number;
+  hasExplicitBass: boolean;
   intervals: number[];
   canonicalName: string;
 } {
   const cleaned = (chordSymbol || 'C').trim();
-  const [mainPart, bassPart] = cleaned.split('/');
-  const match = mainPart.match(/^([A-G][#b]?)(.*)$/);
+  const slashIdx = cleaned.indexOf('/');
+  const mainPart = slashIdx >= 0 ? cleaned.slice(0, slashIdx).trim() : cleaned;
+  const bassPart = slashIdx >= 0 ? cleaned.slice(slashIdx + 1).trim() : '';
+
+  const match = mainPart.match(/^([A-G][#b]?)(.*)$/i);
   if (!match) {
-    return { rootPc: 0, bassPc: 0, intervals: [0, 4, 7], canonicalName: cleaned };
+    return { rootPc: 0, bassPc: 0, hasExplicitBass: false, intervals: [0, 4, 7], canonicalName: cleaned };
   }
 
   const rootName = match[1].charAt(0).toUpperCase() + match[1].slice(1);
   const rootPc = NOTE_TO_PC[rootName] ?? 0;
   const suffix = match[2].trim();
-  const bassPc = bassPart ? (NOTE_TO_PC[bassPart.trim()] ?? rootPc) : rootPc;
+
+  let bassPc = rootPc;
+  let hasExplicitBass = false;
+  if (bassPart) {
+    const bassMatch = bassPart.match(/^([A-G][#b]?)$/i);
+    if (bassMatch) {
+      const bassName = bassMatch[1].charAt(0).toUpperCase() + bassMatch[1].slice(1);
+      if (NOTE_TO_PC[bassName] !== undefined) {
+        bassPc = NOTE_TO_PC[bassName];
+        hasExplicitBass = bassPc !== rootPc;
+      }
+    }
+  }
 
   let intervals = [0, 4, 7];
   if (suffix === '' || suffix === 'maj') intervals = [0, 4, 7];
@@ -112,23 +128,31 @@ export function parseChordIntervals(chordSymbol: string): {
   else if (suffix === '7') intervals = [0, 4, 7, 10];
   else if (suffix === 'maj7' || suffix === 'M7') intervals = [0, 4, 7, 11];
   else if (suffix === 'm7' || suffix === 'min7') intervals = [0, 3, 7, 10];
-  else if (suffix === 'mMaj7') intervals = [0, 3, 7, 11];
+  else if (suffix === 'mMaj7' || suffix === 'm(maj7)') intervals = [0, 3, 7, 11];
   else if (suffix === 'sus2') intervals = [0, 2, 7];
   else if (suffix === 'sus4' || suffix === 'sus') intervals = [0, 5, 7];
   else if (suffix === '7sus4') intervals = [0, 5, 7, 10];
+  else if (suffix === '7sus2') intervals = [0, 2, 7, 10];
   else if (suffix === 'dim' || suffix === '°') intervals = [0, 3, 6];
   else if (suffix === 'dim7' || suffix === '°7') intervals = [0, 3, 6, 9];
   else if (suffix === 'm7b5' || suffix === 'ø' || suffix === 'ø7') intervals = [0, 3, 6, 10];
   else if (suffix === 'aug' || suffix === '+') intervals = [0, 4, 8];
-  else if (suffix === 'add9') intervals = [0, 4, 7, 14];
-  else if (suffix === 'madd9') intervals = [0, 3, 7, 14];
+  else if (suffix === 'add9' || suffix === 'add2') intervals = [0, 4, 7, 14];
+  else if (suffix === 'madd9' || suffix === 'madd2') intervals = [0, 3, 7, 14];
   else if (suffix === '6') intervals = [0, 4, 7, 9];
   else if (suffix === 'm6') intervals = [0, 3, 7, 9];
+  else if (suffix === '6/9') intervals = [0, 4, 7, 9, 14];
   else if (suffix === '9') intervals = [0, 4, 7, 10, 14];
   else if (suffix === 'm9') intervals = [0, 3, 7, 10, 14];
+  else if (suffix === 'maj9' || suffix === 'M9') intervals = [0, 4, 7, 11, 14];
+  else if (suffix === '7b9') intervals = [0, 4, 7, 10, 13];
+  else if (suffix === '7#9') intervals = [0, 4, 7, 10, 15];
+  else if (suffix === '7b5') intervals = [0, 4, 6, 10];
+  else if (suffix === '7#5') intervals = [0, 4, 8, 10];
+  else if (suffix === '11') intervals = [0, 4, 7, 10, 17];
   else if (suffix.startsWith('m')) intervals = [0, 3, 7];
 
-  return { rootPc, bassPc, intervals, canonicalName: cleaned };
+  return { rootPc, bassPc, hasExplicitBass, intervals, canonicalName: cleaned };
 }
 
 /**
@@ -140,7 +164,11 @@ const STANDARD_GUITAR_VOICINGS: Record<string, { frets: number[]; barre?: number
   'C7': { frets: [-1, 3, 2, 3, 1, 0] },
   'Cmaj7': { frets: [-1, 3, 2, 0, 0, 0] },
   'Cadd9': { frets: [-1, 3, 2, 0, 3, 0] },
+  'C/E': { frets: [0, 3, 2, 0, 1, 0] },
   'C/G': { frets: [3, 3, 2, 0, 1, 0] },
+  'C/B': { frets: [-1, 2, 2, 0, 1, 0] },
+  'C/D': { frets: [-1, -1, 0, 0, 1, 0] },
+  'C/A': { frets: [-1, 0, 2, 0, 1, 0] },
   'Cm': { frets: [-1, 3, 5, 5, 4, 3], barre: 3 },
   'Cm7': { frets: [-1, 3, 5, 3, 4, 3], barre: 3 },
   'D': { frets: [-1, -1, 0, 2, 3, 2] },
@@ -148,6 +176,9 @@ const STANDARD_GUITAR_VOICINGS: Record<string, { frets: number[]; barre?: number
   'Dmaj7': { frets: [-1, -1, 0, 2, 2, 2] },
   'Dsus2': { frets: [-1, -1, 0, 2, 3, 0] },
   'Dsus4': { frets: [-1, -1, 0, 2, 3, 3] },
+  'D/A': { frets: [-1, 0, 0, 2, 3, 2] },
+  'D/B': { frets: [-1, 2, 0, 2, 3, 2] },
+  'D/E': { frets: [0, 0, 0, 2, 3, 2] },
   'D/F#': { frets: [2, -1, 0, 2, 3, 2] },
   'Dm': { frets: [-1, -1, 0, 2, 3, 1] },
   'Dm7': { frets: [-1, -1, 0, 2, 1, 1] },
@@ -156,30 +187,50 @@ const STANDARD_GUITAR_VOICINGS: Record<string, { frets: number[]; barre?: number
   'Emaj7': { frets: [0, 2, 1, 1, 0, 0] },
   'Em': { frets: [0, 2, 2, 0, 0, 0] },
   'Em7': { frets: [0, 2, 2, 0, 3, 0] },
+  'Em/G': { frets: [3, 2, 2, 0, 0, 0] },
+  'Em/B': { frets: [-1, 2, 2, 0, 0, 0] },
+  'Em/C': { frets: [-1, 3, 2, 0, 0, 0] },
+  'Em/F#': { frets: [2, 2, 2, 0, 0, 0] },
   'F': { frets: [1, 3, 3, 2, 1, 1], barre: 1 },
   'Fmaj7': { frets: [-1, -1, 3, 2, 1, 0] },
+  'F/A': { frets: [-1, 0, 3, 2, 1, 1] },
+  'F/C': { frets: [-1, 3, 3, 2, 1, 1] },
+  'F/D': { frets: [-1, -1, 0, 2, 1, 1] },
+  'F/G': { frets: [3, -1, 3, 2, 1, 1] },
   'Fm': { frets: [1, 3, 3, 1, 1, 1], barre: 1 },
+  'F#': { frets: [2, 4, 4, 3, 2, 2], barre: 2 },
   'F#m': { frets: [2, 4, 4, 2, 2, 2], barre: 2 },
   'F#7': { frets: [2, 4, 2, 3, 2, 2], barre: 2 },
   'G': { frets: [3, 2, 0, 0, 0, 3] },
   'G7': { frets: [3, 2, 0, 0, 0, 1] },
   'Gmaj7': { frets: [3, 2, 0, 0, 0, 2] },
   'Gsus4': { frets: [3, 3, 0, 0, 1, 3] },
+  'G/A': { frets: [-1, 0, 0, 0, 0, 3] },
   'G/B': { frets: [-1, 2, 0, 0, 3, 3] },
+  'G/C': { frets: [-1, 3, 0, 0, 0, 3] },
+  'G/D': { frets: [-1, -1, 0, 0, 0, 3] },
+  'G/E': { frets: [0, 2, 0, 0, 0, 3] },
+  'G/F#': { frets: [2, 2, 0, 0, 0, 3] },
   'Gm': { frets: [3, 5, 5, 3, 3, 3], barre: 3 },
   'A': { frets: [-1, 0, 2, 2, 2, 0] },
   'A7': { frets: [-1, 0, 2, 0, 2, 0] },
   'Amaj7': { frets: [-1, 0, 2, 1, 2, 0] },
   'Asus2': { frets: [-1, 0, 2, 2, 0, 0] },
   'Asus4': { frets: [-1, 0, 2, 2, 3, 0] },
+  'A/E': { frets: [0, 0, 2, 2, 2, 0] },
   'Am': { frets: [-1, 0, 2, 2, 1, 0] },
   'Am7': { frets: [-1, 0, 2, 0, 1, 0] },
+  'Am/C': { frets: [-1, 3, 2, 2, 1, 0] },
+  'Am/E': { frets: [0, 0, 2, 2, 1, 0] },
+  'Am/F#': { frets: [2, 0, 2, 2, 1, 0] },
   'Am/G': { frets: [3, 0, 2, 2, 1, 0] },
   'B': { frets: [-1, 2, 4, 4, 4, 2], barre: 2 },
   'B7': { frets: [-1, 2, 1, 2, 0, 2] },
   'Bm': { frets: [-1, 2, 4, 4, 3, 2], barre: 2 },
   'Bm7': { frets: [-1, 2, 4, 2, 3, 2], barre: 2 },
   'Bm7b5': { frets: [-1, 2, 3, 2, 3, -1] },
+  'Bm/D': { frets: [-1, -1, 0, 4, 3, 2] },
+  'Bm/E': { frets: [0, 2, 4, 4, 3, 2], barre: 2 },
   'Bb': { frets: [-1, 1, 3, 3, 3, 1], barre: 1 },
   'Bbm': { frets: [-1, 1, 3, 3, 2, 1], barre: 1 },
   'Eb': { frets: [-1, -1, 1, 3, 4, 3] },
@@ -215,9 +266,79 @@ const UKULELE_VOICINGS: Record<string, number[]> = {
   'Bb': [3, 2, 1, 1]
 };
 
+interface PlayabilityEvaluation {
+  playable: boolean;
+  fingersNeeded: number;
+  barreFret?: number;
+}
+
 /**
- * Algorithmic fretted voicing solver that works for ANY tuning (Drop D, DADGAD, Open G, etc.)
- * and ANY chord symbol (including slash chords).
+ * Checks physical playability of a fretted voicing (<= 4 fingers, valid barre geometry, <= 3 fret span).
+ */
+function evaluatePlayability(frets: number[]): PlayabilityEvaluation {
+  const numStrings = frets.length;
+  const pos = frets.filter(f => f > 0);
+  if (pos.length === 0) {
+    return { playable: true, fingersNeeded: 0 };
+  }
+
+  const minF = Math.min(...pos);
+  const maxF = Math.max(...pos);
+  if (maxF - minF > 3) {
+    return { playable: false, fingersNeeded: 99 };
+  }
+
+  // Check if a barre at minF is physically possible
+  const minIndices: number[] = [];
+  for (let s = 0; s < numStrings; s++) {
+    if (frets[s] === minF) minIndices.push(s);
+  }
+  const firstMin = minIndices[0];
+  const lastMin = minIndices[minIndices.length - 1];
+  const hasOpenAboveOrInBarre = frets.slice(firstMin).some(f => f === 0);
+  const hasMuteInsideBarre = frets.slice(firstMin, lastMin + 1).some(f => f === -1);
+  const canBarreAtMin = minIndices.length >= 2 && !hasOpenAboveOrInBarre && !hasMuteInsideBarre;
+
+  if (pos.length <= 4) {
+    // Only show a barre bar for <=4 fretted notes if it spans 4+ strings cleanly (e.g. partial 4-string barre)
+    const shouldShowBarre = canBarreAtMin && lastMin - firstMin >= 3;
+
+    return {
+      playable: true,
+      fingersNeeded: shouldShowBarre ? 1 + pos.filter(f => f > minF).length : pos.length,
+      barreFret: shouldShowBarre ? minF : undefined
+    };
+  }
+
+  // More than 4 fretted strings requires a barre at minF
+  if (!canBarreAtMin) {
+    return { playable: false, fingersNeeded: 99 };
+  }
+
+  const fingersAboveMin = pos.filter(f => f > minF).length;
+  const totalFingers = 1 + fingersAboveMin;
+  if (totalFingers > 4) {
+    return { playable: false, fingersNeeded: totalFingers };
+  }
+
+  // Disallow awkward inverted barres where 2+ bass strings are fretted higher below a mid-neck barre
+  if (firstMin >= 2 && firstMin < numStrings - 2) {
+    const frettedBeforeBarre = frets.slice(0, firstMin).filter(f => f > minF).length;
+    if (frettedBeforeBarre >= 2 && pos.length > 4) {
+      return { playable: false, fingersNeeded: 99 };
+    }
+  }
+
+  return {
+    playable: true,
+    fingersNeeded: totalFingers,
+    barreFret: minF
+  };
+}
+
+/**
+ * Exact backtracking fretted voicing solver that works for ANY tuning (Drop D, DADGAD, Open G, etc.)
+ * and ANY chord symbol (including slash chords with non-chord-tone basses such as G/E or F/D).
  */
 function solveFrettedVoicing(
   chordSymbol: string,
@@ -225,127 +346,265 @@ function solveFrettedVoicing(
   stringNames: string[],
   instrument: 'guitar' | 'ukulele'
 ): FrettedVoicing {
-  const { rootPc, bassPc, intervals } = parseChordIntervals(chordSymbol);
+  const { rootPc, bassPc, hasExplicitBass, intervals } = parseChordIntervals(chordSymbol);
   const targetPcs = new Set(intervals.map(iv => (rootPc + iv) % 12));
+  const thirdPc = intervals.length >= 2 ? (rootPc + intervals[1]) % 12 : null;
+  const fifthPc = intervals.length >= 3 ? (rootPc + intervals[2]) % 12 : null;
+  const extensionPc = intervals.length >= 4 ? (rootPc + intervals[3]) % 12 : null;
   const numStrings = openMidi.length;
+  const minRequiredStrings = numStrings >= 6 ? 4 : 3;
 
-  // Try candidate fret windows (0..4, then movable positions 1..10)
-  let bestFrets: number[] = new Array(numStrings).fill(-1);
-  let bestScore = -Infinity;
+  const runSearch = (enforceBassAsLowest: boolean): { frets: number[]; barre?: number; score: number } | null => {
+    let bestFrets: number[] | null = null;
+    let bestBarre: number | undefined;
+    let bestScore = -Infinity;
+    const seenKeys = new Set<string>();
 
-  const tryWindow = (minPos: number, maxPos: number) => {
-    const frets = new Array<number>(numStrings).fill(-1);
-    let bassAssigned = false;
+    const evaluateCandidate = (frets: number[]) => {
+      const key = frets.join(',');
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
 
-    for (let s = 0; s < numStrings; s++) {
-      const openPc = openMidi[s] % 12;
-      let bestFretForString = -1;
-      let bestStringScore = -Infinity;
+      const play = evaluatePlayability(frets);
+      if (!play.playable) return;
 
-      // Consider open string (fret 0) if valid chord tone
-      const candidateFrets = minPos === 0 ? [0, 1, 2, 3, 4] : Array.from({ length: maxPos - minPos + 1 }, (_, k) => minPos + k);
+      const soundedMidi: number[] = [];
+      const soundedStrings: number[] = [];
+      for (let s = 0; s < numStrings; s++) {
+        if (frets[s] >= 0) {
+          soundedMidi.push(openMidi[s] + frets[s]);
+          soundedStrings.push(s);
+        }
+      }
+      if (soundedStrings.length < minRequiredStrings) return;
 
-      for (const fret of candidateFrets) {
-        const pc = (openPc + fret) % 12;
-        if (!targetPcs.has(pc)) continue;
+      const firstSounded = soundedStrings[0];
+      const lastSounded = soundedStrings[soundedStrings.length - 1];
+      const firstMidi = openMidi[firstSounded] + frets[firstSounded];
+      const lowestMidi = Math.min(...soundedMidi);
 
-        let score = 0;
-        if (!bassAssigned) {
-          if (pc === bassPc) {
-            score += 45;
-          } else if (pc === rootPc) {
-            score += 20;
+      // Avoid pitch-crossover where a higher string sounds lower than the first sounded string on guitar
+      if (instrument === 'guitar' && firstMidi > lowestMidi) return;
+
+      const lowestPc = lowestMidi % 12;
+      if (enforceBassAsLowest && lowestPc !== bassPc) return;
+
+      // Count interior & trailing mutes
+      let interiorMutes = 0;
+      for (let s = firstSounded + 1; s < lastSounded; s++) {
+        if (frets[s] === -1) {
+          // On guitar, allow at most 1 damped A-string mute when low E string is fretted/sounded
+          if (instrument === 'guitar' && s === 1 && firstSounded === 0 && interiorMutes === 0) {
+            interiorMutes++;
           } else {
-            continue; // lowest sounded string must match bass or root
+            return;
           }
-        } else {
-          if (pc === rootPc) score += 10;
-          else score += 8;
-        }
-
-        if (fret === 0) score += 8; // open strings ring warmly
-        score -= Math.abs(fret - minPos) * 1.5;
-
-        if (score > bestStringScore) {
-          bestStringScore = score;
-          bestFretForString = fret;
         }
       }
+      const trailingMutes = numStrings - 1 - lastSounded;
+      if (trailingMutes > 1) return;
 
-      if (bestFretForString !== -1) {
-        frets[s] = bestFretForString;
-        if (!bassAssigned) bassAssigned = true;
-      } else if (s === 0 && !bassAssigned) {
-        frets[s] = -1; // mute lowest string if bass doesn't fit cleanly
+      // Evaluate covered chord tones
+      const coveredChordPcs = new Set<number>();
+      let includesBass = false;
+      for (let s = 0; s < numStrings; s++) {
+        if (frets[s] < 0) continue;
+        const pc = (openMidi[s] + frets[s]) % 12;
+        if (pc === bassPc) includesBass = true;
+        if (targetPcs.has(pc)) {
+          // If this is a slash chord whose bass is not a chord tone, don't count bass string toward chord tones
+          if (!(s === firstSounded && hasExplicitBass && !targetPcs.has(bassPc))) {
+            coveredChordPcs.add(pc);
+          }
+        }
       }
-    }
 
-    // Check span of non-zero frets <= 4
-    const fretted = frets.filter(f => f > 0);
-    const minF = fretted.length > 0 ? Math.min(...fretted) : 0;
-    const maxF = fretted.length > 0 ? Math.max(...fretted) : 0;
-    if (fretted.length > 0 && maxF - minF > 3) return;
+      const pos = frets.filter(f => f > 0);
+      const minF = pos.length > 0 ? Math.min(...pos) : 0;
+      const maxF = pos.length > 0 ? Math.max(...pos) : 0;
+      const openCount = frets.filter(f => f === 0).length;
 
-    // Score completeness of pitch classes
-    const coveredPcs = new Set<number>();
-    let soundedCount = 0;
-    for (let s = 0; s < numStrings; s++) {
-      if (frets[s] >= 0) {
-        coveredPcs.add((openMidi[s] + frets[s]) % 12);
-        soundedCount++;
+      let score = 0;
+      score += coveredChordPcs.size * 26;
+      if (!coveredChordPcs.has(rootPc)) score -= 65;
+      if (thirdPc !== null && !coveredChordPcs.has(thirdPc)) score -= 42;
+      if (extensionPc !== null && !coveredChordPcs.has(extensionPc)) score -= 32;
+      if (fifthPc !== null && !coveredChordPcs.has(fifthPc)) score -= 12;
+
+      if (hasExplicitBass && lowestPc === bassPc) score += 50;
+      else if (includesBass) score += 12;
+
+      score += soundedStrings.length * 6;
+      score += openCount * 4.5;
+      score -= interiorMutes * 14;
+      score -= trailingMutes * 10;
+      score -= minF * 3.0;
+      score -= (maxF - minF) * 0.8;
+      score -= play.fingersNeeded * 1.2;
+      if (play.barreFret !== undefined) score -= 3;
+
+      // Low-register clarity penalty for adjacent minor/major 2nd or unison on the lowest two strings
+      if (instrument === 'guitar' && frets[0] >= 0 && frets[1] >= 0) {
+        const lowGap = (openMidi[1] + frets[1]) - (openMidi[0] + frets[0]);
+        if (lowGap === 0) score -= 16;
+        else if (lowGap === 1) score -= 20;
+        else if (lowGap === 2) score -= 8;
       }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestFrets = [...frets];
+        bestBarre = play.barreFret;
+      }
+    };
+
+    const searchWindow = (minPos: number, maxPos: number) => {
+      const frets = new Array<number>(numStrings).fill(-1);
+
+      const backtrack = (
+        s: number,
+        hasSounded: boolean,
+        hasBassNote: boolean,
+        minFSoFar: number,
+        maxFSoFar: number,
+        interiorMutes: number
+      ) => {
+        if (s === numStrings) {
+          if (hasSounded && (!enforceBassAsLowest || hasBassNote)) {
+            evaluateCandidate(frets);
+          }
+          return;
+        }
+
+        const openPc = openMidi[s] % 12;
+        const candidateFrets: number[] = [];
+        if (minPos <= 3) candidateFrets.push(0);
+        const startF = minPos === 0 ? 1 : minPos;
+        for (let f = startF; f <= maxPos; f++) {
+          candidateFrets.push(f);
+        }
+
+        // Option 1: sounded frets on string s
+        for (const f of candidateFrets) {
+          const pc = (openPc + f) % 12;
+          if (!hasSounded) {
+            if (enforceBassAsLowest && instrument === 'guitar' && pc !== bassPc) continue;
+            if (!targetPcs.has(pc) && pc !== bassPc) continue;
+          } else {
+            if (!targetPcs.has(pc)) continue;
+          }
+
+          const nextMinF = f > 0 ? Math.min(minFSoFar, f) : minFSoFar;
+          const nextMaxF = f > 0 ? Math.max(maxFSoFar, f) : maxFSoFar;
+          if (nextMaxF > 0 && nextMinF < 99 && nextMaxF - nextMinF > 3) continue;
+
+          frets[s] = f;
+          backtrack(
+            s + 1,
+            true,
+            hasBassNote || pc === bassPc,
+            nextMinF,
+            nextMaxF,
+            interiorMutes
+          );
+          frets[s] = -1;
+        }
+
+        // Option 2: muted string (-1)
+        const canMuteLeading = !hasSounded && (numStrings - 1 - s) >= minRequiredStrings;
+        const canMuteInteriorA = hasSounded && instrument === 'guitar' && s === 1 && interiorMutes === 0;
+        const canMuteTrailingLast = hasSounded && s === numStrings - 1;
+        if (canMuteLeading || canMuteInteriorA || canMuteTrailingLast) {
+          frets[s] = -1;
+          backtrack(
+            s + 1,
+            hasSounded,
+            hasBassNote,
+            minFSoFar,
+            maxFSoFar,
+            hasSounded && s < numStrings - 1 ? interiorMutes + 1 : interiorMutes
+          );
+        }
+      };
+
+      backtrack(0, false, false, 99, 0, 0);
+    };
+
+    searchWindow(0, 4);
+    for (let startFret = 1; startFret <= 9; startFret++) {
+      searchWindow(startFret, startFret + 3);
     }
 
-    const minRequiredStrings = numStrings >= 6 ? 4 : 3;
-    if (soundedCount < minRequiredStrings) return;
-
-    const coverageRatio = coveredPcs.size / Math.min(targetPcs.size, numStrings);
-    const openBonus = frets.filter(f => f === 0).length * 2.5;
-    const positionPenalty = minF * 0.8;
-    const hasBass = coveredPcs.has(bassPc) ? 20 : -20;
-
-    const totalScore = coverageRatio * 50 + soundedCount * 4 + openBonus + hasBass - positionPenalty;
-    if (totalScore > bestScore) {
-      bestScore = totalScore;
-      bestFrets = frets;
-    }
+    return bestFrets ? { frets: bestFrets, barre: bestBarre, score: bestScore } : null;
   };
 
-  tryWindow(0, 4);
-  for (let startFret = 1; startFret <= 9; startFret++) {
-    tryWindow(startFret, startFret + 3);
-  }
+  // On guitar always enforce exact bass; on re-entrant ukulele enforce exact lowest-note bass for slash chords with graceful fallback
+  const strictBass = instrument === 'guitar' || hasExplicitBass;
+  const result = runSearch(strictBass) ?? (strictBass ? runSearch(false) : null);
+  const chosenFrets = result?.frets ?? new Array(numStrings).fill(-1);
 
-  const positiveFrets = bestFrets.filter(f => f > 0);
+  const positiveFrets = chosenFrets.filter(f => f > 0);
   const minPos = positiveFrets.length > 0 ? Math.min(...positiveFrets) : 1;
   const maxPos = positiveFrets.length > 0 ? Math.max(...positiveFrets) : 1;
   const baseFret = maxPos <= 4 ? 1 : minPos;
 
   const midiNotes: number[] = [];
   for (let s = 0; s < numStrings; s++) {
-    if (bestFrets[s] >= 0) {
-      midiNotes.push(openMidi[s] + bestFrets[s]);
+    if (chosenFrets[s] >= 0) {
+      midiNotes.push(openMidi[s] + chosenFrets[s]);
     }
   }
 
   return {
     chord: chordSymbol,
     instrument,
-    frets: bestFrets,
+    frets: chosenFrets,
     baseFret,
+    barre: result?.barre,
     midiNotes,
     stringNames
   };
 }
 
-function normalizeLookupChord(chord: string): string {
-  const flatToSharp: Record<string, string> = {
-    'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#'
-  };
-  const m = chord.trim().match(/^([A-G][#b]?)(.*)$/);
-  if (!m) return chord.trim();
-  const root = flatToSharp[m[1]] || m[1];
-  return `${root}${m[2]}`;
+const ENHARMONIC_PAIRS: Record<string, string> = {
+  'Db': 'C#', 'C#': 'Db',
+  'Eb': 'D#', 'D#': 'Eb',
+  'Gb': 'F#', 'F#': 'Gb',
+  'Ab': 'G#', 'G#': 'Ab',
+  'Bb': 'A#', 'A#': 'Bb'
+};
+
+function findCuratedVoicing<T>(
+  table: Record<string, T>,
+  chord: string
+): T | undefined {
+  const clean = chord.trim();
+  if (table[clean]) return table[clean];
+
+  const slashIdx = clean.indexOf('/');
+  const mainPart = slashIdx >= 0 ? clean.slice(0, slashIdx).trim() : clean;
+  const bassPart = slashIdx >= 0 ? clean.slice(slashIdx + 1).trim() : '';
+
+  const m = mainPart.match(/^([A-G][#b]?)(.*)$/i);
+  if (!m) return undefined;
+
+  const root = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  const suffix = m[2];
+  const rootVariants = ENHARMONIC_PAIRS[root] ? [root, ENHARMONIC_PAIRS[root]] : [root];
+
+  let bassVariants = [''];
+  if (bassPart) {
+    const normBass = bassPart.charAt(0).toUpperCase() + bassPart.slice(1);
+    bassVariants = ENHARMONIC_PAIRS[normBass] ? [normBass, ENHARMONIC_PAIRS[normBass]] : [normBass];
+  }
+
+  for (const r of rootVariants) {
+    for (const b of bassVariants) {
+      const candidate = b ? `${r}${suffix}/${b}` : `${r}${suffix}`;
+      if (table[candidate]) return table[candidate];
+    }
+  }
+  return undefined;
 }
 
 export function getGuitarVoicing(chordSymbol: string, tuningStr?: string): FrettedVoicing {
@@ -353,7 +612,7 @@ export function getGuitarVoicing(chordSymbol: string, tuningStr?: string): Frett
   const clean = chordSymbol.trim();
 
   if (tuning.id === 'standard') {
-    const direct = STANDARD_GUITAR_VOICINGS[clean] || STANDARD_GUITAR_VOICINGS[normalizeLookupChord(clean)];
+    const direct = findCuratedVoicing(STANDARD_GUITAR_VOICINGS, clean);
     if (direct) {
       const positive = direct.frets.filter(f => f > 0);
       const maxF = positive.length > 0 ? Math.max(...positive) : 1;
@@ -380,7 +639,7 @@ export function getGuitarVoicing(chordSymbol: string, tuningStr?: string): Frett
 
 export function getUkuleleVoicing(chordSymbol: string): FrettedVoicing {
   const clean = chordSymbol.trim();
-  const direct = UKULELE_VOICINGS[clean] || UKULELE_VOICINGS[normalizeLookupChord(clean)];
+  const direct = findCuratedVoicing(UKULELE_VOICINGS, clean);
   if (direct) {
     const maxF = Math.max(...direct);
     const minF = Math.min(...direct.filter(f => f > 0), 1);
@@ -402,7 +661,7 @@ export function getPianoVoicing(chordSymbol: string): PianoVoicing {
   const { rootPc, bassPc, intervals } = parseChordIntervals(chordSymbol);
   const baseOctave = 60; // C4
   const chordMidi = intervals.map(iv => baseOctave + rootPc + iv);
-  const bassMidi = bassPc !== rootPc ? 48 + bassPc : 48 + rootPc; // C3 bass octave
+  const bassMidi = 48 + bassPc; // C3 bass octave
   const midiNotes = [bassMidi, ...chordMidi];
 
   const pitchClasses = Array.from(new Set(intervals.map(iv => (rootPc + iv) % 12)));

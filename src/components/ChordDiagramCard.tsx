@@ -213,12 +213,19 @@ const PianoDiagramSvg: React.FC<PianoSvgProps> = ({ voicing, compact = false }) 
   const width = totalWhite * whiteW + 2;
   const height = whiteH + 4;
 
-  // Map chord MIDI notes above octave C4 (60) so inversions/extensions show cleanly across 2 octaves
-  const activeMidiSet = new Set(
-    voicing.midiNotes.slice(1).map(m => ((m - 60) % 24 + 24) % 24)
-  );
   const bassPc = voicing.bassPitchClass;
-  const activePcSet = new Set(voicing.pitchClasses);
+  const rawChordSemis = voicing.midiNotes.slice(1).map(m => m - 60);
+  const rootSemi = rawChordSemis[0] ?? 0;
+  const isSlashChord = (rootSemi % 12 + 12) % 12 !== bassPc;
+
+  // If slash bass is higher pitch-class than root, shift upper chord up an octave when it fits in 2 octaves
+  const maxChordSemi = rawChordSemis.length > 0 ? Math.max(...rawChordSemis) : 0;
+  const shiftUp = isSlashChord && rootSemi <= bassPc && maxChordSemi + 12 < 24 ? 12 : 0;
+
+  const activeMidiSet = new Set(
+    rawChordSemis.map(s => ((s + shiftUp) % 24 + 24) % 24)
+  );
+  const bassSemi = isSlashChord ? bassPc : -1;
 
   return (
     <svg
@@ -231,8 +238,8 @@ const PianoDiagramSvg: React.FC<PianoSvgProps> = ({ voicing, compact = false }) 
         const oct = Math.floor(i / 7);
         const pc = WHITE_KEY_PCS[i % 7];
         const semi = oct * 12 + pc;
-        const isActive = activeMidiSet.has(semi) || (oct === 0 && activePcSet.has(pc));
-        const isBass = oct === 0 && pc === bassPc;
+        const isActive = activeMidiSet.has(semi);
+        const isBass = semi === bassSemi;
         const x = 1 + i * whiteW;
         return (
           <g key={`wk-${i}`}>
@@ -242,18 +249,33 @@ const PianoDiagramSvg: React.FC<PianoSvgProps> = ({ voicing, compact = false }) 
               width={whiteW - 1}
               height={whiteH}
               rx={1.5}
-              fill={isActive ? 'var(--accent-primary)' : isBass ? 'var(--accent-subtle)' : '#fafaf9'}
+              fill={
+                isBass
+                  ? 'var(--accent-active)'
+                  : isActive
+                  ? 'var(--accent-primary)'
+                  : '#fafaf9'
+              }
               stroke="var(--border-medium)"
               strokeWidth={0.8}
             />
-            {isActive && (
+            {isBass ? (
+              <circle
+                cx={x + (whiteW - 1) / 2}
+                cy={whiteH - 7}
+                r={2.4}
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth={1.3}
+              />
+            ) : isActive ? (
               <circle
                 cx={x + (whiteW - 1) / 2}
                 cy={whiteH - 7}
                 r={2.2}
                 fill="#ffffff"
               />
-            )}
+            ) : null}
           </g>
         );
       })}
@@ -262,7 +284,8 @@ const PianoDiagramSvg: React.FC<PianoSvgProps> = ({ voicing, compact = false }) 
       {Array.from({ length: numOctaves }, (_, oct) =>
         BLACK_KEY_OFFSETS.map(({ pc, afterWhiteIndex }) => {
           const semi = oct * 12 + pc;
-          const isActive = activeMidiSet.has(semi) || (oct === 0 && activePcSet.has(pc));
+          const isActive = activeMidiSet.has(semi);
+          const isBass = semi === bassSemi;
           const x = 1 + (oct * 7 + afterWhiteIndex + 1) * whiteW - blackW / 2 - 0.5;
           return (
             <g key={`bk-${oct}-${pc}`}>
@@ -272,18 +295,33 @@ const PianoDiagramSvg: React.FC<PianoSvgProps> = ({ voicing, compact = false }) 
                 width={blackW}
                 height={blackH}
                 rx={1.2}
-                fill={isActive ? 'var(--accent-primary)' : '#1c1917'}
+                fill={
+                  isBass
+                    ? 'var(--accent-active)'
+                    : isActive
+                    ? 'var(--accent-primary)'
+                    : '#1c1917'
+                }
                 stroke="#0c0a09"
                 strokeWidth={0.6}
               />
-              {isActive && (
+              {isBass ? (
+                <circle
+                  cx={x + blackW / 2}
+                  cy={blackH - 5.5}
+                  r={2}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={1.2}
+                />
+              ) : isActive ? (
                 <circle
                   cx={x + blackW / 2}
                   cy={blackH - 5.5}
                   r={1.8}
                   fill="#ffffff"
                 />
-              )}
+              ) : null}
             </g>
           );
         })
