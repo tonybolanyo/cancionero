@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChartDown, ChartUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ChordPosition, getDifficultyColor, getDifficultyLabel } from '../services/chordDictionaryService';
 
 interface ChordPositionSelectorProps {

@@ -333,6 +333,8 @@ function CancioneroApp() {
         onOpenAudioAnalyzer={isAuthor ? () => navigate({ name: 'audio-analyzer' }) : undefined}
         onOpenSongbook={() => navigate({ name: 'songbook' })}
         onOpenVideoVisualizer={isAuthor ? () => handleOpenVisualizer() : undefined}
+        onOpenChordDictionary={() => navigate({ name: 'chord-dictionary' })}
+        onOpenScaleDictionary={() => navigate({ name: 'scale-dictionary' })}
       >
         <AppRouter
           currentRoute={currentRoute}

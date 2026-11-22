@@ -24,6 +24,8 @@ export interface AppLayoutProps {
   onOpenAudioAnalyzer?: () => void;
   onOpenSongbook: () => void;
   onOpenVideoVisualizer?: () => void;
+  onOpenChordDictionary?: () => void;
+  onOpenScaleDictionary?: () => void;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -43,7 +45,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onOpenAuthModal,
   onOpenAudioAnalyzer,
   onOpenSongbook,
-  onOpenVideoVisualizer
+  onOpenVideoVisualizer,
+  onOpenChordDictionary,
+  onOpenScaleDictionary
 }) => {
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-200">
@@ -74,6 +78,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onOpenAudioAnalyzer={onOpenAudioAnalyzer}
         onOpenSongbook={onOpenSongbook}
         onOpenVideoVisualizer={onOpenVideoVisualizer}
+        onOpenChordDictionary={onOpenChordDictionary}
+        onOpenScaleDictionary={onOpenScaleDictionary}
       />
 
       {/* Main Page Content Router */}

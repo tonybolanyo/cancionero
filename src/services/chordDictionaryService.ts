@@ -34,12 +34,13 @@ export async function loadChordDictionary(): Promise<ChordDictionary> {
     if (!response.ok) {
       throw new Error(`Failed to load chord dictionary: ${response.statusText}`);
     }
-    chordDictionary = await response.json();
-    return chordDictionary;
+    const data: ChordDictionary = await response.json();
+    chordDictionary = data;
+    return data;
   } catch (error) {
     console.error('Error loading chord dictionary:', error);
     // Return empty dictionary as fallback
-    return {
+    const fallback: ChordDictionary = {
       chords: {},
       metadata: {
         version: '1.0.0',
@@ -49,6 +50,8 @@ export async function loadChordDictionary(): Promise<ChordDictionary> {
         description: 'Chord dictionary (fallback - empty)'
       }
     };
+    chordDictionary = fallback;
+    return fallback;
   }
 }
 

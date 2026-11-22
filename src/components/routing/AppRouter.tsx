@@ -18,6 +18,8 @@ import { AudioAnalyzerPage } from '../../pages/AudioAnalyzerPage';
 import { AboutPage } from '../../pages/AboutPage';
 import { GitSyncPage } from '../../pages/GitSyncPage';
 import { SpotifyImportPage } from '../../pages/SpotifyImportPage';
+import { ChordDictionaryDemoPage } from '../../pages/ChordDictionaryDemoPage';
+import { ScaleDictionaryPage } from '../../pages/ScaleDictionaryPage';
 import { AuthorAccessGuard } from '../AuthorAccessGuard';
 
 export interface AppRouterProps {
@@ -261,6 +263,12 @@ export const AppRouter: React.FC<AppRouterProps> = ({
           onOpenAuthModal={onOpenAuthModal}
         />
       );
+
+    case 'scale-dictionary':
+      return <ScaleDictionaryPage />;
+
+    case 'chord-dictionary':
+      return <ChordDictionaryDemoPage />;
 
     case 'catalog':
     default:

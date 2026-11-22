@@ -14,7 +14,9 @@ export type AppRoute =
   | { name: 'about' }
   | { name: 'git-sync' }
   | { name: 'spotify-import' }
-  | { name: 'video-visualizer'; songId?: string };
+  | { name: 'video-visualizer'; songId?: string }
+  | { name: 'scale-dictionary' }
+  | { name: 'chord-dictionary' };
 
 interface NavigationContextType {
   currentRoute: AppRoute;
@@ -96,6 +98,14 @@ export function parseHashToRoute(rawHash: string): AppRoute {
     return { name: 'video-visualizer', songId };
   }
 
+  if (path === 'diccionario-escalas' || path === 'escalas') {
+    return { name: 'scale-dictionary' };
+  }
+
+  if (path === 'diccionario-acordes' || path === 'acordes') {
+    return { name: 'chord-dictionary' };
+  }
+
   // Fallback to catalog
   return { name: 'catalog' };
 }
@@ -130,6 +140,10 @@ export function routeToHash(route: AppRoute): string {
       return '#/importar-spotify';
     case 'video-visualizer':
       return route.songId ? `#/visualizador?song=${encodeURIComponent(route.songId)}` : '#/visualizador';
+    case 'scale-dictionary':
+      return '#/diccionario-escalas';
+    case 'chord-dictionary':
+      return '#/diccionario-acordes';
   }
 }
 
