@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2026-11-22
+
+### 🎉 Features
+
+- actualizar canción "Danza de marionetas" ([70d3e26](../../commit/70d3e26)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.48.0] - 2026-11-22
 
 ### 🎉 Features
