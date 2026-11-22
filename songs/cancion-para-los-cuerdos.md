@@ -3,92 +3,103 @@ id: "cancion-para-los-cuerdos"
 title: "Canción para los cuerdos"
 status: "published"
 year: 2025
-genre: "Canción de Autor"
+genre: "Cantautor"
 key: "E"
 tempo: 64
 albumId: "cartas-sin-sello"
 albumTitle: "Cartas sin sello"
 trackNumber: 5
-timeSignature: "6/8"
+timeSignature: "3/4"
 tuning: "Estándar (EADGBE)"
 spotifyUrl: "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk"
-audioUrl: "blob:https://tonygb.com/39d6d00b-f2dc-4b27-b940-32e88b5dfe2f"
 isPrivateDemo: true
-notes: "Del disco 'Cartas sin sello' de Tony Bolaño"
-lrc: "[ti:Canción para los cuerdos]\n[ar:Tony G. Bolaño]\n\n[00:00.00] En la sala de los espejos\n[00:04.00] donde el tiempo se hace eco,\n[00:08.00] baila Marta con su sombra\n[00:12.00] y un vestido de remiendos.\n[00:16.00] Dice que el mundo es un sueño\n[00:20.00] y que el sueño es verdadero,\n[00:24.00] que la luna es un pañuelo\n[00:28.00] donde esconde su deseo.\n[00:32.00] Pero nadie la comprende,\n[00:36.00] ni los sabios ni los necios,\n[00:40.00] y le dicen que está loca\n[00:44.00] por amar sin presupuesto.\n[00:48.00] Y yo pregunto, amor,\n[00:52.00] ¿ quién decide la frontera\n[00:56.00] entre el verso y el error,\n[01:00.00] entre el alma y la madera?\n[01:04.00] Si en este manicomio\n[01:08.00] la cordura es la bandera,\n[01:12.00] ¿ no será que en la calle\n[01:16.00] la locura es la que impera?\n[01:20.00] Don Ernesto fue poeta\n[01:24.00] antes de perder la calma,\n[01:28.00] escribía en servilletas\n[01:32.00] las heridas de su alma.\n[01:36.00] Ahora mira las paredes\n[01:40.00] y conversa con las plantas,\n[01:44.00] le recita a las enfermeras\n[01:48.00] y a las sillas desbocadas.\n[01:52.00] Pero afuera nadie escucha\n[01:56.00] los poemas que regala,\n[02:00.00] y le dicen que está loco\n[02:04.00] por hablar con la esperanza.\n[02:08.00] Y yo pregunto, amor,\n[02:12.00] ¿ quién decide la frontera\n[02:16.00] entre el verso y el error,\n[02:20.00] entre el alma y la madera?\n[02:24.00] Si en este manicomio\n[02:28.00] la cordura es la bandera,\n[02:32.00] ¿ no será que en la calle\n[02:36.00] la locura es la que impera?\n[02:40.00] Hay un niño en la ventana\n[02:44.00] dibujando mariposas,\n[02:48.00] le han prohibido los colores\n[02:52.00] por temor a que las cosas\n[02:56.00] se conviertan en canciones\n[03:00.00] o en verdades peligrosas.\n[03:04.00] Y la enfermera Susana\n[03:08.00] canta a escondidas su rosa,\n[03:12.00] porque amar en estos muros\n[03:16.00] es delito y es derrota.\n[03:20.00] Y yo, que escribo en la noche\n[03:24.00] esta carta clandestina,\n[03:28.00] me pregunto si algún día\n[03:32.00] seré libre de mi rima.\n[03:36.00] Si el amor es un delirio\n[03:40.00] que se paga en medicina,\n[03:44.00] o si afuera están los locos\n[03:48.00] y aquí dentro la rutina.\n[03:52.00] Por eso, amor, te escribo\n[03:56.00] desde el centro del abismo,\n[04:00.00] donde todos somos cuerdos\n[04:04.00] y soñamos con lo mismo:\n[04:08.00] que el amor no sea un crimen\n[04:12.00] ni la vida un espejismo,\n[04:16.00] y que un día los poetas\n[04:20.00] sean dueños de su ritmo."
+notes: "Del disco 'Cartas sin sello' de Tony Bolaño\nÁlbum original: Cartas sin sello (2025)"
+lrc: "[00:13.51]En la sala de los espejos\n[00:16.35]donde el tiempo se hace eco,\n[00:18.61]baila Marta con su sombra\n[00:21.01]y un vestido de remiendos.\n[00:24.10]Dice que el mundo es un sueño\n[00:26.54]y que el sueño es verdadero,\n[00:29.53]que la luna es un pañuelo\n[00:31.39]donde esconde su deseo.\n[00:34.68]Pero nadie la comprende,\n[00:37.00]ni los sabios ni los necios,\n[00:39.86]y le dicen que está loca\n[00:41.86]por amar sin presupuesto.\n\n[00:45.21]Y yo pregunto, amor,\n[00:47.69]¿quién decide la frontera\n[00:50.23]entre el verso y el error,\n[00:52.61]entre el alma y la madera?\n[00:55.16]Si en este manicomio\n[00:57.45]la cordura es la bandera,\n[01:00.52]¿no será que en la calle\n[01:02.61]la locura es la que impera?\n\n[01:18.06]Don Ernesto fue poeta\n[01:20.58]antes de perder la calma,\n[01:23.16]escribía en servilletas\n[01:25.29]las heridas de su alma.\n[01:28.52]Ahora mira las paredes\n[01:30.99]y conversa con las plantas,\n[01:33.34]le recita a las enfermeras\n[01:35.66]y a las sillas desbocadas.\n[01:38.91]Pero afuera nadie escucha\n[01:41.23]los poemas que regala,\n[01:43.79]y le dicen que está loco\n[01:46.14]por hablar con la esperanza.\n\n[01:49.64]Y yo pregunto, amor,\n[01:52.11]¿quién decide la frontera\n[01:54.60]entre el verso y el error,\n[01:56.94]entre el alma y la madera?\n[01:59.65]Si en este manicomio\n[02:01.80]la cordura es la bandera,\n[02:04.81]¿no será que en la calle\n[02:06.73]la locura es la que impera?\n\n[02:19.80]Hay un niño en la ventana\n[02:22.32]dibujando mariposas,\n[02:25.35]le han prohibido los colores\n[02:27.26]por temor a que las cosas\n[02:30.51]se conviertan en canciones\n[02:33.08]o en verdades peligrosas.\n[02:35.47]Y la enfermera Susana\n[02:37.72]canta a escondidas su rosa,\n[02:40.89]porque amar en estos muros\n[02:43.38]es delito y es derrota.\n\n[02:48.42]Y yo, que escribo en la noche\n[02:52.81]esta carta clandestina,\n[02:55.29]me pregunto si algún día\n[02:57.64]seré libre de mi rima.\n[03:00.36]Si el amor es un delirio\n[03:02.93]que se paga en medicina,\n[03:05.48]o si afuera están los locos\n[03:07.45]y aquí dentro la rutina.\n\n[03:11.16]Por eso, amor, te escribo\n[03:14.10]desde el centro del abismo,\n[03:16.23]donde todos somos cuerdos\n[03:18.64]y soñamos con lo mismo:\n[03:21.28]que el amor no sea un crimen\n[03:23.97]ni la vida un espejismo,\n[03:26.28]y que un día los poetas\n[03:30.07]sean dueños de su ritmo."
 tags: ["cartas-sin-sello", "acústico"]
 createdAt: "2026-11-01T00:17:35.091Z"
-updatedAt: "2026-11-08T14:07:29.199Z"
+updatedAt: "2026-11-22T16:57:49.801Z"
 ---
-[A] En la sala de los espejos
-[Bm] donde e[D]l [F#m]tiempo [D]se [A]hace [F#m]eco,
-[F#m] baila [Bm]Marta con su sombra
-[Bm] y un vestido de [F#m]remiendos.
-[F#m] Dice que el mundo [D]es [F#m]un su[Bm]eño
-[Bm] y que el sueño [A]es verdadero,
-[A] que la [F#m]luna [D]es un pañuelo
-[F#m] donde [Bm]esconde su [Em]deseo.
-[Em] Pero nadie la [A]comprende,
-[Em] ni [G]los [Em]sabios ni los [G]necios,
-[A] y le [G]dicen que [D]está loca
-[A] por [Bm]amar sin pres[D]upuesto.
+## Intro
+[A/D#]  [A/F]  [B]  [B/G]
 
-[A] Y yo pregunto, [Em]amor,
-¿[G] quién [Bm]decide la frontera
-[Bm] entre [Em]el verso y el error,
-[Em] entre [F#m]el [G]alma y la [F#m]madera?
-[G] Si [Em]en [A]este manic[Bm]omio
-[Bm] la cordura [D]es [A]la [Em]bandera,
-¿[Em] no será que [Bm]en la calle
-[Bm] la loc[D]ura e[A]s la que [D]impera?
+[F#m] En la sala de los espejos
+[F#m] donde el tiempo se [F#m/A#]hace eco,
+[F#m/A#] baila [E/D#]Marta con su sombra
+[E/D#] y un vestido [A/G]de remiendos.
+[A/G] Dice [F#m]que el mundo es un sueño
+[F#m] y que el sueño es verdadero,
+[F#m] que la luna es un pañuelo
+[B] donde esconde su deseo.
+[B] Pero nadie la com[E]prende,
+[E] ni los sabios [A]ni los ne[C#m]cios,
+[C#m] y le dicen que está loca
+[C#m] por amar sin presupuesto.
 
-[A] Don Ernesto [D]fue poeta
-[Bm] antes de [Em]perder [A]la [Em]calma,
-[Em] escri[G]bía en [Bm]servilletas
-[F#m] las heridas de su alma.
-[Bm] Ahora [A]mira [Em]las [A]paredes
-[A] y [Bm]conversa [A]con las [Bm]plantas,
-[A] le rec[F#m]ita [A]a las enfermeras
-[A] y a las sillas desboc[D]adas.
-[A] Pero afuera nadie [G]escucha
-[G] los poemas [Bm]que regala,
-[Bm] y le dicen que está [A]loco
-[Bm] por [F#m]hablar con la esperanza.
+[C#m] Y yo [F#m]pregunto, amor,
+[F#m] ¿quién deci[A]de la frontera
+[A] entre el verso [F#]y el error,
+[F#] entre el [E]alma y la made[B]ra?
+[B] Si en es[G]te manico[F#m]mio
+[F#m] la cor[E]dura es la ban[F#m/G#]dera,
+[F#m/G#] ¿no será que en la ca[F#m]lle
+[F#m] la locura es la que impera?
 
-[F#m] Y yo pregunto, amor,
-¿[A] quién decide la [Bm]frontera
-[Bm] entre el verso y el [A]error,
-[A] entre el alma y la mad[G]era?
-[G] Si en [D]es[Bm]te man[D]ic[Bm]omio
-[A] la cordura es la [G]bandera,
-¿[G] no [Bm]será que en la calle
-[Bm] la loc[Em]ura e[A]s la que impera?
+## Instrumental
+[A]  [E]  [A/F]  [Em/G]  [B]  [Bm]  [A]  [D/G]
 
-[A] Hay [G]un [A]niño en la [G]ventana
-[A] dib[Bm]ujando mar[D]ip[G]osas,
-[G] le han prohibido los [A]colores
-[A] por temor [Am]a que [C]las cosas
-[C] se [Em]conviertan en canciones
-[Em] o en verdades [Bm]peligrosas.
-[A] Y la enfermera Sus[G]ana
-[G] canta a [A]escondidas [D]su rosa,
-[Bm] porque amar [A]en estos [D]muros
-[Gm] es del[F#]ito y es [Bm]derrota.
+[A/E] Don Ernesto fue poeta
+[A/E] antes de [D/D#]perder la calma,
+[D/D#] escri[D]bía [E]en serville[G]tas
+[G] las heridas de su [A/G#]al[A/F#]ma.
+[A/F#] Ahora [G/D#]mira las paredes
+[G/D#] y conversa con las [Bm]plantas,
+[Bm] le recita a [G]las enfermeras
+[G] y a las sillas des[B]bocadas.
+[B] Pero afuera nadie escu[A]cha
+[A] los poemas que regala,
+[A] y le dicen que [A/G]está loco
+[A/G] por hablar con [B/E]la esperan[G/E]za.
 
-[Bm] Y yo, que escribo en la [Em]noche
-[A] esta carta [Em]clandestina,
-[A] me [Em]pregunto si [G]algún día
-[G] seré libre [A]de mi [G]rima.
-[Bm] Si el amor es un del[A]irio
-[Bm] que se paga [D]en med[Dm]icina,
-[Dm] o si afuera están los locos
-[A] y aquí dentro la rutina.
+[G/E] Y yo pregunto, a[A/E]mor,
+[A] ¿quién decide la frontera
+[A] en[G]tre el verso y el error,
+[G] entre el alma y la madera?
+[G] Si en este [Bm/F]manico[Bm]mio
+[Bm] la cor[E]dura es la bandera,
+[E] ¿no será que en la ca[F#m/G]lle
+[F#m/G] la locu[A/G]ra es la que impera?
 
-[Bm] Por e[D]so, amor, te escribo
-[F#m] desde el centro del abismo,
+## Instrumental
+[A]  [D/E]  [B]  [E/G]
+
+[A/D#] Hay un niño en la ventana
+[A/D#] dibujan[G/E]do mariposas,
+[G/E] le han prohibido los colores
+[D] por [A/F]temor a [A/B]que las cosas
+[A/B] se conviertan en canciones
+[A/G#] o en verdades peli[B/G#]grosas.
+[B/G#] Y la enfer[G]mera [Em]Susana
+[Em] canta [A/F]a [A/B]escondidas su rosa,
+[A/B] porque amar [B/F]en estos muros
+[B/F] es delito y es [G]derrota.
+
+[G] Y yo, que escribo en la noche
+[G] esta [Am/D]carta clandesti[C]na,
+[C] me pregunto si al[B]gún día
+[B] seré libre de mi rima.
+[B] Si el a[E]mor es [E/G#]un delirio
+[E/G#] que se paga en [A]medicina,
+[A] o si afuera están los locos
+[A] y a[F#m]quí dentro la rutina.
+
+[F#m] Por eso, amor, [G/F#]te escri[A]bo
+[A] desde el cen[D]tro del abismo,
 [D] donde todos somos cuerdos
-[A] y soñamo[F#m]s con lo mismo:
-[Bm] que el amor [F#m]no sea un crimen
-[A] ni la vida un espejismo,
-[G] y que u[A]n día los poetas
-[F#m] sean dueño[D]s de su ritmo.
+[F#m] y soñamos con lo mismo:
+[B] que el amor no [E]sea un crimen
+[E] ni la vida un espejismo,
+[E] y que un dí[A/F]a los poetas
+[A/F] sean dueños de su ritmo.
+
+## Outro
+[B]  [B/E]  [B/F]  [A]  [G]  [D/E]  [A/E]  [E]  [D/E]  [C#m/G]
