@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-11-22
+
+### 🎉 Features
+
+- actualizar canción "Emilio y Dolores - Versión acústica" ([bc596af](../../commit/bc596af)) - Tony G. Bolaño
+- actualizar canción "El andén de los invisibles" ([86054a1](../../commit/86054a1)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.38.0] - 2026-11-22
 
 ### 🎉 Features
