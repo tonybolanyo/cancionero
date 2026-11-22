@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0] - 2026-11-22
+
+### 🎉 Features
+
+- expand chord dictionary with 288 chords and 1,440 positions ([5a0fcdd](../../commit/5a0fcdd)) - tonybolanyo
+
+### 📚 Documentation
+
+- add comprehensive delivery summary for chord dictionary expansion ([4be06a9](../../commit/4be06a9)) - tonybolanyo
+- add chord dictionary maintenance guide ([a719a93](../../commit/a719a93)) - tonybolanyo
+
+### 🔄 Other Changes
+
+- Merge pull request #40 from tonybolanyo/redesigned-couscous ([db83516](../../commit/db83516)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.26.0] - 2026-11-22
 
 ### 🎉 Features
