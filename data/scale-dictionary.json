@@ -1,0 +1,538 @@
+{
+  "scales": {
+    "pentatonic-minor": {
+      "name": "Pentatónica Menor",
+      "description": "Escala pentatónica menor - la más usada en blues y rock",
+      "intervals": [0, 3, 5, 7, 10],
+      "positions": [
+        {
+          "name": "Posición 1 (Cabeza)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de cabeza - posición abierta"
+        },
+        {
+          "name": "Posición 2 (Traste 1)",
+          "rootFret": 1,
+          "notes": [
+            { "string": 0, "fret": 3, "isRoot": false },
+            { "string": 1, "fret": 1, "isRoot": true },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 3, "isRoot": false },
+            { "string": 4, "fret": 1, "isRoot": true },
+            { "string": 5, "fret": 3, "isRoot": false }
+          ],
+          "shape": "G form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de segunda posición"
+        },
+        {
+          "name": "Posición 3 (Traste 2)",
+          "rootFret": 2,
+          "notes": [
+            { "string": 0, "fret": 5, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 5, "isRoot": false },
+            { "string": 3, "fret": 5, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 5, "isRoot": true }
+          ],
+          "shape": "A form",
+          "startFret": 1,
+          "endFret": 7,
+          "description": "Patrón de tercera posición"
+        },
+        {
+          "name": "Posición 4 (Traste 3)",
+          "rootFret": 3,
+          "notes": [
+            { "string": 0, "fret": 5, "isRoot": false },
+            { "string": 1, "fret": 6, "isRoot": true },
+            { "string": 2, "fret": 5, "isRoot": false },
+            { "string": 3, "fret": 7, "isRoot": false },
+            { "string": 4, "fret": 6, "isRoot": true },
+            { "string": 5, "fret": 5, "isRoot": false }
+          ],
+          "shape": "D form",
+          "startFret": 3,
+          "endFret": 9,
+          "description": "Patrón de cuarta posición"
+        },
+        {
+          "name": "Posición 5 (Traste 5)",
+          "rootFret": 5,
+          "notes": [
+            { "string": 0, "fret": 8, "isRoot": false },
+            { "string": 1, "fret": 8, "isRoot": false },
+            { "string": 2, "fret": 7, "isRoot": false },
+            { "string": 3, "fret": 9, "isRoot": false },
+            { "string": 4, "fret": 8, "isRoot": true },
+            { "string": 5, "fret": 7, "isRoot": false }
+          ],
+          "shape": "C form",
+          "startFret": 5,
+          "endFret": 11,
+          "description": "Patrón de quinta posición"
+        }
+      ],
+      "difficulty": "easy",
+      "keyNotes": "Raíz, 3ª menor, 4ª justa, 5ª justa, 7ª menor"
+    },
+    "pentatonic-major": {
+      "name": "Pentatónica Mayor",
+      "description": "Escala pentatónica mayor - más brillante y positiva",
+      "intervals": [0, 2, 4, 7, 9],
+      "positions": [
+        {
+          "name": "Posición 1 (Cabeza)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": false },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de cabeza"
+        },
+        {
+          "name": "Posición 2 (Traste 2)",
+          "rootFret": 2,
+          "notes": [
+            { "string": 0, "fret": 4, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": true },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 4, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": true },
+            { "string": 5, "fret": 4, "isRoot": false }
+          ],
+          "shape": "G form",
+          "startFret": 1,
+          "endFret": 6,
+          "description": "Patrón de segunda posición"
+        },
+        {
+          "name": "Posición 3 (Traste 4)",
+          "rootFret": 4,
+          "notes": [
+            { "string": 0, "fret": 7, "isRoot": false },
+            { "string": 1, "fret": 4, "isRoot": false },
+            { "string": 2, "fret": 6, "isRoot": false },
+            { "string": 3, "fret": 7, "isRoot": false },
+            { "string": 4, "fret": 4, "isRoot": true },
+            { "string": 5, "fret": 7, "isRoot": false }
+          ],
+          "shape": "A form",
+          "startFret": 3,
+          "endFret": 9,
+          "description": "Patrón de tercera posición"
+        },
+        {
+          "name": "Posición 4 (Traste 7)",
+          "rootFret": 7,
+          "notes": [
+            { "string": 0, "fret": 9, "isRoot": false },
+            { "string": 1, "fret": 7, "isRoot": true },
+            { "string": 2, "fret": 9, "isRoot": false },
+            { "string": 3, "fret": 9, "isRoot": false },
+            { "string": 4, "fret": 7, "isRoot": true },
+            { "string": 5, "fret": 9, "isRoot": false }
+          ],
+          "shape": "D form",
+          "startFret": 6,
+          "endFret": 12,
+          "description": "Patrón de cuarta posición"
+        },
+        {
+          "name": "Posición 5 (Traste 9)",
+          "rootFret": 9,
+          "notes": [
+            { "string": 0, "fret": 12, "isRoot": false },
+            { "string": 1, "fret": 9, "isRoot": false },
+            { "string": 2, "fret": 11, "isRoot": false },
+            { "string": 3, "fret": 12, "isRoot": false },
+            { "string": 4, "fret": 9, "isRoot": true },
+            { "string": 5, "fret": 12, "isRoot": false }
+          ],
+          "shape": "C form",
+          "startFret": 8,
+          "endFret": 14,
+          "description": "Patrón de quinta posición"
+        }
+      ],
+      "difficulty": "easy",
+      "keyNotes": "Raíz, 2ª mayor, 3ª mayor, 5ª justa, 6ª mayor"
+    },
+    "blues": {
+      "name": "Escala Blues",
+      "description": "Escala blues - pentatónica menor con la 4ª aumentada",
+      "intervals": [0, 3, 5, 6, 7, 10],
+      "positions": [
+        {
+          "name": "Posición 1 (Cabeza)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de cabeza - posición abierta"
+        },
+        {
+          "name": "Posición 2 (Traste 1)",
+          "rootFret": 1,
+          "notes": [
+            { "string": 0, "fret": 3, "isRoot": false },
+            { "string": 1, "fret": 1, "isRoot": true },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 3, "isRoot": false },
+            { "string": 4, "fret": 1, "isRoot": true },
+            { "string": 5, "fret": 3, "isRoot": false }
+          ],
+          "shape": "G form",
+          "startFret": 0,
+          "endFret": 6,
+          "description": "Patrón de segunda posición"
+        },
+        {
+          "name": "Posición 3 (Traste 5)",
+          "rootFret": 5,
+          "notes": [
+            { "string": 0, "fret": 8, "isRoot": false },
+            { "string": 1, "fret": 8, "isRoot": false },
+            { "string": 2, "fret": 7, "isRoot": false },
+            { "string": 3, "fret": 9, "isRoot": false },
+            { "string": 4, "fret": 8, "isRoot": true },
+            { "string": 5, "fret": 7, "isRoot": false }
+          ],
+          "shape": "A form",
+          "startFret": 5,
+          "endFret": 11,
+          "description": "Patrón de tercera posición"
+        }
+      ],
+      "difficulty": "medium",
+      "keyNotes": "Raíz, 3ª menor, 4ª justa, 4ª aumentada, 5ª justa, 7ª menor"
+    },
+    "natural-minor": {
+      "name": "Escala Menor Natural",
+      "description": "Escala menor natural - relativa a la escala mayor",
+      "intervals": [0, 2, 3, 5, 7, 8, 10],
+      "positions": [
+        {
+          "name": "Posición 1 (E form)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Forma de mi menor"
+        },
+        {
+          "name": "Posición 2 (G form)",
+          "rootFret": 2,
+          "notes": [
+            { "string": 0, "fret": 5, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 5, "isRoot": false },
+            { "string": 3, "fret": 5, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 5, "isRoot": true }
+          ],
+          "shape": "G form",
+          "startFret": 2,
+          "endFret": 7,
+          "description": "Forma de sol menor"
+        },
+        {
+          "name": "Posición 3 (A form)",
+          "rootFret": 5,
+          "notes": [
+            { "string": 0, "fret": 8, "isRoot": false },
+            { "string": 1, "fret": 5, "isRoot": false },
+            { "string": 2, "fret": 7, "isRoot": false },
+            { "string": 3, "fret": 7, "isRoot": false },
+            { "string": 4, "fret": 5, "isRoot": true },
+            { "string": 5, "fret": 7, "isRoot": false }
+          ],
+          "shape": "A form",
+          "startFret": 5,
+          "endFret": 10,
+          "description": "Forma de la menor"
+        }
+      ],
+      "difficulty": "medium",
+      "keyNotes": "Raíz, 2ª mayor, 3ª menor, 4ª justa, 5ª justa, 6ª menor, 7ª menor"
+    },
+    "major": {
+      "name": "Escala Mayor",
+      "description": "Escala mayor - la escala fundamental de la música occidental",
+      "intervals": [0, 2, 4, 5, 7, 9, 11],
+      "positions": [
+        {
+          "name": "Posición 1 (E form)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": false },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Forma de do mayor"
+        },
+        {
+          "name": "Posición 2 (G form)",
+          "rootFret": 2,
+          "notes": [
+            { "string": 0, "fret": 5, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": false },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 5, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": false },
+            { "string": 5, "fret": 5, "isRoot": true }
+          ],
+          "shape": "G form",
+          "startFret": 2,
+          "endFret": 7,
+          "description": "Forma de sol mayor"
+        },
+        {
+          "name": "Posición 3 (A form)",
+          "rootFret": 5,
+          "notes": [
+            { "string": 0, "fret": 7, "isRoot": false },
+            { "string": 1, "fret": 5, "isRoot": false },
+            { "string": 2, "fret": 7, "isRoot": false },
+            { "string": 3, "fret": 7, "isRoot": false },
+            { "string": 4, "fret": 5, "isRoot": true },
+            { "string": 5, "fret": 7, "isRoot": false }
+          ],
+          "shape": "A form",
+          "startFret": 5,
+          "endFret": 10,
+          "description": "Forma de la mayor"
+        }
+      ],
+      "difficulty": "medium",
+      "keyNotes": "Raíz, 2ª mayor, 3ª mayor, 4ª justa, 5ª justa, 6ª mayor, 7ª mayor"
+    },
+    "harmonic-minor": {
+      "name": "Escala Menor Armónica",
+      "description": "Escala menor armónica - con la 7ª mayor",
+      "intervals": [0, 2, 3, 5, 7, 8, 11],
+      "positions": [
+        {
+          "name": "Posición 1 (E form)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "E form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Forma de mi menor armónica"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª mayor, 3ª menor, 4ª justa, 5ª justa, 6ª menor, 7ª mayor"
+    },
+    "dorian": {
+      "name": "Modo Dórico",
+      "description": "Segundo modo de la escala mayor - menor con 6ª mayor",
+      "intervals": [0, 2, 3, 5, 7, 9, 10],
+      "positions": [
+        {
+          "name": "Posición 1",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 3, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "D form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de dórico"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª mayor, 3ª menor, 4ª justa, 5ª justa, 6ª mayor, 7ª menor"
+    },
+    "phrygian": {
+      "name": "Modo Frigio",
+      "description": "Tercer modo de la escala mayor - menor con 2ª menor",
+      "intervals": [0, 1, 3, 5, 7, 8, 10],
+      "positions": [
+        {
+          "name": "Posición 1",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 1, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "P form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de frigio"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª menor, 3ª menor, 4ª justa, 5ª justa, 6ª menor, 7ª menor"
+    },
+    "lydian": {
+      "name": "Modo Lidio",
+      "description": "Cuarto modo de la escala mayor - mayor con 4ª aumentada",
+      "intervals": [0, 2, 4, 6, 7, 9, 11],
+      "positions": [
+        {
+          "name": "Posición 1",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": false },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 3, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "L form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de lidio"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª mayor, 3ª mayor, 4ª aumentada, 5ª justa, 6ª mayor, 7ª mayor"
+    },
+    "mixolydian": {
+      "name": "Modo Mixolidio",
+      "description": "Quinto modo de la escala mayor - mayor con 7ª menor",
+      "intervals": [0, 2, 4, 5, 7, 9, 10],
+      "positions": [
+        {
+          "name": "Posición 1",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 2, "isRoot": false },
+            { "string": 2, "fret": 4, "isRoot": false },
+            { "string": 3, "fret": 2, "isRoot": false },
+            { "string": 4, "fret": 2, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "M form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de mixolidio"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª mayor, 3ª mayor, 4ª justa, 5ª justa, 6ª mayor, 7ª menor"
+    },
+    "locrian": {
+      "name": "Modo Locrio",
+      "description": "Sexto modo de la escala mayor - menor con 2ª menor y 5ª disminuida",
+      "intervals": [0, 1, 3, 5, 6, 8, 10],
+      "positions": [
+        {
+          "name": "Posición 1",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 1, "isRoot": false },
+            { "string": 2, "fret": 3, "isRoot": false },
+            { "string": 3, "fret": 1, "isRoot": false },
+            { "string": 4, "fret": 3, "isRoot": false },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "Lo form",
+          "startFret": 0,
+          "endFret": 5,
+          "description": "Patrón de locrio"
+        }
+      ],
+      "difficulty": "hard",
+      "keyNotes": "Raíz, 2ª menor, 3ª menor, 4ª justa, 5ª disminuida, 6ª menor, 7ª menor"
+    },
+    "chromatic": {
+      "name": "Escala Cromática",
+      "description": "Escala cromática - todos los semitonos",
+      "intervals": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "positions": [
+        {
+          "name": "Posición 1 (Lineal)",
+          "rootFret": 0,
+          "notes": [
+            { "string": 0, "fret": null, "isRoot": false },
+            { "string": 1, "fret": 0, "isRoot": true },
+            { "string": 2, "fret": 0, "isRoot": true },
+            { "string": 3, "fret": 0, "isRoot": true },
+            { "string": 4, "fret": 0, "isRoot": true },
+            { "string": 5, "fret": 0, "isRoot": true }
+          ],
+          "shape": "Linear",
+          "startFret": 0,
+          "endFret": 12,
+          "description": "Patrón lineal cromático"
+        }
+      ],
+      "difficulty": "easy",
+      "keyNotes": "Todos los semitonos disponibles"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2024-01-01T00:00:00Z",
+    "instrument": "guitar",
+    "tuning": "standard",
+    "strings": ["E", "A", "D", "G", "B", "E"],
+    "description": "Diccionario completo de escalas para guitarra con múltiples posiciones en el diapasón",
+    "fretsAvailable": 24,
+    "categories": ["Pentatónicas", "Mayores/Menores", "Blues", "Modos", "Especiales"]
+  }
+}

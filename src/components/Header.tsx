@@ -19,6 +19,8 @@ interface HeaderProps {
   onOpenAuthModal: () => void;
   onOpenSongbook?: () => void;
   onOpenVideoVisualizer?: () => void;
+  onOpenScaleDictionary?: () => void;
+  onOpenChordDictionary?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,7 +37,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAbout,
   onOpenAuthModal,
   onOpenSongbook,
-  onOpenVideoVisualizer
+  onOpenVideoVisualizer,
+  onOpenScaleDictionary,
+  onOpenChordDictionary
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { isAuthor, user } = useAuth();
@@ -153,6 +157,27 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Manifiesto
           </button>
+
+          {/* Learning Resources - Diccionarios */}
+          {onOpenChordDictionary && (
+            <button
+              onClick={onOpenChordDictionary}
+              className="whitespace-nowrap transition-colors hover:text-[var(--text-primary)] text-[var(--text-muted)] py-1 cursor-pointer"
+              title="Diccionario de acordes para guitarra"
+            >
+              Acordes
+            </button>
+          )}
+
+          {onOpenScaleDictionary && (
+            <button
+              onClick={onOpenScaleDictionary}
+              className="whitespace-nowrap transition-colors hover:text-[var(--text-primary)] text-[var(--text-muted)] py-1 cursor-pointer"
+              title="Diccionario de escalas para guitarra"
+            >
+              Escalas
+            </button>
+          )}
         </nav>
 
         {/* Zone 3: Theme Toggle + Author Login / New Song */}
