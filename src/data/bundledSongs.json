@@ -1,5 +1,50 @@
 [
   {
+    "id": "si-me-pierdo",
+    "title": "Si me pierdo",
+    "status": "published",
+    "year": 2026,
+    "genre": "Bolero",
+    "key": "C#m",
+    "tempo": 85,
+    "timeSignature": "6/8",
+    "tuning": "Estándar (EADGBE)",
+    "isPrivateDemo": "true",
+    "notes": "Álbum original: Inéditas",
+    "lrc": "[00:12.25]Si algún día, ya cansado,\\n[00:18.30]se me apaga la guitarra,\\n[00:21.24]si la esperanza se desgarra\\n[00:23.50]y me siento derrotado,\\n[00:27.05]volveré a lo que has dejado:\\n[00:32.07]una voz contra el olvido,\\n[00:35.25]un sueño recién nacido,\\n[00:37.75]lo más terrible se aprende enseguida,\\n[00:40.90]y lo hermoso cuesta la vida,\\n[00:45.50]pero no me doy por vencido.\\n\\n[00:50.75]Que levante la guitarra,\\n[00:52.50]si me pierdo en el camino,\\n[00:54.75]si me vence algún destino\\n[00:58.75]o la noche se desgarra.\\n[01:01.25]Que su madera no amarre\\n[01:04.25]la voz que nunca se olvida;\\n[01:07.31]que vuelva canción la vida,\\n[01:10.27]que me devuelva la mano\\n[01:13.50]y un horizonte temprano\\n[01:17.75]cuando me ronde la herida.",
+    "tags": [
+      "acústico"
+    ],
+    "createdAt": "2026-10-28T12:46:30.837Z",
+    "updatedAt": "2026-11-22T11:18:18.886Z",
+    "lyrics": "## Intro\n[D/E]  [A/D#]  [F#m]  [A/F#]  [A/B]  [A/F#]  [G/A]  [Bm/G#]\n\n[Bm/F] Si algún día, ya cansado,\n[Bm/F] se me apa[Bm/C]ga la [Bm]guitarra,\n[Bm] si la esperanza se des[C#m/G#]garra\n[C#m/G#] y me [C#m]sien[C#m/F]to derrotado,\n[C#m/F] vol[F#m/F]veré [A/A#]a lo que [A/D#]has deja[A/A#]do:\n[A/A#] una voz contra el [G/A]olvido,\n[G/A] un sueño re[Bm/G]cién nacido,\n[Bm/G] lo más terrible se aprende [B/E]ensegui[B/G]da,\n[B/G] y lo hermoso cues[F#m]ta la vida,\n[F#m] pero [C#m/G]no me doy por vencido.\n\n[C#m/G] Que levan[F#/G#]te la gui[G#/C]tarra,\n[G#/C] si me pierdo en el cami[F#m/G]no,\n[F#m/G] si me vence algún [C#m]destino\n[C#m] o la noche se desgarra.\n[Bm/G#] Que su [C#m/G#]madera no a[F#m/F]marre\n[F#m/F] la voz que nunca se olvida;\n[C#m/F#] que vuelva canción [F#m/A]la vi[F#m/G#]da,\n[F#m/G#] que me devuel[F#m/G]va la mano\n[F#m/G] y un horizonte [Em/F]tempra[A/A#]no\n[A/A#] cuando me ronde la herida.\n\n## Outro\n[A/A#]  [F#m/B]  [F#m]  [D/E]  [F#m/D#]  [F#m/E]"
+  },
+  {
+    "id": "la-cortesia-del-filo",
+    "title": "La cortesía del filo",
+    "status": "published",
+    "year": 2025,
+    "genre": "Cantautor",
+    "key": "G",
+    "tempo": 63,
+    "albumId": "cartas-sin-sello",
+    "albumTitle": "Cartas sin sello",
+    "trackNumber": "15",
+    "timeSignature": "4/4",
+    "tuning": "Estándar (EADGBE)",
+    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
+    "isPrivateDemo": "true",
+    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño\\nÁlbum original: Cartas sin sello (2025)\\nÁlbum original: Cartas sin sello (2025)\\nÁlbum original: Cartas sin sello (2025)",
+    "lrc": "[00:18.04]Hoy traes la voz envuelta en terciopelo,\\n[00:23.62]un “perdón” de bolsillo,\\n[00:26.36]por si acaso el viento gira.\\n[00:30.82]Pero yo conozco el juego de tus dedos,\\n[00:36.01]la moneda en el aire\\n[00:38.26]que nunca termina.\\n\\n[00:42.67]Y me dices “lo siento”\\n[00:45.20]como quien cruza un puente\\n[00:48.64]sin mirar el río.\\n[00:51.23]Pero yo, que he visto\\n[00:54.98]la danza de tus pasos,\\n[00:58.08]ya no me lo creo,\\n[01:00.93]ya no, ya no me fío.\\n\\n[01:05.95]Hay un arte en tu modo de inclinar la cabeza,\\n[01:10.93]en la pausa precisa\\n[01:13.76]que parece ternura.\\n[01:17.57]Pero bajo la mesa\\n[01:20.43]se asoma la fiera,\\n[01:23.49]y el perdón es un filo\\n[01:26.62]que nunca se cura.\\n\\n[01:30.16]Y me dices “lo siento”\\n[01:32.85]como quien cruza un puente\\n[01:36.06]sin mojarse el alma.\\n[01:39.01]Pero yo, que he visto\\n[01:42.38]la sombra en tu palabra,\\n[01:45.44]ya no me lo creo,\\n[01:48.31]ya no, no me desarma.\\n\\n[01:53.23]Quizás aprendí de tus gestos\\n[01:55.69]la ciencia del disimulo,\\n[01:59.31]la flor que se da con espinas,\\n[02:02.27]el abrazo que es nudo.\\n\\n[02:05.50]Así que guarda el “perdón” en tu bolsillo de siempre,\\n[02:10.77]que yo ya no lo cambio\\n[02:13.86]por promesas de humo.\\n[02:17.95]He leído tus cartas,\\n[02:20.46]he contado tus dados,\\n[02:23.58]y en la ruleta del miedo\\n[02:26.13]ya no apuesto ninguno.\\n\\n[02:30.14]Y me dices “lo siento”\\n[02:32.69]como quien cruza un puente\\n[02:36.00]sin dejar huella.\\n[02:39.00]Pero yo, que he visto\\n[02:42.38]el mapa de tus rutas,\\n[02:45.41]ya no me lo creo,\\n[02:48.13]ya no, ya no me resulta.",
+    "tags": [
+      "cartas-sin-sello",
+      "acústico"
+    ],
+    "createdAt": "2026-11-01T00:17:35.091Z",
+    "updatedAt": "2026-11-22T08:38:12.928Z",
+    "lyrics": "## Intro\n[G]  [G/E]  [C/E]  [C]  [D]  [C/B]  [G/B]  [G/E]  [G]  [F/D]  [C/D]  [Am/D]\n\n[G] Hoy traes la voz envuel[G/E]ta en [Am/E]tercio[G/D]pelo,\n[G/D] un “per[C]dón” de bolsi[C/B]llo,\n[C/B] por si [F/A]acaso el [F/D]viento gi[F/G]ra.\n[F/G] Pe[G]ro yo co[G/F#]nozco el [Em]juego de tus [G/D]dedos,\n[G/D] la moneda en [C]el aire\n[C] que nun[Am/D]ca termina.\n\n[Am/D] Y me [Am/E]dices “lo sien[Am/B]to”\n[Am/B] como [D/B]quien [F/C]cruza un puen[F/D]te\n[F/D] sin mi[Am/E]rar el río.\n[Am/E] Pero yo, [Am/C]que he vis[Bb/D]to\n[Bb/D] la danza [G/E]de tus [G/B]pasos,\n[G/B] ya no me [C]lo cre[G]o,\n[G] ya no, [Am/D]ya no me fí[G]o.\n\n[G] Hay un ar[G/F#]te en tu modo [G/E]de inclinar la ca[G/D]be[Bb/D]za,\n[Bb/D] en la [C]pausa preci[G/B]sa\n[G/B] que pa[C/A]rece ter[C/D]nura.\n[C/D] Pero ba[G]jo la me[Am/F#]sa\n[G/F#] se a[G/E]soma la [G/D]fiera,\n[G/D] y el [Bb/D]perdón es un [Bb/C#]fi[G/C#]lo\n[G/C#] que [Am/D]nunca se cura.\n\n[Am/D] Y me [Am/E]dices “[Em]lo [G/B]siento”\n[G/B] como [C]quien cruza un [Bb/D]puente\n[Bb/D] sin mo[G/E]jarse el [G/B]alma.\n[G/B] Pe[F/B]ro [F/C]yo, que [Am/C]he vis[D]to\n[D] la sombra [G/E]en tu pala[G/B]bra,\n[G/B] ya no me [C]lo cre[G]o,\n[G] ya no, [Am/D]no me de[C/D]sar[C]ma.\n\n[C] Quizás aprendí de tus gestos\n[C] la cien[Am/G]cia [C/D]del disimu[C]lo,\n[C] la flor que se da con [G/C]espi[G/D]nas,\n[G/D] el abrazo [C/D]que es [D]nudo.\n\n[D] Así [C/G]que guar[C/F#]da el “perdón” en tu bolsi[G/E]llo de siem[Bb/D]pre,\n[Bb/D] que yo ya [C]no lo cam[G/B]bio\n[G/B] por pro[F/A]me[C/A]sas de [C/D]humo.\n[C/D] He [C/G]leído tus car[C/F#]tas,\n[C/F#] he con[G/E]tado tus [G/D]dados,\n[G/D] y en la ru[C]leta del mie[G/C#]do\n[G/C#] ya no apues[D]to ninguno.\n\n[D] Y me [G/E]dices “lo sien[D/B]to”\n[D/B] como [Em/C]quien cruza un [Bb/D]puente\n[Bb/D] sin de[G/E]jar hue[G/B]lla.\n[G/B] Pero [C]yo, que he vis[D]to\n[D] el mapa [Em]de tus ru[D/B]tas,\n[D/B] ya no me [C]lo creo,\n[C] ya no, ya no [F/D]me resulta.\n\n## Outro\n[Am/D]  [Am/G]  [D/G#]  [Em]  [Bb/F]  [C]  [G/C]  [D]  [C/D]  [G]  [G/D]  [G]"
+  },
+  {
     "id": "cancion-para-los-cuerdos",
     "title": "Canción para los cuerdos",
     "status": "published",
@@ -181,24 +226,6 @@
     "createdAt": "2026-10-30T16:43:35.843Z",
     "updatedAt": "2026-10-30T16:47:30.246Z",
     "lyrics": "## Estrofa 1\n[F#m] Hay recuerdos que pesan como ladrillos al sol\n[D] Ese viejo archivo que guarda todo el dolor\n[F#m] (Guarda el dolor...)\n[A] Un respiro en el aire\n[F#m] Una página en blanco\n[A] (Respirar...)\n[F#m] El derecho a olvidar\n[Bm] Es lo que estoy buscando\n[F#m] (buscando...)\n\n## Estribillo\n[E] Déjame borrar las sombras del ayer\n[F#m] Que mi memoria elija lo que quiere mantener\n[Bm] (Déjame borrar...)\n[F#m] No soy mi pasado\n[F#m] No soy mi error\n[D] Soy el presente cantando una nueva canción\n[F#m] (No soy mi error...)\n\n## Estrofa 2\n[A] Hay fotos que gritan\n[F#m] Promesas que se hundieron\n[A] En el río del tiempo\n[F#m] Viejos miedos que se hicieron\n[Bm] Una máquina guarda lo que quiero dejar\n[F#m] El derecho a olvidar\n[E] Dejarlo ir\n[F#m] Soltar\n\n## Estribillo\n[Bm] Déjame borrar las sombras del ayer\n[F#m] Que mi memoria elija lo que quiere mantener\n[F#m] (Sombras de ayer...)\n[D] No soy mi pasado\n[F#m] No soy mi error\n[A] Soy el presente cantando una nueva canción\n[F#m] (No soy mi error...)\n\n## Puente\n[A] No me definas por lo que un clic congeló\n[F#m] Soy más que un registro\n[Bm] Soy lo que hoy soy\n[F#m] Que el viento sople fuerte\n[E] Que borre esta señal\n[F#m] Un nuevo comienzo\n[Bm] Mi derecho esencial\n\n## Estribillo\n[F#m] Déjame borrar las sombras del ayer\n[F#m] Que mi memoria elija lo que quiere mantener\n[D] (Déjame borrar...)\n[F#m] No soy mi pasado\n[A] No soy mi error\n[F#m] Soy el presente cantando una nueva canción\n[A] (No soy mi error...)"
-  },
-  {
-    "id": "si-me-pierdo",
-    "title": "Si me pierdo",
-    "status": "published",
-    "year": 2026,
-    "genre": "Bolero",
-    "key": "Am",
-    "tempo": 96,
-    "timeSignature": "4/4",
-    "tuning": "Estándar (EADGBE)",
-    "tags": [
-      "acústico"
-    ],
-    "lrc": "[ti:Si me pierdo]\\\\n[ar:Tony]\\\\n[al:Cancionero Acústico]\\\\n[by:Cancionero]\\\\n[offset:0]\\\\n[00:04.20] [Am] Si algún día, ya cansado,\\\\n[00:08.50] [Dm] se me apaga la guitarra,\\\\n[00:12.80] [E7] si la esperanza se desgarra\\\\n[00:16.40] [Am] y me siento derrotado,\\\\n[00:20.10] volveré a lo que has dejado:\\\\n[00:24.00] [Dm] una voz contra el olvido,\\\\n[00:28.20] [G] un sueño recién nacido,\\\\n[00:32.40] [C] lo más terrible se aprende enseguida,\\\\n[00:36.70] [F] y lo hermoso cuesta la vida,\\\\n[00:41.10] [E7] pero no me doy por vencido.\\\\n[00:46.00] \\\\n[00:50.30] [Am] Que levante la guitarra,\\\\n[00:54.80] [Dm] si me pierdo en el camino,\\\\n[00:59.20] [G] si me vence algún destino\\\\n[01:03.50] [C] o la noche se desgarra.\\\\n[01:08.00] [F] Que su madera no amarre\\\\n[01:12.40] [Dm] la voz que nunca se olvida;\\\\n[01:16.80] [E7] que vuelva canción la vida,\\\\n[01:21.00] que me devuelva la mano\\\\n[01:25.30] y un horizonte temprano\\\\n[01:29.80] [Am] cuando me ronde la herida.",
-    "createdAt": "2026-10-28T12:46:30.837Z",
-    "updatedAt": "2026-10-28T12:46:30.837Z",
-    "lyrics": "Si algún día, ya cansado,\nse me apaga la guitarra,\nsi la esperanza se desgarra\ny me siento derrotado,\nvolveré a lo que has dejado:\nuna voz contra el olvido,\nun sueño recién nacido,\nlo más terrible se aprende enseguida,\ny lo hermoso cuesta la vida,\npero no me doy por vencido.\n\nQue levante la guitarra,\nsi me pierdo en el camino,\nsi me vence algún destino\no la noche se desgarra.\nQue su madera no amarre\nla voz que nunca se olvida;\nque vuelva canción la vida,\nque me devuelva la mano\ny un horizonte temprano\ncuando me ronde la herida."
   },
   {
     "id": "no-jose-luis",
@@ -672,29 +699,24 @@
     "lyrics": "## Estrofa 1\nHoy amanece distinto,  \nhay un eco en la ventana,  \nel café sabe a domingo  \ny a preguntas que no hablan.  \nTus pasos cruzan despacio  \nla frontera de mi almohada,  \ny aunque el mundo esté callado  \nalgo en mí no se apaga.\n\n## Estrofa 2\nDicen que hay cosas sagradas,  \nque no deben perdonarse,  \nque el amor es un combate  \ndonde nadie sale ileso.  \nPero yo, que vi tus manos  \ntemblar sobre mi costado,  \nsé que el mundo está cansado  \nde juzgar lo que no entiende.\n\n## Estribillo\nY no lo cuento,  \nporque nadie entendería  \nque prefiera tu regreso  \nal frío de la herida.  \nNo lo grito,  \nporque todos pedirían  \nque te aleje de mi vida,  \ny yo abrazo tu regreso  \nantes que perder tu risa.\n\n## Puente\nEn la plaza los vecinos  \ncantan himnos de justicia,  \npero yo, desde mi esquina,  \nsolo quiero tu rutina.  \nEl café, la sobremesa,  \nel rumor de tu vestido,  \ny el milagro repetido  \nde encontrarte cada día.\n\n## Estribillo\nY no lo cuento,  \nporque nadie entendería  \nque prefiera tu regreso  \nal frío de la herida.  \nNo lo grito,  \nporque todos pedirían  \nque te aleje de mi vida,  \ny yo abrazo tu regreso  \nantes que perder tu risa.\n\n## Coda\nQue me juzguen los que quieran,  \nque me llamen cobardía,  \nyo prefiero tus mañanas  \na la soledad vacía.  \nY aunque duela, aunque sangre,  \naunque el mundo no comprenda,  \nyo me quedo con tus pasos  \ny el secreto en la tormenta."
   },
   {
-    "id": "la-cortesia-del-filo",
-    "title": "La cortesía del filo",
+    "id": "cancion-1795344608590",
+    "title": "Sonrisa de alquiler",
     "status": "draft",
-    "year": 2025,
-    "genre": "Cantautor",
-    "key": "G",
-    "tempo": 63,
-    "albumId": "cartas-sin-sello",
-    "albumTitle": "Cartas sin sello",
-    "trackNumber": "15",
-    "timeSignature": "4/4",
+    "year": 2026,
+    "genre": "Canción de Autor",
+    "key": "Em",
+    "tempo": 82,
+    "timeSignature": "2/4",
     "tuning": "Estándar (EADGBE)",
-    "spotifyUrl": "https://open.spotify.com/album/2OxjqlugoDnXgt3EbAdmRk",
     "isPrivateDemo": "true",
-    "notes": "Del disco 'Cartas sin sello' de Tony Bolaño\\nÁlbum original: Cartas sin sello (2025)\\nÁlbum original: Cartas sin sello (2025)",
-    "lrc": "[00:18.04]Hoy traes la voz envuelta en terciopelo,\\n[00:23.62]un “perdón” de bolsillo,\\n[00:26.36]por si acaso el viento gira.\\n[00:30.82]Pero yo conozco el juego de tus dedos,\\n[00:36.01]la moneda en el aire\\n[00:38.26]que nunca termina.\\n\\n[00:42.67]Y me dices “lo siento”\\n[00:45.20]como quien cruza un puente\\n[00:48.64]sin mirar el río.\\n[00:51.23]Pero yo, que he visto\\n[00:54.98]la danza de tus pasos,\\n[00:58.08]ya no me lo creo,\\n[01:00.93]ya no, ya no me fío.\\n\\n[01:05.95]Hay un arte en tu modo de inclinar la cabeza,\\n[01:10.93]en la pausa precisa\\n[01:13.76]que parece ternura.\\n[01:17.57]Pero bajo la mesa\\n[01:20.43]se asoma la fiera,\\n[01:23.49]y el perdón es un filo\\n[01:26.62]que nunca se cura.\\n\\n[01:30.16]Y me dices “lo siento”\\n[01:32.85]como quien cruza un puente\\n[01:36.06]sin mojarse el alma.\\n[01:39.01]Pero yo, que he visto\\n[01:42.38]la sombra en tu palabra,\\n[01:45.44]ya no me lo creo,\\n[01:48.31]ya no, no me desarma.\\n\\n[01:53.23]Quizás aprendí de tus gestos\\n[01:55.69]la ciencia del disimulo,\\n[01:59.31]la flor que se da con espinas,\\n[02:02.27]el abrazo que es nudo.\\n\\n[02:05.50]Así que guarda el “perdón” en tu bolsillo de siempre,\\n[02:10.77]que yo ya no lo cambio\\n[02:13.86]por promesas de humo.\\n[02:17.95]He leído tus cartas,\\n[02:20.46]he contado tus dados,\\n[02:23.58]y en la ruleta del miedo\\n[02:26.13]ya no apuesto ninguno.\\n\\n[02:30.14]Y me dices “lo siento”\\n[02:32.69]como quien cruza un puente\\n[02:36.00]sin dejar huella.\\n[02:39.00]Pero yo, que he visto\\n[02:42.38]el mapa de tus rutas,\\n[02:45.41]ya no me lo creo,\\n[02:48.13]ya no, ya no me resulta.",
+    "notes": "Progresión armónica detectada: Em - Em/B - Am - D/B - Em - Em/A - Em - D/B",
     "tags": [
-      "cartas-sin-sello",
-      "acústico"
+      "acústico",
+      "maqueta"
     ],
-    "createdAt": "2026-11-01T00:17:35.091Z",
-    "updatedAt": "2026-11-21T21:45:16.936Z",
-    "lyrics": "## Intro\n[G]  [G/E]  [C/E]  [C]  [D]  [C/B]  [G/B]  [G/E]  [G]  [F/D]  [C/D]  [Am/D]  [C/D]\n\n[G] Hoy traes la voz envuelta [G/E]en [Am/E]terciop[G/D]elo,\n[G/D] un “pe[C]rdónded[C/B]bolsillolo,\n[C/B] por si [F/A]acaso el [F/D]viento [F/G]gira.\n[F/G] Pe[G]ro yo [G/F#]conozco el [Em]juego de tus [G/D]dedos,\n[G/D] la moneda e[C]n el aire\n[C] que nunca [Am/D]termina.\n\n[Am/D] Y me [Am/E]dices “lo[Am/B]sientoo”\n[Am/B] como [D/B]quien [F/C]cruza un [F/D]puente\n[F/D] sin [Am/E]mirar el río.\n[Am/E] Pero yo, [Am/C]que he [Bb/D]visto\n[Bb/D] la danza [G/E]de tus [G/B]pasos,\n[G/B] ya no me [C]lo [G]creo,\n[G] ya no, [Am/D]ya no me [G]fío.\n\n[G] Hay un [G/F#]arte en tu modo [G/E]de inclinar la cab[G/D]eza,\n[Bb/D] en la [C]pausa prec[G/B]isa\n[G/B] que par[C/A]ece [C/D]ternura.\n[C/D] Pero [G]bajo la [Am/F#]mesa\n[G/F#] se as[G/E]oma la [G/D]fiera,\n[G/D] y e[Bb/D]l [Bb/C]perdón es un [Bb/C#]filo\n[G/C#] que [Am/D]nunca se cura.\n\n[Am/D] Y me [Am/E]dices [Em]“lo[G/B]sientoo”\n[G/B] como [C]quien cruza un [Bb/D]puente\n[Bb/D] sin [G/E]mojarse el [G/B]alma.\n[G/B] Pe[F/B]ro [F/C]yo, que [Am/C]he [D]visto\n[D] la sombra [G/E]en tu [G/B]palabra,\n[G/B] ya no me [C]lo [G]creo,\n[G] ya no, [Am/D]no me [C/D]desarma.\n\n[C] Quizás aprendí de tus gestos\n[C] la [Am/G]ciencia [C/D]del disim[C]ulo,\n[C] la flor que se da co[G/C]n [G/D]espinas,\n[G/D] el abrazo que [C/D]es [D]nudo.\n\n[D] Así [C/G]que [C/F#]guarda el “perdónenetutbolsillol[G/E]ded[Bb/D]siemprere,\n[Bb/D] que yo ya [C]no lo [G/B]cambio\n[G/B] por prom[F/A]esas [C/A]de [C/D]humo.\n[C/D] He [C/G]leído tus [C/F#]cartas,\n[C/F#] he [G/E]contado tus [G/D]dados,\n[G/D] y en la rul[C]eta del [G/C#]miedo\n[G/C#] ya no apuesto [D]ninguno.\n\n[D] Y me [G/E]dices “lo[D/B]sientoo”\n[D/B] como [Em/C]quien cruza un [Bb/D]puente\n[Bb/D] sin [G/E]dejar [G/B]huella.\n[G/B] Pero [C]yo, que he [D]visto\n[D] el mapa [Em]de tus [D/B]rutas,\n[D/B] ya no me [C]lo creo,\n[C] ya no, ya no [F/D]me resulta.\n\n## Outro\n[Am/D]  [Am/G]  [D/G#]  [Em]  [Bb/F]  [C]  [G/C]  [D]  [C/D]  [G]  [G/D]  [G]"
+    "createdAt": "2026-11-22T10:56:33.394Z",
+    "updatedAt": "2026-11-22T10:57:45.812Z",
+    "lyrics": "## Intro\n\n## Estrofa 1\n[Am] Me pongo lo que [Am/E]tengo\n[Am/E] que no parezca [G/F#]que ven[Em/B]go de gue[C/F#]rra,\n[C/F#] me [C/E]arreglo la son[G/E]risa\n[G/E] como [G/B]si fue[G/E]ra una herida abierta.\n\n[G/E] Hay cien voces ha[Em/F#]blan[Am/F#]do\n[Am/F#] y ninguna [Am/B]dice [Em/B]nada que entienda,\n[Em/B] yo aprieto una co[Am]pa\n[Am] como si fue[G/E]ra el últi[G/B]mo salvavi[C/F#]das.\n\n## Pre-estribillo\n[C/F#] Y pre[A/F#]gunto [Em]por el tiempo,\n[Em] por el trabajo, por la suerte,\n[Em] mien[C/E]tras [Em/A]den[G/A]tro de mí\n[G/A] se a[G/B]paga [D/F#]una [C/E]luz dis[Am/E]tinta.\n\n## Estribillo\n[Am/E] Cara de [Em]póker, son[Em/B]risa de [Em]alquiler,\n[D/A] un “qué bien estás” [Am]que no [Em]puedo sentir.\n[Em] Días largos, salas llenas, voces sin fin,\n[Em] todos bailan[Am]do y yo apren[Am/E]diendo a [Am]fingir.\n\n[Am] Cara de póker, no [Em]es que esté mal,\n[Em] solo que este si[Em/C#]tio no [Em/B]sabe de mí.\n[Em/B] Sobrevivo [Am/B]al día con la máscara puesta,\n[Am/B] y cuando llego a [Em]casa, por fin [Em/B]respiro.\n\n## Guitarra\n\n## Estrofa 2\n[Em/B] Me [Am/E]salen [Am]de [Am/E]memo[Em/F#]ria\n[Em/F#] las frases que no duelen [G/B]a na[G/E]die,\n[G/E] “qué mayor está”, “qué bien te ves”,\n[G/E] “ya deberías venir más”.\n\n[G/E] Ríe to[Am/F#]do el [Em/B]mundo\n[Em/B] a un chis[D/B]te que no en[Em/B]tiendo [Am/E]bien,\n[Am/E] yo [Am/B]río [C/A]dos segun[G/A]dos [G/E]tarde\n[G/E] y nadie [G/F#]se [Em/F#]da cuenta de [A/F#]que no está [A/B]bien.\n\n## Pre-estribillo\n[A/B] No es odio ni [G/B]ren[G/E]cor,\n[G/E] no es [G/B]que no quiera a [Em/A]la [C/A]gente,\n[C/A] es que sos[Em/F#]tener [A/F#]la calma\n[A/F#] me [A/B]cues[G/E]ta toda la tarde.\n\n## Estribillo\n[G/E] Cara [Em]de póker, son[Am]risa de al[Am/E]qui[Am]ler,\n[Am] un “qué bien estás” [G/F#]que no [Em/B]puedo sentir.\n[Em/B] Días [Em]largos, salas llenas, voces sin fin,\n[Em] to[Em/B]dos bai[Em]lando y yo apren[Am]diendo [G/E]a fin[G/A]gir.\n\n[G/A] Cara de póker, no es [Em/F#]que [Am/B]esté mal,\n[Am/B] solo que este [Em/B]sitio no sabe de mí.\n[Em/B] Sobrevivo al [Em]día con la máscara [Em/A]puesta,\n[Em/A] y cuando llego a casa, [G/B]por fin respiro.\n\n## Puente\n[G/B] Y no es [C/E]que [G/B]quie[G/E]ra huir\n[G/E] de las [Bm]manos [G/E]que me abra[G/A]zan,\n[G/A] es que hay si[G/E]tios don[Am/B]de el [Am/F#]aire\n[Am/F#] se vuel[Bm/F#]ve demasiado [Am/B]grande.\n\n[Am/B] Yo [Am/F#]no sé estar [Am/E]de fies[F/A]ta\n[F/A] sin dejar pe[C]dazos [B]míos,\n[B] así [A/F#]que [Em]guardo la voz,\n[Em] la mi[G/E]rada y los sentidos.\n\n## Estribillo final\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n\n## Coda\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n[A/B]  [A/F#]  [Em]  [G/E]\n\n## Otro"
   },
   {
     "id": "cinco-anos-y-un-faro",

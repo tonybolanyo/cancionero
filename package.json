@@ -13,7 +13,8 @@
     "generate-sitemap": "node scripts/generate-sitemap.mjs",
     "generate-sitemap-index": "node scripts/generate-sitemap-index.mjs",
     "generate-robots": "node scripts/generate-seo-files.js",
-    "build": "npm run generate-version && npm run generate-catalog && vite build && npm run generate-robots && npm run generate-sitemap && npm run generate-sitemap-index",
+    "copy-chord-dictionary": "node scripts/copy-chord-dictionary.mjs",
+    "build": "npm run generate-version && npm run generate-catalog && npm run copy-chord-dictionary && vite build && npm run generate-robots && npm run generate-sitemap && npm run generate-sitemap-index",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
