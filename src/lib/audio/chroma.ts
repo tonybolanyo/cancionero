@@ -36,6 +36,23 @@ export interface BassPitchEstimate {
   lowestFrequencyHz?: number;
 }
 
+/**
+ * Enhanced bass pitch estimate with temporal characteristics.
+ * Used for Mejora C: Bass validation (distinguish passing notes from actual chord roots).
+ */
+export interface EnhancedBassPitchEstimate extends BassPitchEstimate {
+  /** Estimated duration of this bass note in milliseconds (0–5000) */
+  estimatedDurationMs?: number;
+  /** True if this is a held tone (>300ms stable pitch) */
+  isHeldTone?: boolean;
+  /** True if this is a transient/passing note (<100ms) */
+  isTransient?: boolean;
+  /** MIDI note number for interval calculation (21–108) */
+  estimatedMidiNote?: number;
+  /** Rhythmic alignment hint for bass validation */
+  rhythmicAlignment?: 'onBeat' | 'offBeat' | 'unknown';
+}
+
 export interface DualBandFrameChroma {
   /** Combined/full-band 12-bin chromagram (normalized 0..1) */
   chroma: number[];
@@ -78,6 +95,9 @@ export interface ChromaOptions {
   highMinFrequency?: number;  // NEW: default: 600 Hz (guitar harmonics)
   highMaxFrequency?: number;  // NEW: default: 2000 Hz (guitar harmonics)
   referenceA4Hz?: number;     // default: 440 Hz (tuning calibration)
+  // NEW: Mejora E - Percussive noise reduction
+  suppressOnsets?: boolean;   // default: false (disable by default for backward compatibility)
+  onsetSilenceWindowMs?: number; // default: 50ms (window to attenuate around percussion onsets)
 }
 
 const DEFAULT_A4_HZ = 440.0;
@@ -396,6 +416,165 @@ export function computeTripleBandFrameChroma(
 }
 
 /**
+ * Converts frequency in Hz to MIDI note number.
+ * MIDI note 69 = A4 = 440 Hz (standard tuning)
+ */
+export function frequencyToMidi(hz: number, referenceA4Hz: number = 440): number {
+  if (hz <= 0) return -1;
+  return Math.round(69 + 12 * Math.log2(hz / referenceA4Hz));
+}
+
+/**
+ * Converts MIDI note number to frequency in Hz.
+ */
+export function midiToFrequency(midi: number, referenceA4Hz: number = 440): number {
+  return referenceA4Hz * Math.pow(2, (midi - 69) / 12);
+}
+
+/**
+ * Estimates the duration of a bass note by looking for sustained pitch.
+ * Used for Mejora C: distinguishing passing notes from actual chord bass.
+ */
+export function estimateBassNoteDuration(
+  windowedChroma: WindowedChroma[],
+  frameIndex: number,
+  hopDurationMs: number = 750
+): EnhancedBassPitchEstimate | null {
+  if (frameIndex < 0 || frameIndex >= windowedChroma.length) return null;
+
+  const current = windowedChroma[frameIndex];
+  if (!current.bassEstimate || current.bassEstimate.pitchClass < 0) {
+    return null;
+  }
+
+  const currentPitch = current.bassEstimate.pitchClass;
+  let durationFrames = 1;
+
+  // Look forward for sustained pitch
+  for (let i = frameIndex + 1; i < windowedChroma.length && i < frameIndex + 15; i++) {
+    const next = windowedChroma[i].bassEstimate;
+    if (!next || next.pitchClass < 0) break;
+    // Allow ±1 semitone variance for vibrato/tolerance
+    if (Math.abs(next.pitchClass - currentPitch) > 1) break;
+    if (next.confidence < 0.4) break;
+    durationFrames++;
+  }
+
+  // Look backward for context
+  for (let i = frameIndex - 1; i >= Math.max(0, frameIndex - 15); i--) {
+    const prev = windowedChroma[i].bassEstimate;
+    if (!prev || prev.pitchClass < 0) break;
+    if (Math.abs(prev.pitchClass - currentPitch) > 1) break;
+    if (prev.confidence < 0.4) break;
+    durationFrames--;
+  }
+
+  const estimatedDurationMs = durationFrames * hopDurationMs;
+  const isHeldTone = estimatedDurationMs > 300;
+  const isTransient = estimatedDurationMs < 100;
+
+  return {
+    ...current.bassEstimate,
+    estimatedDurationMs,
+    isHeldTone,
+    isTransient,
+    estimatedMidiNote: frequencyToMidi(
+      current.bassEstimate.lowestFrequencyHz || 100,
+      440
+    ),
+    rhythmicAlignment: undefined // Will be computed during beat alignment
+  } as EnhancedBassPitchEstimate;
+}
+
+/**
+ * Detects onset (attack) times in audio by looking for sudden energy increases.
+ * Used for Mejora E: percussive noise reduction.
+ */
+export function detectOnsets(
+  channelData: Float32Array,
+  sampleRate: number,
+  options: {
+    hopSizeSamples?: number;
+    energyThreshold?: number;
+  } = {}
+): number[] {
+  const hopSize = options.hopSizeSamples ?? Math.floor(sampleRate * 0.0232); // ~512 at 44.1kHz
+  const threshold = options.energyThreshold ?? 1.5; // 1.5x mean energy
+
+  const onsets: number[] = [];
+  const energies: number[] = [];
+
+  // Compute energy envelope (RMS per hop)
+  for (let i = 0; i < channelData.length; i += hopSize) {
+    const end = Math.min(i + hopSize, channelData.length);
+    let sumSq = 0;
+    for (let j = i; j < end; j++) {
+      sumSq += channelData[j] * channelData[j];
+    }
+    const rms = Math.sqrt(sumSq / (end - i));
+    energies.push(rms);
+  }
+
+  if (energies.length < 2) return onsets;
+
+  // Compute mean energy
+  const meanEnergy = energies.reduce((a, b) => a + b, 0) / energies.length;
+
+  // Detect onsets: energy spike > threshold × mean
+  for (let i = 1; i < energies.length; i++) {
+    const prevEnergy = energies[i - 1];
+    const currEnergy = energies[i];
+
+    if (currEnergy > prevEnergy * threshold && currEnergy > meanEnergy * 0.5) {
+      const onsetSample = i * hopSize;
+      onsets.push(onsetSample / sampleRate);
+    }
+  }
+
+  return onsets;
+}
+
+/**
+ * Attenuates audio samples near percussion onsets.
+ * Used for Mejora E: reduces impact of drums/percussion on chromagram.
+ */
+export function applyOnsetMask(
+  frameData: Float32Array,
+  onsets: number[],
+  windowStart: number,
+  windowEnd: number,
+  silenceWindowMs: number = 50
+): Float32Array {
+  if (onsets.length === 0) return frameData;
+
+  const result = new Float32Array(frameData);
+  const windowDurationSec = windowEnd - windowStart;
+  const sampleRate = frameData.length / windowDurationSec;
+
+  for (const onsetTime of onsets) {
+    // Skip onsets outside this window
+    if (onsetTime < windowStart || onsetTime > windowEnd) continue;
+
+    const onsetSample = Math.floor((onsetTime - windowStart) * sampleRate);
+    const silenceSamples = Math.floor(silenceWindowMs * sampleRate / 1000);
+
+    // Attenuate samples around onset (reduce percussion transient)
+    // Use smooth fade to avoid discontinuities
+    const fadeStart = Math.max(0, onsetSample - 10);
+    const fadeEnd = Math.min(result.length, onsetSample + silenceSamples);
+
+    for (let i = fadeStart; i < fadeEnd; i++) {
+      // Smooth attenuation: 70% at onset, tapering to 100% away from it
+      const distFromOnset = Math.abs(i - onsetSample);
+      const attenuationFactor = Math.max(0.3, 1.0 - 0.7 * Math.exp(-distFromOnset / 5));
+      result[i] *= attenuationFactor;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Computes root-mean-square (RMS) acoustic energy for a signal slice.
  */
 export function computeRmsEnergy(frameData: Float32Array): number {
@@ -420,17 +599,27 @@ export function computeWindowedChromagrams(
   const windowDurationSec = options.windowDurationSec ?? 1.5; // 1.5 seconds window
   const hopDurationSec = options.hopDurationSec ?? (windowDurationSec * 0.5); // 50% overlap
   const useDualBand = options.dualBand ?? true;
-  const useTripleBand = options.tripleBand ?? true; // NEW: default true
+  const useTripleBand = options.tripleBand ?? true;
+  const suppressOnsets = options.suppressOnsets ?? false; // NEW: Mejora E
+  const onsetSilenceWindowMs = options.onsetSilenceWindowMs ?? 50; // NEW: Mejora E
 
   const windowSamples = Math.floor(windowDurationSec * sampleRate);
   const hopSamples = Math.floor(hopDurationSec * sampleRate);
 
-  const computeWindow = (slice: Float32Array, startTime: number, endTime: number): WindowedChroma => {
-    const rmsEnergy = computeRmsEnergy(slice);
+  // NEW: Detect onsets for percussive noise reduction (Mejora E)
+  const onsets = suppressOnsets ? detectOnsets(channelData, sampleRate) : [];
 
-    // NEW: Try triple-band first (if enabled)
+  const computeWindow = (slice: Float32Array, startTime: number, endTime: number): WindowedChroma => {
+    // NEW: Apply onset mask to reduce percussion impact (Mejora E)
+    const processedSlice = suppressOnsets
+      ? applyOnsetMask(slice, onsets, startTime, endTime, onsetSilenceWindowMs)
+      : slice;
+
+    const rmsEnergy = computeRmsEnergy(processedSlice);
+
+    // Try triple-band first (if enabled)
     if (useTripleBand && useDualBand) {
-      const triple = computeTripleBandFrameChroma(slice, sampleRate, {
+      const triple = computeTripleBandFrameChroma(processedSlice, sampleRate, {
         bassMinFrequency: options.bassMinFrequency,
         bassMaxFrequency: options.bassMaxFrequency,
         midMinFrequency: options.midMinFrequency,
@@ -452,7 +641,7 @@ export function computeWindowedChromagrams(
     }
 
     if (useDualBand) {
-      const dual = computeDualBandFrameChroma(slice, sampleRate, {
+      const dual = computeDualBandFrameChroma(processedSlice, sampleRate, {
         bassMinFrequency: options.bassMinFrequency,
         bassMaxFrequency: options.bassMaxFrequency,
         midMinFrequency: options.midMinFrequency,
@@ -471,7 +660,7 @@ export function computeWindowedChromagrams(
     }
 
     const chroma = computeFrameChroma(
-      slice,
+      processedSlice,
       sampleRate,
       options.minFrequency,
       options.maxFrequency,
