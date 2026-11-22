@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-11-22
+
+### 🎉 Features
+
+- add scale features - base note selector, smart suggestions, audio analyzer integration, and interactive quiz ([b4fbb5e](../../commit/b4fbb5e)) - tonybolanyo
+- Agregar Diccionario de Escalas interactivo para guitarra ([880fd81](../../commit/880fd81)) - tonybolanyo
+
+### 📚 Documentation
+
+- Agregar documentación completa del formato JSON de escalas ([c7b37ab](../../commit/c7b37ab)) - tonybolanyo
+- Agregar referencia rápida del Diccionario de Escalas ([6521788](../../commit/6521788)) - tonybolanyo
+
+### 🔄 Other Changes
+
+- Merge pull request #43 from tonybolanyo/studious-spork ([4c6070f](../../commit/4c6070f)) - Tony G. Bolaño
+- Merge pull request #42 from tonybolanyo/automatic-enigma ([fe50b82](../../commit/fe50b82)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.28.0] - 2026-11-22
 
 ### 🎉 Features
