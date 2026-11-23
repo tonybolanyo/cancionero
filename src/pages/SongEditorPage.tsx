@@ -222,6 +222,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [transcriptionProgress, setTranscriptionProgress] = useState<string | null>(null);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [lastTranscriptionResult, setLastTranscriptionResult] = useState<LyricsTranscriptionResult | null>(null);
+  const [audioStudioMode, setAudioStudioMode] = useState<'analyzer' | 'transcription'>('analyzer');
 
   // Split view live music stand preview toggle
   const [showStandPreview, setShowStandPreview] = useState<boolean>(true);
@@ -2645,6 +2646,13 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                     </div>
                   ) : (
                     <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          void handleAudioFileChosen(e.dataTransfer.files[0]);
+                        }
+                      }}
                       onClick={() => audioFileInputRef.current?.click()}
                       className="p-8 text-center rounded-lg border-2 border-dashed border-[var(--border-subtle)] hover:border-[var(--accent-primary)] transition-colors cursor-pointer space-y-2"
                     >
@@ -2661,48 +2669,74 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   )}
                 </div>
 
-                {/* Grid: 1. DSP Harmonic Detection & 2. Gemini AI Voice Transcription */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* DSP Analyzer Widget */}
-                  <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
-                        <Wand2 className="w-4 h-4" />
-                      </div>
-                      <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
-                        Detector Acústico DSP
-                      </h4>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Extrae tono, tempo (BPM), compás y acordes desde las ondas sonoras.
-                    </p>
+                {/* Unified Audio Studio Switcher: 1. Harmonic & Rhythm Analysis | 2. Voice Transcription */}
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-xs">
+                  <div
+                    role="tablist"
+                    aria-label="Herramientas de estudio de audio"
+                    className="grid grid-cols-2 p-1 gap-1 bg-[var(--bg-surface-subtle)] border-b border-[var(--border-subtle)]"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={audioStudioMode === 'analyzer'}
+                      onClick={() => setAudioStudioMode('analyzer')}
+                      className={`min-h-[44px] sm:min-h-[38px] px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+                        audioStudioMode === 'analyzer'
+                          ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <Wand2 className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                      <span className="truncate">Armonía, Ritmo y Acordes</span>
+                    </button>
 
-                    <AudioAnalyzerSection
-                      onApplyDetection={handleApplyAudioDetection}
-                      onInsertChordsIntoLyrics={handleInsertDetectedChords}
-                      canUndoInsertChords={lyricsUndoHistory !== null}
-                      onUndoInsertChords={handleUndoChordInsertion}
-                      savedAudioAnalysis={savedAudioAnalysis || undefined}
-                      currentKey={key}
-                      currentTempo={tempo}
-                      currentAudioUrl={audioUrl}
-                      driveFileId={driveFileId}
-                      driveFileName={driveFileName}
-                      onAudioFileSelected={handleAudioFileChosen}
-                      externalAudioFile={activeAudioFile}
-                    />
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={audioStudioMode === 'transcription'}
+                      onClick={() => setAudioStudioMode('transcription')}
+                      className={`min-h-[44px] sm:min-h-[38px] px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+                        audioStudioMode === 'transcription'
+                          ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <Mic className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                      <span className="truncate">Transcripción de Voz</span>
+                    </button>
                   </div>
 
-                  {/* Dual-Engine Voice-to-Text Transcription Card (Whisper Local vs Gemini AI Cloud) */}
-                  <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-xs space-y-4 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
-                            <Mic className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                  {audioStudioMode === 'analyzer' ? (
+                    <div className="p-4 sm:p-5">
+                      <AudioAnalyzerSection
+                        embedded={true}
+                        onRequestAudioUpload={() => audioFileInputRef.current?.click()}
+                        onApplyDetection={handleApplyAudioDetection}
+                        onInsertChordsIntoLyrics={handleInsertDetectedChords}
+                        canUndoInsertChords={lyricsUndoHistory !== null}
+                        onUndoInsertChords={handleUndoChordInsertion}
+                        savedAudioAnalysis={savedAudioAnalysis || undefined}
+                        currentKey={key}
+                        currentTempo={tempo}
+                        currentAudioUrl={audioUrl}
+                        driveFileId={driveFileId}
+                        driveFileName={driveFileName}
+                        onAudioFileSelected={handleAudioFileChosen}
+                        externalAudioFile={activeAudioFile}
+                      />
+                    </div>
+                  ) : (
+                    /* Dual-Engine Voice-to-Text Transcription Card (Whisper Local vs Gemini AI Cloud) */
+                    <div className="p-4 sm:p-5 space-y-4 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold">
+                              <Mic className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
                               Transcripción de Voz Cantada
                             </h4>
                             <p className="text-[11px] text-[var(--text-muted)]">
@@ -2897,6 +2931,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                       </span>
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
             )}

@@ -85,6 +85,8 @@ interface AudioAnalyzerSectionProps {
   onReanalyzeDriveAudio?: () => Promise<void>;
   isDriveLoading?: boolean;
   externalAudioFile?: File | null;
+  embedded?: boolean;
+  onRequestAudioUpload?: () => void;
 }
 
 export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
@@ -101,7 +103,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   onAudioFileSelected,
   onReanalyzeDriveAudio,
   isDriveLoading,
-  externalAudioFile
+  externalAudioFile,
+  embedded = false,
+  onRequestAudioUpload
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>(currentAudioUrl || '');
@@ -528,7 +532,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setCurrentTime(targetTime);
   };
 
-  const handleFileSelected = (selectedFile: File) => {
+  const handleFileSelected = (selectedFile: File, notifyParent: boolean = true) => {
     setError(null);
     setApplied(false);
     setAppliedTempo(false);
@@ -566,7 +570,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     const objectUrl = URL.createObjectURL(selectedFile);
     setAudioUrl(objectUrl);
 
-    if (onAudioFileSelected) {
+    if (notifyParent && onAudioFileSelected) {
       onAudioFileSelected(selectedFile);
     }
 
@@ -576,7 +580,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
   useEffect(() => {
     if (externalAudioFile && externalAudioFile !== file) {
-      handleFileSelected(externalAudioFile);
+      handleFileSelected(externalAudioFile, false);
+    } else if (!externalAudioFile && embedded && file) {
+      setFile(null);
+      setAudioUrl(currentAudioUrl || '');
     }
   }, [externalAudioFile]);
 
@@ -799,25 +806,27 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
   return (
     <div className="space-y-4 text-xs transition-colors duration-200">
-      {/* Compact Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
-        <div className="min-w-0">
-          <h4 className="font-serif font-bold text-sm sm:text-base text-[var(--text-primary)]">
-            Análisis musical del audio
-          </h4>
-          <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
-            Tempo, compás, tonalidad y progresión armónica en un solo panel
-          </p>
-        </div>
+      {/* Compact Header (hidden when embedded in SongEditorPage to avoid duplicate titles) */}
+      {!embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
+          <div className="min-w-0">
+            <h4 className="font-serif font-bold text-sm sm:text-base text-[var(--text-primary)]">
+              Análisis musical del audio
+            </h4>
+            <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
+              Tempo, compás, tonalidad y progresión armónica en un solo panel
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => setIsTunerOpen(true)}
-          className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
-        >
-          Afinador
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setIsTunerOpen(true)}
+            className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            Afinador
+          </button>
+        </div>
+      )}
 
       {/* Unified Error States */}
       {(error || tempoError || keyError) && (
@@ -864,182 +873,272 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         </div>
       )}
 
-      {/* Unified Audio Source / Dropzone */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => !file && !driveFileId && fileInputRef.current?.click()}
-        className={`p-3.5 sm:p-4 rounded-xl border transition-colors ${
-          file || driveFileId
-            ? 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)]'
-            : 'border-2 border-dashed bg-[var(--bg-modal)]/60 border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--bg-surface)] cursor-pointer text-center flex flex-col items-center justify-center gap-2 py-6'
-        }`}
-      >
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFileSelected(e.target.files[0]);
-            }
-          }}
-          accept=".mp3,.wav,audio/mp3,audio/wav,audio/mpeg"
-          className="hidden"
-        />
-
-        {file ? (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
-                <FileAudio className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
-                  {file.name}
-                </p>
-                <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] font-mono tabular-nums">
-                  <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="uppercase text-[var(--accent-primary)] font-semibold">
-                    {file.name.split('.').pop()}
-                  </span>
-                  {duration > 0 && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span>{formatClock(duration)}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {audioUrl && (
+      {/* Unified Audio Source / Dropzone (when standalone) OR Compact Action Bar (when embedded) */}
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)]">
+          {file ? (
+            <>
+              <span className="text-xs text-[var(--text-secondary)]">
+                Audio listo para análisis armónico y rítmico
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlayback();
-                  }}
-                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-border)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium whitespace-nowrap"
+                  onClick={() => setIsTunerOpen(true)}
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> : <Play className="w-3.5 h-3.5" />}
-                  <span>{isPlaying ? 'Pausar' : 'Escuchar'}</span>
+                  Afinador
                 </button>
-              )}
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRunAnalysis();
-                }}
-                disabled={isAnalyzing}
-                className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                    <span>Analizando…</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo'}</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFile(null);
-                  setAudioUrl('');
-                  setAnalysisResult(null);
-                  setTempoAnalysis(null);
-                  setBeatAnalysis(null);
-                  setMeterAnalysis(null);
-                  setStructureAnalysis(null);
-                  resetKeyAnalysis();
-                  if (audioRef.current) audioRef.current.pause();
-                }}
-                className="min-h-[40px] sm:min-h-[34px] px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer font-medium whitespace-nowrap"
-                title="Quitar archivo"
-              >
-                Cambiar
-              </button>
-            </div>
-          </div>
-        ) : driveFileId ? (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25 flex items-center justify-center shrink-0">
-                <FileAudio className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
-                  {driveFileName || 'Maqueta guardada en Google Drive'}
-                </p>
-                <p className="text-[11px] text-[var(--text-muted)]">
-                  Google Drive privado · Lista para reanalizar sin volver a subirla
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {onReanalyzeDriveAudio && (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void onReanalyzeDriveAudio();
-                  }}
-                  disabled={isDriveLoading}
+                  onClick={handleRunAnalysis}
+                  disabled={isAnalyzing}
                   className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
-                  {isDriveLoading ? (
+                  {isAnalyzing ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                      <span>Cargando…</span>
+                      <span>Analizando…</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Reanalizar de Drive</span>
+                      <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo IA'}</span>
                     </>
                   )}
                 </button>
-              )}
+              </div>
+            </>
+          ) : driveFileId ? (
+            <>
+              <span className="text-xs text-[var(--text-secondary)] truncate">
+                Maqueta en Drive: <strong className="text-[var(--text-primary)]">{driveFileName || 'Audio privado'}</strong>
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTunerOpen(true)}
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Afinador
+                </button>
+                {onReanalyzeDriveAudio && (
+                  <button
+                    type="button"
+                    onClick={() => void onReanalyzeDriveAudio()}
+                    disabled={isDriveLoading}
+                    className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{isDriveLoading ? 'Cargando…' : 'Reanalizar de Drive'}</span>
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-[var(--text-secondary)]">
+                Sube una maqueta en el panel superior para analizar tempo, tonalidad y acordes.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTunerOpen(true)}
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Afinador
+                </button>
+                {onRequestAudioUpload && (
+                  <button
+                    type="button"
+                    onClick={onRequestAudioUpload}
+                    className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Subir audio</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => !file && !driveFileId && fileInputRef.current?.click()}
+          className={`p-3.5 sm:p-4 rounded-xl border transition-colors ${
+            file || driveFileId
+              ? 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)]'
+              : 'border-2 border-dashed bg-[var(--bg-modal)]/60 border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--bg-surface)] cursor-pointer text-center flex flex-col items-center justify-center gap-2 py-6'
+          }`}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileSelected(e.target.files[0]);
+              }
+            }}
+            accept=".mp3,.wav,audio/mp3,audio/wav,audio/mpeg"
+            className="hidden"
+          />
 
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
-                className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer whitespace-nowrap"
-              >
-                Subir otra
-              </button>
+          {file ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                  <FileAudio className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
+                    {file.name}
+                  </p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] font-mono tabular-nums">
+                    <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="uppercase text-[var(--accent-primary)] font-semibold">
+                      {file.name.split('.').pop()}
+                    </span>
+                    {duration > 0 && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>{formatClock(duration)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {audioUrl && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePlayback();
+                    }}
+                    className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-border)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium whitespace-nowrap"
+                  >
+                    {isPlaying ? <Pause className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> : <Play className="w-3.5 h-3.5" />}
+                    <span>{isPlaying ? 'Pausar' : 'Escuchar'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRunAnalysis();
+                  }}
+                  disabled={isAnalyzing}
+                  className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                      <span>Analizando…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo'}</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                    setAudioUrl('');
+                    setAnalysisResult(null);
+                    setTempoAnalysis(null);
+                    setBeatAnalysis(null);
+                    setMeterAnalysis(null);
+                    setStructureAnalysis(null);
+                    resetKeyAnalysis();
+                    if (audioRef.current) audioRef.current.pause();
+                  }}
+                  className="min-h-[40px] sm:min-h-[34px] px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer font-medium whitespace-nowrap"
+                  title="Quitar archivo"
+                >
+                  Cambiar
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
-              <Upload className="w-5 h-5" />
+          ) : driveFileId ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25 flex items-center justify-center shrink-0">
+                  <FileAudio className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
+                    {driveFileName || 'Maqueta guardada en Google Drive'}
+                  </p>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Google Drive privado · Lista para reanalizar sin volver a subirla
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {onReanalyzeDriveAudio && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onReanalyzeDriveAudio();
+                    }}
+                    disabled={isDriveLoading}
+                    className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {isDriveLoading ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                        <span>Cargando…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Reanalizar de Drive</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer whitespace-nowrap"
+                >
+                  Subir otra
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)]">
-                Arrastra o pulsa para subir tu maqueta (.mp3 o .wav)
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                Se analiza automáticamente al seleccionarla
-              </p>
-            </div>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)]">
+                  Arrastra o pulsa para subir tu maqueta (.mp3 o .wav)
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Se analiza automáticamente al seleccionarla
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Hidden audio element for playback preview */}
       {isValidPlayableAudioUrl(audioUrl) && (

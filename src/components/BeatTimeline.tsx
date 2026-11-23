@@ -1,12 +1,20 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders, Maximize2, Minimize2, Repeat } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  Layers,
+  Sliders,
+  Repeat,
+  ChevronDown,
+  ZoomIn,
+  Check
+} from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
 import {
   TimeSignature,
-  COMMON_TIME_SIGNATURES_LIST,
-  UNCOMMON_TIME_SIGNATURES_LIST,
   getMeterBeatCount
 } from '../lib/audio/meter';
 import { MusicalSection, MusicalSectionType } from '../lib/audio/structure';
@@ -118,18 +126,13 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onTogglePlay,
   isLoading = false,
   onRecalculate,
-  onExportJSON,
-  onExportCSV,
-  onExportMIDI,
   pitchShiftSemitones = 0,
   onPitchShiftChange,
   preserveTempo = true,
   onTogglePreserveTempo,
   accidentalPreference = 'sharps',
-  onToggleAccidentalPreference,
   meter = '4/4',
   downbeats,
-  onMeterChange,
   playbackRate = 1.0,
   onPlaybackRateChange,
   loopStart = null,
@@ -141,8 +144,11 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onEqModeChange,
   className = ''
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layersMenuRef = useRef<HTMLDivElement>(null);
+
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [showOnsets, setShowOnsets] = useState<boolean>(true);
@@ -150,9 +156,24 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   const [showChords, setShowChords] = useState<boolean>(true);
   const [showSections, setShowSections] = useState<boolean>(true);
   const [isTallWaveform, setIsTallWaveform] = useState<boolean>(false);
+  const [zoomLevel, setZoomLevel] = useState<1 | 2 | 4>(1);
+  const [showLayersMenu, setShowLayersMenu] = useState<boolean>(false);
+  const [showPracticeTools, setShowPracticeTools] = useState<boolean>(false);
 
   // Precomputed waveform peaks cache (high fidelity 1600 buckets for 4K / Retina)
   const peaksRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (layersMenuRef.current && !layersMenuRef.current.contains(e.target as Node)) {
+        setShowLayersMenu(false);
+      }
+    };
+    if (showLayersMenu) {
+      document.addEventListener('mousedown', handleOutside);
+      return () => document.removeEventListener('mousedown', handleOutside);
+    }
+  }, [showLayersMenu]);
 
   // Compute downsampled waveform peaks when audioBuffer changes
   useEffect(() => {
@@ -162,7 +183,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     }
 
     const channelData = audioBuffer.getChannelData(0);
-    const numBuckets = 1600; // high visual fidelity across wide and 4K displays
+    const numBuckets = 1600;
     const bucketSize = Math.max(1, Math.floor(channelData.length / numBuckets));
     const peaks: number[] = [];
 
@@ -179,6 +200,22 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     peaksRef.current = peaks;
   }, [audioBuffer]);
 
+  // Keep playhead visible when zoomed and playing
+  useEffect(() => {
+    if (!isPlaying || zoomLevel === 1) return;
+    const scroller = scrollContainerRef.current;
+    const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
+    if (!scroller || totalDuration <= 0) return;
+
+    const playheadPx = (currentTime / totalDuration) * scroller.scrollWidth;
+    const viewLeft = scroller.scrollLeft;
+    const viewRight = viewLeft + scroller.clientWidth;
+
+    if (playheadPx < viewLeft + 40 || playheadPx > viewRight - 60) {
+      scroller.scrollLeft = Math.max(0, playheadPx - scroller.clientWidth * 0.3);
+    }
+  }, [currentTime, duration, audioBuffer, isPlaying, zoomLevel]);
+
   const hasSections = Boolean(showSections && sections && sections.length > 0);
   const hasChords = Boolean(showChords && chords && chords.length > 0);
   const currentSection = sections?.find(
@@ -188,19 +225,16 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     c => currentTime >= c.startTime && currentTime < c.endTime
   );
 
-  // Dynamic height calculation adapted to screen resolution and studio expand mode
+  // Dynamic height calculation adapted to screen resolution and expand mode
   const getTimelineHeight = useCallback((w: number, chordsActive: boolean, sectionsActive: boolean, tall: boolean) => {
     const extraSec = sectionsActive ? 22 : 0;
     if (w >= 1600) {
-      // 4K and Ultra-wide monitors
       return (tall ? (chordsActive ? 280 : 240) : (chordsActive ? 180 : 150)) + extraSec;
     }
     if (w <= 640) {
-      // Mobile screens
-      return (tall ? (chordsActive ? 170 : 150) : (chordsActive ? 124 : 104)) + extraSec;
+      return (tall ? (chordsActive ? 190 : 165) : (chordsActive ? 136 : 112)) + extraSec;
     }
-    // Standard desktop and laptop
-    return (tall ? (chordsActive ? 220 : 190) : (chordsActive ? 144 : 124)) + extraSec;
+    return (tall ? (chordsActive ? 220 : 190) : (chordsActive ? 150 : 128)) + extraSec;
   }, []);
 
   // Main Canvas render function
@@ -211,7 +245,9 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     const rect = container.getBoundingClientRect();
     const width = Math.floor(rect.width);
-    const height = getTimelineHeight(width, hasChords, hasSections, isTallWaveform);
+    if (width <= 0) return;
+    const viewportW = scrollContainerRef.current?.clientWidth || width;
+    const height = getTimelineHeight(viewportW, hasChords, hasSections, isTallWaveform);
 
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
@@ -234,7 +270,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
 
     const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
 
-    // 1b. Musical Structure Lane (SSM Intro / Estrofa / Estribillo / Puente / Instrumental)
+    // 1b. Musical Structure Lane
     if (hasSections && sections) {
       const secY = 14;
       const secH = 18;
@@ -254,7 +290,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.lineWidth = isActive ? 1.5 : 1;
         ctx.strokeRect(xStart, secY, segWidth, secH);
 
-        // Structural transition vertical marker across waveform
         if (sec.startTime > 0.2) {
           ctx.save();
           ctx.strokeStyle = isActive ? style.activeBorder : style.line;
@@ -267,7 +302,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
           ctx.restore();
         }
 
-        // Section label text
         if (segWidth > 28) {
           ctx.fillStyle = isActive ? '#ffffff' : style.text;
           ctx.font = `bold ${segWidth > 68 ? '10px' : '9px'} sans-serif`;
@@ -284,11 +318,10 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       });
     }
 
-    // 2. Chords Lane (Essentia ChordsDetection frame-by-frame)
+    // 2. Chords Lane
     const chordsY = hasSections ? 34 : 15;
     const chordsH = 22;
     if (hasChords && chords) {
-      // Draw faint background lane for chords
       ctx.fillStyle = 'rgba(139, 92, 246, 0.05)';
       ctx.fillRect(0, chordsY, width, chordsH);
 
@@ -299,18 +332,15 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         const segWidth = Math.max(1, xEnd - xStart);
         const isActive = currentTime >= c.startTime && currentTime < c.endTime;
 
-        // Background color
         ctx.fillStyle = isActive
-          ? 'rgba(168, 85, 247, 0.45)' // Bright violet highlight
+          ? 'rgba(168, 85, 247, 0.45)'
           : 'rgba(139, 92, 246, 0.16)';
         ctx.fillRect(xStart, chordsY, segWidth, chordsH);
 
-        // Border
         ctx.strokeStyle = isActive ? '#c084fc' : 'rgba(168, 85, 247, 0.32)';
         ctx.lineWidth = isActive ? 1.5 : 1;
         ctx.strokeRect(xStart, chordsY, segWidth, chordsH);
 
-        // Dotted transition line continuing downwards into the waveform
         ctx.save();
         ctx.strokeStyle = isActive ? 'rgba(192, 132, 252, 0.5)' : 'rgba(168, 85, 247, 0.18)';
         ctx.lineWidth = 1;
@@ -321,8 +351,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.stroke();
         ctx.restore();
 
-        // Chord name label
-        if (segWidth > 15) {
+        if (segWidth > 16) {
           ctx.fillStyle = isActive ? '#ffffff' : '#e9d5ff';
           ctx.font = `bold ${segWidth > 32 ? '11px' : '9px'} monospace`;
           ctx.textAlign = 'center';
@@ -351,9 +380,8 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         const x = i * barWidth;
         const progressX = (currentTime / totalDuration) * width;
 
-        // Waveform color: brighter for played section, subtle for unplayed
         if (x <= progressX) {
-          ctx.fillStyle = 'rgba(217, 119, 6, 0.45)'; // Amber active
+          ctx.fillStyle = 'rgba(217, 119, 6, 0.45)';
         } else {
           ctx.fillStyle = 'rgba(150, 160, 180, 0.22)';
         }
@@ -362,7 +390,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       }
     }
 
-    // 4. Beat Grid Lines (Regular rhythm grid from @audio/beat and estimated downbeats)
+    // 4. Beat Grid Lines
     if (showBeats && beatAnalysis && beatAnalysis.beats.length > 0) {
       const topY = waveformTopY;
       const effectiveDownbeats: number[] =
@@ -377,7 +405,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               return list;
             })();
 
-      // Draw regular beats (excluding positions already covered by downbeats)
       beatAnalysis.beats.forEach((beatTime) => {
         if (beatTime < 0 || beatTime > totalDuration) return;
         const isCoveredByDownbeat = effectiveDownbeats.some(db => Math.abs(db - beatTime) < 0.04);
@@ -392,7 +419,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.stroke();
       });
 
-      // Draw all downbeats (including half-beat downbeats for 5/8, 7/8, etc.)
       effectiveDownbeats.forEach((dbTime, idx) => {
         if (dbTime < 0 || dbTime > totalDuration) return;
         const x = (dbTime / totalDuration) * width;
@@ -420,9 +446,9 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       });
     }
 
-    // 5. Onsets (Acoustic transients / attack moments detected by spectral flux)
+    // 5. Onsets
     if (showOnsets && beatAnalysis && beatAnalysis.onsets.length > 0) {
-      ctx.fillStyle = '#06b6d4'; // Cyan tick
+      ctx.fillStyle = '#06b6d4';
       beatAnalysis.onsets.forEach((onsetTime) => {
         if (onsetTime < 0 || onsetTime > totalDuration) return;
         const x = (onsetTime / totalDuration) * width;
@@ -431,9 +457,11 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     }
 
     // 6. Time ruler ticks
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.font = '9px monospace';
-    const intervalSec = totalDuration > 120 ? 30 : totalDuration > 60 ? 15 : 5;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    const intervalSec = zoomLevel >= 4 ? 5 : totalDuration > 120 ? 30 : totalDuration > 60 ? 15 : 5;
     for (let t = 0; t <= totalDuration; t += intervalSec) {
       const x = (t / totalDuration) * width;
       const mins = Math.floor(t / 60);
@@ -445,10 +473,10 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       }
     }
 
-    // 7. Hover cursor & time / chord preview
+    // 7. Hover / Touch Scrubbing Tooltip (positioned near top on mobile so finger doesn't hide it)
     if (hoverTime !== null && hoverTime >= 0 && hoverTime <= totalDuration) {
       const hx = (hoverTime / totalDuration) * width;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(hx, 0);
@@ -457,7 +485,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       ctx.setLineDash([]);
 
       const hMins = Math.floor(hoverTime / 60);
-      const hSecs = (hoverTime % 60).toFixed(2);
+      const hSecs = (hoverTime % 60).toFixed(1);
       const hoverSec = sections?.find(s => hoverTime >= s.startTime && hoverTime < s.endTime);
       const hoverChord = chords?.find(c => hoverTime >= c.startTime && hoverTime < c.endTime);
       const hoverChordName = hoverChord
@@ -469,14 +497,16 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       if (hoverChordName) labelParts.push(hoverChordName);
       const hoverLabel = labelParts.join(' · ');
 
-      ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
       const textWidth = ctx.measureText(hoverLabel).width;
       const boxX = Math.max(4, Math.min(width - textWidth - 10, hx - textWidth / 2 - 4));
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
-      ctx.fillRect(boxX, height - 26, textWidth + 8, 15);
+      const boxY = viewportW <= 640 ? 14 : height - 26;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+      ctx.fillRect(boxX, boxY, textWidth + 8, 16);
       ctx.fillStyle = hoverChord ? '#c084fc' : hoverSec ? '#38bdf8' : '#f59e0b';
-      ctx.fillText(hoverLabel, boxX + 4, height - 15);
+      ctx.fillText(hoverLabel, boxX + 4, boxY + 11.5);
     }
 
     // 7b. A-B Rehearsal Loop region overlay
@@ -521,7 +551,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.lineTo(playheadX, height);
     ctx.stroke();
 
-    // Playhead top triangle marker
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.moveTo(playheadX - 4, 0);
@@ -531,7 +560,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     ctx.fill();
 
     ctx.restore();
-  }, [audioBuffer, beatAnalysis, chords, sections, currentTime, duration, hasChords, hasSections, hoverTime, showBeats, showChords, showOnsets, showSections, accidentalPreference, isTallWaveform, getTimelineHeight, meter, downbeats, loopStart, loopEnd]);
+  }, [audioBuffer, beatAnalysis, chords, sections, currentTime, duration, hasChords, hasSections, hoverTime, showBeats, showChords, showOnsets, showSections, accidentalPreference, isTallWaveform, getTimelineHeight, meter, downbeats, loopStart, loopEnd, zoomLevel]);
 
   useEffect(() => {
     let animId: number;
@@ -545,7 +574,6 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [render, isPlaying]);
 
-  // Handle ResizeObserver for dynamic full-width adaptation from mobile to 4K
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -561,9 +589,8 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       ro.disconnect();
       window.removeEventListener('resize', render);
     };
-  }, [render]);
+  }, [render, zoomLevel]);
 
-  // Unified Seek logic based on horizontal coordinate (mouse or touch)
   const seekFromCoord = useCallback((clientX: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -593,16 +620,13 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   const handleMouseLeave = () => {
     setIsDragging(false);
     setHoverTime(null);
   };
 
-  // Touch handlers for mobile devices
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     setIsDragging(true);
     if (e.touches[0]) {
@@ -618,7 +642,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
         setHoverTime((x / rect.width) * totalDuration);
       }
-      if (isDragging) {
+      if (isDragging && zoomLevel === 1) {
         seekFromCoord(e.touches[0].clientX);
       }
     }
@@ -635,336 +659,237 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const cycleZoom = () => {
+    setZoomLevel(prev => (prev === 1 ? 2 : prev === 2 ? 4 : 1));
+  };
+
+  const displayedCurrentChord = currentChord
+    ? (accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord)
+    : null;
+
+  const hasPracticeOverrides =
+    pitchShiftSemitones !== 0 || Math.abs(playbackRate - 1.0) >= 0.02 || eqMode !== 'normal';
+
+  const activePracticeSummary = [
+    pitchShiftSemitones !== 0 ? `${pitchShiftSemitones > 0 ? '+' : ''}${pitchShiftSemitones} st` : null,
+    Math.abs(playbackRate - 1.0) >= 0.02 ? `${playbackRate}x` : null,
+    eqMode === 'vocal_cut'
+      ? 'Sin voz'
+      : eqMode === 'bass_isolate'
+      ? 'Bajo'
+      : eqMode === 'guitar_focus'
+      ? 'Guitarra'
+      : null
+  ].filter(Boolean);
+
   return (
-    <div className={`p-3.5 sm:p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 ${className}`}>
-      {/* Top Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[var(--border-subtle)] pb-2.5">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
-            <Activity className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-              Línea de Tiempo: Forma de Onda, Ritmo & Acordes
-            </span>
-            <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">
-              (@audio/beat + Essentia Chords)
-            </span>
-            {currentSection && (
-              <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-500/40 text-sky-600 dark:text-sky-300 font-mono text-[11px] font-bold flex items-center gap-1">
-                <Layers className="w-3 h-3 text-sky-400" />
-                <span>{currentSection.label}</span>
+    <div className={`rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] overflow-visible ${className}`}>
+      {/* Compact Live Readout + 3 Clean Actions */}
+      <div className="px-3.5 py-2.5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {displayedCurrentChord ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-base sm:text-lg font-bold text-purple-600 dark:text-purple-300 tabular-nums shrink-0">
+                {displayedCurrentChord}
               </span>
-            )}
-            {currentChord && (
-              <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-purple-600 dark:text-purple-300 font-mono text-[11px] font-bold flex items-center gap-1">
-                <Music className="w-3 h-3 text-purple-400" />
-                <span>Acorde: {accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord}</span>
-                <span className="text-[9px] text-purple-400/80">({Math.round((currentChord.confidence ?? currentChord.strength ?? 0.8) * 100)}%)</span>
-              </span>
-            )}
-          </div>
+              {currentSection && (
+                <>
+                  <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
+                  <span className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                    {currentSection.label}
+                  </span>
+                </>
+              )}
+            </div>
+          ) : currentSection ? (
+            <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+              {currentSection.label}
+            </span>
+          ) : (
+            <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+              Línea de tiempo interactiva
+            </span>
+          )}
         </div>
 
-        {/* Legend & Display Filters */}
-        <div className="flex items-center gap-1.5 flex-wrap text-xs">
-          {/* Toggle waveform height (compact vs studio tall) */}
+        {/* Right Controls: Zoom + Capas Popover + Recalculate */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={() => setIsTallWaveform(!isTallWaveform)}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1 shadow-2xs ${
-              isTallWaveform
-                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
-                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            onClick={cycleZoom}
+            className={`min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+              zoomLevel > 1
+                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)]'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
-            title={isTallWaveform ? 'Volver a altura estándar' : 'Expandir altura de onda (Modo Estudio 4K)'}
+            title="Cambiar zoom horizontal de la onda (1x, 2x, 4x)"
           >
-            {isTallWaveform ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-            <span className="hidden sm:inline">{isTallWaveform ? 'Onda compacta' : 'Onda estudio'}</span>
+            <ZoomIn className="w-3.5 h-3.5" />
+            <span>{zoomLevel}x</span>
           </button>
 
-          {sections && sections.length > 0 && (
+          {/* Unified Layers Popover */}
+          <div className="relative" ref={layersMenuRef}>
             <button
               type="button"
-              onClick={() => setShowSections(!showSections)}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1.5 ${
-                showSections
-                  ? 'bg-sky-500/15 border-sky-500/30 text-sky-600 dark:text-sky-400 font-semibold'
-                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
-              }`}
-              title="Mostrar/Ocultar estructura musical detectada por Matriz de Autosimilitud (Intro / Estrofa / Estribillo / Puente)"
+              onClick={() => setShowLayersMenu(prev => !prev)}
+              className="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+              title="Mostrar u ocultar pistas en la línea de tiempo"
             >
-              <span className="w-2 h-2 rounded-full bg-sky-400" />
-              <span>Estructura ({sections.length})</span>
+              <Layers className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <span>Capas</span>
+              <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
             </button>
-          )}
 
-          {chords && chords.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowChords(!showChords)}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1.5 ${
-                showChords
-                  ? 'bg-purple-500/15 border-purple-500/30 text-purple-600 dark:text-purple-400 font-semibold'
-                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
-              }`}
-              title="Mostrar/Ocultar progresión continua de acordes (Essentia ChordsDetection)"
-            >
-              <span className="w-2 h-2 rounded-full bg-purple-500" />
-              <span>Acordes ({chords.length})</span>
-            </button>
-          )}
-
-          {chords && chords.length > 0 && onExportJSON && (
-            <button
-              type="button"
-              onClick={onExportJSON}
-              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-              title="Exportar secuencia de acordes a JSON"
-            >
-              <Download className="w-2.5 h-2.5 text-purple-400" />
-              <span>JSON</span>
-            </button>
-          )}
-
-          {chords && chords.length > 0 && onExportCSV && (
-            <button
-              type="button"
-              onClick={onExportCSV}
-              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-              title="Exportar secuencia de acordes a CSV"
-            >
-              <Download className="w-2.5 h-2.5 text-purple-400" />
-              <span>CSV</span>
-            </button>
-          )}
-
-          {chords && chords.length > 0 && onExportMIDI && (
-            <button
-              type="button"
-              onClick={onExportMIDI}
-              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-              title="Exportar progresión armónica detectada a archivo MIDI (.mid)"
-            >
-              <Download className="w-2.5 h-2.5 text-emerald-400" />
-              <span>MIDI</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setShowBeats(!showBeats)}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1.5 ${
-              showBeats
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-semibold'
-                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
-            }`}
-            title="Mostrar/Ocultar rejilla rítmica de beats"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Beat Grid {beatAnalysis ? `(${beatAnalysis.beats.length})` : ''}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowOnsets(!showOnsets)}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer flex items-center gap-1.5 ${
-              showOnsets
-                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-600 dark:text-cyan-400 font-semibold'
-                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
-            }`}
-            title="Mostrar/Ocultar ataques musicales (onsets)"
-          >
-            <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            <span>Onsets {beatAnalysis ? `(${beatAnalysis.onsets.length})` : ''}</span>
-          </button>
+            {showLayersMenu && (
+              <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1.5 z-30 text-xs">
+                {sections && sections.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSections(v => !v)}
+                    className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <span>Estructura ({sections.length})</span>
+                    {showSections && <Check className="w-3.5 h-3.5 text-sky-500" />}
+                  </button>
+                )}
+                {chords && chords.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowChords(v => !v)}
+                    className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <span>Acordes ({chords.length})</span>
+                    {showChords && <Check className="w-3.5 h-3.5 text-purple-500" />}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowBeats(v => !v)}
+                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                >
+                  <span>Rejilla de pulsos</span>
+                  {showBeats && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOnsets(v => !v)}
+                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                >
+                  <span>Ataques (Onsets)</span>
+                  {showOnsets && <Check className="w-3.5 h-3.5 text-cyan-500" />}
+                </button>
+                <div className="my-1 border-t border-[var(--border-subtle)]" />
+                <button
+                  type="button"
+                  onClick={() => setIsTallWaveform(v => !v)}
+                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                >
+                  <span>Onda expandida</span>
+                  {isTallWaveform && <Check className="w-3.5 h-3.5 text-[var(--accent-primary)]" />}
+                </button>
+              </div>
+            )}
+          </div>
 
           {onRecalculate && (
             <button
               type="button"
               onClick={onRecalculate}
               disabled={isLoading}
-              className="px-2 py-1 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] transition-colors cursor-pointer disabled:opacity-50 text-[11px] flex items-center gap-1"
-              title="Recalcular onsets, beats y progresión armónica con los Web Workers"
+              className="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1 whitespace-nowrap"
+              title="Recalcular pulsos y acordes"
             >
-              <RotateCcw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+              <RotateCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Recalcular</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Interactive Canvas Timeline with dynamic responsive height and touch scrubbing */}
+      {/* Interactive Zoomable Canvas Timeline */}
       <div
-        ref={containerRef}
-        className="relative w-full rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[#0f1117] select-none cursor-pointer shadow-inner transition-all duration-150 touch-none"
-        style={{
-          minHeight: (hasChords ? (isTallWaveform ? 170 : 124) : (isTallWaveform ? 150 : 104)) + (hasSections ? 22 : 0)
-        }}
+        ref={scrollContainerRef}
+        className={`relative w-full bg-[#0f1117] ${zoomLevel > 1 ? 'overflow-x-auto' : 'overflow-hidden'}`}
       >
-        <canvas
-          ref={canvasRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
-          className="w-full h-full block"
-        />
+        <div
+          ref={containerRef}
+          className={`relative select-none cursor-pointer ${zoomLevel === 1 ? 'touch-none' : ''}`}
+          style={{
+            width: `${zoomLevel * 100}%`,
+            minHeight: (hasChords ? (isTallWaveform ? 190 : 136) : (isTallWaveform ? 165 : 112)) + (hasSections ? 22 : 0)
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            className="w-full h-full block"
+          />
 
-        {/* Loading overlay */}
-        {isLoading && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center gap-2 text-xs text-[var(--accent-primary)] font-medium">
-            <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
-            <span>Analizando compases rítmicos y acordes continuos con Web Workers...</span>
-          </div>
-        )}
+          {isLoading && (
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center gap-2 text-xs text-[var(--accent-primary)] font-medium px-4 text-center">
+              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Analizando pulso y armonía…</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Transport & Metrics Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
-        <div className="flex items-center gap-3">
+      {/* Row 1: Streamlined Transport Bar (Thumb-friendly) */}
+      <div className="px-3.5 py-2.5 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5 text-xs">
+        <div className="flex items-center gap-2.5">
           {onTogglePlay && (
             <button
               type="button"
               onClick={onTogglePlay}
-              className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title={isPlaying ? 'Pausar reproducción' : 'Reproducir audio'}
+              className="min-h-[44px] sm:min-h-[36px] px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap"
             >
-              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               <span>{isPlaying ? 'Pausar' : 'Reproducir'}</span>
             </button>
           )}
 
-          <div className="font-mono text-xs text-[var(--text-primary)]">
+          <div className="font-mono tabular-nums text-xs text-[var(--text-primary)]">
             <span className="font-bold">{formatTime(currentTime)}</span>
             <span className="text-[var(--text-muted)]"> / {formatTime(duration)}</span>
           </div>
-
-          {currentChord && (
-            <div className="font-mono text-xs text-purple-600 dark:text-purple-300 font-semibold hidden sm:inline">
-              Acorde activo: <span className="text-sm font-bold underline decoration-purple-500">{accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord}</span>
-            </div>
-          )}
         </div>
 
-        {/* Pitch-Shifting & Enharmonic Controls */}
+        {/* Right: Quick A-B Loop + Practice Tools Drawer Toggle */}
         <div className="flex items-center gap-2 flex-wrap">
-          {onPitchShiftChange && (
-            <div className="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 shadow-2xs">
-              <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase px-1.5 font-semibold flex items-center gap-1">
-                <Sliders className="w-2.5 h-2.5 text-purple-500" />
-                <span>Pitch:</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => onPitchShiftChange(pitchShiftSemitones - 1)}
-                className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
-                title="Bajar 1 semitono al audio en tiempo real"
-              >
-                -1 st
-              </button>
-              <button
-                type="button"
-                onClick={() => onPitchShiftChange(0)}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
-                  pitchShiftSemitones !== 0
-                    ? 'bg-purple-600 text-white shadow-2xs'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Restablecer tono original (0 semitonos)"
-              >
-                {pitchShiftSemitones > 0 ? `+${pitchShiftSemitones}` : pitchShiftSemitones} st
-              </button>
-              <button
-                type="button"
-                onClick={() => onPitchShiftChange(pitchShiftSemitones + 1)}
-                className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] text-[var(--text-secondary)] transition-colors cursor-pointer"
-                title="Subir 1 semitono al audio en tiempo real"
-              >
-                +1 st
-              </button>
-
-              {onTogglePreserveTempo && (
-                <button
-                  type="button"
-                  onClick={onTogglePreserveTempo}
-                  className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
-                    preserveTempo
-                      ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 font-semibold'
-                      : 'bg-[var(--bg-modal)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                  }`}
-                  title={preserveTempo ? 'Modo: Mantener velocidad y tempo original (fase vocoder)' : 'Modo: Varipitch (cambia tono y velocidad)'}
-                >
-                  {preserveTempo ? 'Tempo fijo' : 'Varipitch'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {onToggleAccidentalPreference && (
-            <button
-              type="button"
-              onClick={onToggleAccidentalPreference}
-              className="px-2 py-1 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs font-semibold"
-              title={`Preferencia enarmónica activa: ${accidentalPreference === 'flats' ? 'Bemoles (b)' : 'Sostenidos (#)'}. Clic para alternar.`}
-            >
-              <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
-            </button>
-          )}
-
-          {/* Selector de velocidad (Time-stretching sin alterar el tono) */}
-          {onPlaybackRateChange && (
-            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
-              <span className="px-1.5 text-[var(--text-muted)] font-semibold hidden sm:inline">Vel:</span>
-              {[0.75, 0.85, 1.0, 1.15].map(rate => (
-                <button
-                  key={rate}
-                  type="button"
-                  onClick={() => onPlaybackRateChange(rate)}
-                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors whitespace-nowrap ${
-                    Math.abs(playbackRate - rate) < 0.02
-                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
-                  }`}
-                  title={`Velocidad ${rate.toFixed(2)}x`}
-                >
-                  {rate}x
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Bucle A-B de ensayo */}
           {onSetLoopA && onSetLoopB && (
-            <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
-              <span className="px-1 text-[var(--text-muted)] flex items-center gap-1">
-                <Repeat className="w-2.5 h-2.5 text-emerald-500" />
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono">
+              <span className="px-1.5 text-[var(--text-muted)] hidden sm:inline-flex items-center">
+                <Repeat className="w-3 h-3 text-emerald-500" />
               </span>
               <button
                 type="button"
                 onClick={onSetLoopA}
-                className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold whitespace-nowrap ${
+                className={`min-h-[38px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
                   loopStart !== null
                     ? 'bg-emerald-600 text-white'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
                 }`}
-                title="Marcar punto A en el tiempo actual"
+                title="Marcar punto A de bucle"
               >
                 {loopStart !== null ? `A ${formatTime(loopStart)}` : 'A'}
               </button>
               <button
                 type="button"
                 onClick={onSetLoopB}
-                className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold whitespace-nowrap ${
+                className={`min-h-[38px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
                   loopEnd !== null
                     ? 'bg-emerald-600 text-white'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
                 }`}
-                title="Marcar punto B en el tiempo actual"
+                title="Marcar punto B de bucle"
               >
                 {loopEnd !== null ? `B ${formatTime(loopEnd)}` : 'B'}
               </button>
@@ -972,7 +897,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
                 <button
                   type="button"
                   onClick={onClearLoop}
-                  className="px-1.5 py-0.5 rounded cursor-pointer text-[var(--text-muted)] hover:text-red-500"
+                  className="min-h-[38px] sm:min-h-[30px] px-2 py-1 rounded-md cursor-pointer text-[var(--text-muted)] hover:text-red-500 font-bold"
                   title="Quitar bucle A-B"
                 >
                   ×
@@ -981,112 +906,131 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             </div>
           )}
 
-          {/* Aislamiento Mid-Side / EQ para sacar partes de oído */}
-          {onEqModeChange && (
-            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
-              {([
-                { id: 'normal', label: 'Normal' },
-                { id: 'vocal_cut', label: 'Sin voz' },
-                { id: 'bass_isolate', label: 'Bajo' },
-                { id: 'guitar_focus', label: 'Guitarra' }
-              ] as const).map(opt => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => onEqModeChange(opt.id)}
-                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors whitespace-nowrap ${
-                    eqMode === opt.id
-                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Selector interactivo de compás (comunes + irregulares/compuestos) */}
-          {onMeterChange && (
-            <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
-              <span className="px-1.5 text-[var(--text-muted)] font-semibold hidden sm:inline">Compás:</span>
-              {COMMON_TIME_SIGNATURES_LIST.map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => onMeterChange(m)}
-                  className={`px-1.5 py-0.5 rounded cursor-pointer font-semibold transition-colors ${
-                    meter === m
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
-                  }`}
-                  title={`Ajustar compás a ${m}`}
-                >
-                  {m}
-                </button>
-              ))}
-              <select
-                aria-label="Compases irregulares o compuestos"
-                value={UNCOMMON_TIME_SIGNATURES_LIST.includes(meter) ? meter : ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    onMeterChange(e.target.value as TimeSignature);
-                  }
-                }}
-                className={`px-1 py-0.5 rounded cursor-pointer font-semibold transition-colors focus:outline-none ${
-                  UNCOMMON_TIME_SIGNATURES_LIST.includes(meter)
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Seleccionar compás irregular o compuesto (5/4, 7/4, 5/8, 7/8, 9/8, 12/8)"
-              >
-                <option value="" disabled className="bg-[var(--bg-modal)] text-[var(--text-muted)]">
-                  Otros…
-                </option>
-                {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
-                  <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3.5 text-[11px] text-[var(--text-muted)] font-mono flex-wrap">
-          {beatAnalysis && (
-            <>
-              <div>
-                <span>Tempo: </span>
-                <strong className="text-[var(--text-primary)]">{beatAnalysis.tempo} BPM</strong>
-              </div>
-              <div>
-                <span>Pulsos: </span>
-                <strong className="text-emerald-500">{beatAnalysis.beats.length} beats</strong>
-              </div>
-              <div>
-                <span>Ataques: </span>
-                <strong className="text-cyan-400">{beatAnalysis.onsets.length} onsets</strong>
-              </div>
-            </>
-          )}
-          {meter && (
-            <div>
-              <span>Compás: </span>
-              <strong className="text-emerald-500 font-bold">{meter}</strong>
-              {downbeats && downbeats.length > 0 && (
-                <span className="text-[10px] opacity-75 ml-1 font-semibold">({downbeats.length} compases)</span>
-              )}
-            </div>
-          )}
-          {chords && chords.length > 0 && (
-            <div>
-              <span>Acordes: </span>
-              <strong className="text-purple-500">{chords.length} segmentos</strong>
-            </div>
+          {(onPitchShiftChange || onPlaybackRateChange || onEqModeChange) && (
+            <button
+              type="button"
+              onClick={() => setShowPracticeTools(prev => !prev)}
+              className={`min-h-[40px] sm:min-h-[32px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                showPracticeTools || hasPracticeOverrides
+                  ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)]'
+                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>
+                {activePracticeSummary.length > 0
+                  ? `Ensayo · ${activePracticeSummary.join(' · ')}`
+                  : 'Ensayo'}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPracticeTools ? 'rotate-180' : ''}`} />
+            </button>
           )}
         </div>
       </div>
+
+      {/* Row 2: Collapsible Practice Controls Drawer (Pitch, Speed, EQ) */}
+      {showPracticeTools && (
+        <div className="px-3.5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          {/* Pitch Shifting */}
+          {onPitchShiftChange && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[var(--text-secondary)]">Tono (Semitonos)</span>
+                {onTogglePreserveTempo && (
+                  <button
+                    type="button"
+                    onClick={onTogglePreserveTempo}
+                    className={`text-[11px] font-mono font-semibold cursor-pointer ${
+                      preserveTempo ? 'text-purple-600 dark:text-purple-300' : 'text-[var(--text-muted)]'
+                    }`}
+                  >
+                    {preserveTempo ? 'Tempo fijo' : 'Varipitch'}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1 bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-lg p-1 font-mono">
+                <button
+                  type="button"
+                  onClick={() => onPitchShiftChange(pitchShiftSemitones - 1)}
+                  className="min-h-[40px] sm:min-h-[32px] rounded-md font-semibold hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] cursor-pointer"
+                >
+                  -1 st
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPitchShiftChange(0)}
+                  className={`min-h-[40px] sm:min-h-[32px] rounded-md font-bold cursor-pointer ${
+                    pitchShiftSemitones !== 0
+                      ? 'bg-purple-600 text-white'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Restablecer a 0"
+                >
+                  {pitchShiftSemitones > 0 ? `+${pitchShiftSemitones}` : pitchShiftSemitones} st
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPitchShiftChange(pitchShiftSemitones + 1)}
+                  className="min-h-[40px] sm:min-h-[32px] rounded-md font-semibold hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] cursor-pointer"
+                >
+                  +1 st
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Playback Speed */}
+          {onPlaybackRateChange && (
+            <div className="space-y-1.5">
+              <span className="font-semibold text-[var(--text-secondary)] block">Velocidad</span>
+              <div className="grid grid-cols-4 gap-1 bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-lg p-1 font-mono">
+                {[0.75, 0.85, 1.0, 1.15].map(rate => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => onPlaybackRateChange(rate)}
+                    className={`min-h-[40px] sm:min-h-[32px] rounded-md font-semibold cursor-pointer transition-colors ${
+                      Math.abs(playbackRate - rate) < 0.02
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                    }`}
+                  >
+                    {rate}x
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* EQ / Instrument Isolation */}
+          {onEqModeChange && (
+            <div className="space-y-1.5">
+              <span className="font-semibold text-[var(--text-secondary)] block">Filtro de mezcla</span>
+              <div className="grid grid-cols-4 gap-1 bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-lg p-1 font-mono">
+                {([
+                  { id: 'normal', label: 'Normal' },
+                  { id: 'vocal_cut', label: 'Sin voz' },
+                  { id: 'bass_isolate', label: 'Bajo' },
+                  { id: 'guitar_focus', label: 'Guitarra' }
+                ] as const).map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onEqModeChange(opt.id)}
+                    className={`min-h-[40px] sm:min-h-[32px] rounded-md font-semibold cursor-pointer transition-colors truncate px-1 ${
+                      eqMode === opt.id
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
