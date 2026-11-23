@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] - 2026-11-23
+
+### 🎉 Features
+
+- improve section header insertion logic ([3168cf7](../../commit/3168cf7)) - Tony G. Bolaño
+
+### 🔄 Other Changes
+
+- feat ([5a36bf6](../../commit/5a36bf6)) - audio): add MIDI export support for chord progressions (Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.54.0] - 2026-11-22
 
 ### 🎉 Features
