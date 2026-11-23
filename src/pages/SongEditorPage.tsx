@@ -138,7 +138,7 @@ type WorkbenchTab = 'lyrics.md' | 'audio-studio.dsp' | 'sync.lrc' | 'metadata.js
 
 const COMMON_KEYS_MAJOR = ['C', 'G', 'D', 'A', 'E', 'F', 'Bb'];
 const COMMON_KEYS_MINOR = ['Am', 'Em', 'Dm', 'Bm', 'F#m', 'C#m', 'Gm'];
-const COMMON_TIME_SIGNATURES = ['4/4', '3/4', '6/8', '2/4', '12/8'];
+const COMMON_TIME_SIGNATURES = ['4/4', '3/4', '6/8', '2/4', '5/4', '7/4', '5/8', '7/8', '9/8', '12/8'];
 const COMMON_TUNINGS = [
   'Estándar (EADGBE)',
   'Drop D (DADGBE)',

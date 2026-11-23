@@ -3,7 +3,12 @@ import { Play, Pause, RotateCcw, Activity, Music, Layers, Download, Sliders, Max
 import { BeatAnalysis } from '../lib/audio/onsets';
 import { ChordSegment } from '../lib/audio/keyAnalysis';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
-import { TimeSignature } from '../lib/audio/meter';
+import {
+  TimeSignature,
+  COMMON_TIME_SIGNATURES_LIST,
+  UNCOMMON_TIME_SIGNATURES_LIST,
+  getMeterBeatCount
+} from '../lib/audio/meter';
 import { MusicalSection, MusicalSectionType } from '../lib/audio/structure';
 import type { AudioEqMode } from '../lib/audio/pitchShiftPlayer';
 
@@ -360,49 +365,57 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     // 4. Beat Grid Lines (Regular rhythm grid from @audio/beat and estimated downbeats)
     if (showBeats && beatAnalysis && beatAnalysis.beats.length > 0) {
       const topY = waveformTopY;
+      const effectiveDownbeats: number[] =
+        downbeats && downbeats.length > 0
+          ? downbeats
+          : (() => {
+              const k = getMeterBeatCount(meter);
+              const list: number[] = [];
+              for (let idx = 0; idx < beatAnalysis.beats.length; idx += k) {
+                list.push(beatAnalysis.beats[idx]);
+              }
+              return list;
+            })();
 
-      beatAnalysis.beats.forEach((beatTime, idx) => {
+      // Draw regular beats (excluding positions already covered by downbeats)
+      beatAnalysis.beats.forEach((beatTime) => {
         if (beatTime < 0 || beatTime > totalDuration) return;
+        const isCoveredByDownbeat = effectiveDownbeats.some(db => Math.abs(db - beatTime) < 0.04);
+        if (isCoveredByDownbeat) return;
+
         const x = (beatTime / totalDuration) * width;
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.30)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, height - 12);
+        ctx.stroke();
+      });
 
-        // Check if this beat is an estimated/confirmed downbeat
-        let barNumber: number | null = null;
-        if (downbeats && downbeats.length > 0) {
-          const matchIdx = downbeats.findIndex(db => Math.abs(db - beatTime) < 0.04);
-          if (matchIdx !== -1) {
-            barNumber = matchIdx + 1;
-          }
-        } else {
-          // Fallback to grouping by meter
-          const K = meter === '3/4' ? 3 : meter === '6/8' ? 6 : meter === '2/4' ? 2 : 4;
-          if (idx % K === 0) {
-            barNumber = Math.floor(idx / K) + 1;
-          }
-        }
-        const isBarStart = barNumber !== null;
+      // Draw all downbeats (including half-beat downbeats for 5/8, 7/8, etc.)
+      effectiveDownbeats.forEach((dbTime, idx) => {
+        if (dbTime < 0 || dbTime > totalDuration) return;
+        const x = (dbTime / totalDuration) * width;
+        const barNumber = idx + 1;
 
-        ctx.strokeStyle = isBarStart ? 'rgba(16, 185, 129, 0.90)' : 'rgba(16, 185, 129, 0.30)';
-        ctx.lineWidth = isBarStart ? 1.5 : 1;
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.90)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(x, topY);
         ctx.lineTo(x, height - 12);
         ctx.stroke();
 
-        // Downbeat marker and bar number
-        if (isBarStart) {
-          ctx.fillStyle = '#10b981';
-          ctx.beginPath();
-          ctx.arc(x, topY + 2, 2.5, 0, Math.PI * 2);
-          ctx.fill();
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(x, topY + 2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
 
-          // Bar number label if enough horizontal space
-          if (width > 420) {
-            ctx.fillStyle = '#10b981';
-            ctx.font = 'bold 8px monospace';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(`${barNumber}`, x + 3, topY + 1);
-          }
+        if (width > 420) {
+          ctx.fillStyle = '#10b981';
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(`${barNumber}`, x + 3, topY + 1);
         }
       });
     }
@@ -993,11 +1006,11 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             </div>
           )}
 
-          {/* Selector interactivo de compás (2/4, 3/4, 4/4, 6/8) */}
+          {/* Selector interactivo de compás (comunes + irregulares/compuestos) */}
           {onMeterChange && (
-            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
+            <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-[10px] font-mono shadow-2xs">
               <span className="px-1.5 text-[var(--text-muted)] font-semibold hidden sm:inline">Compás:</span>
-              {(['2/4', '3/4', '4/4', '6/8'] as const).map(m => (
+              {COMMON_TIME_SIGNATURES_LIST.map(m => (
                 <button
                   key={m}
                   type="button"
@@ -1012,6 +1025,30 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
                   {m}
                 </button>
               ))}
+              <select
+                aria-label="Compases irregulares o compuestos"
+                value={UNCOMMON_TIME_SIGNATURES_LIST.includes(meter) ? meter : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onMeterChange(e.target.value as TimeSignature);
+                  }
+                }}
+                className={`px-1 py-0.5 rounded cursor-pointer font-semibold transition-colors focus:outline-none ${
+                  UNCOMMON_TIME_SIGNATURES_LIST.includes(meter)
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+                title="Seleccionar compás irregular o compuesto (5/4, 7/4, 5/8, 7/8, 9/8, 12/8)"
+              >
+                <option value="" disabled className="bg-[var(--bg-modal)] text-[var(--text-muted)]">
+                  Otros…
+                </option>
+                {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
+                  <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
+                    {m}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
         </div>

@@ -258,7 +258,7 @@ Detecta de forma rigurosa:
 1. tempo: entero en BPM (pulsaciones por minuto, ej. 85, 96, 110, 128).
 2. key: tonalidad principal en notación estándar anglosajona (ej. 'Am', 'G', 'C', 'Em', 'D', 'Dm', 'F#m', 'E').
 3. scale: escala o modo musical (ej. 'Menor natural', 'Mayor', 'Menor armónica', 'Dórico').
-4. timeSignature: compás musical (ej. '4/4', '3/4', '6/8').
+4. timeSignature: compás musical (ej. '4/4', '3/4', '6/8', '2/4', '5/4', '7/8', '7/4', '5/8', '9/8', '12/8').
 5. tuning: afinación estimada del instrumento (ej. 'Estándar (EADGBE)', 'Drop D', 'Capo 2').
 6. chordProgression: resumen sintético de la secuencia armónica principal (ej. 'Am - F - C - G').
 7. chords: lista cronológica de los acordes detectados con su timestamp aproximado y la sección (Intro, Estrofa, Estribillo, Puente).
@@ -275,7 +275,7 @@ Detecta de forma rigurosa:
               tempo: { type: Type.INTEGER, description: 'Tempo en BPM estimado' },
               key: { type: Type.STRING, description: 'Tonalidad musical ej. Am, C, G' },
               scale: { type: Type.STRING, description: 'Escala musical ej. Menor natural, Mayor' },
-              timeSignature: { type: Type.STRING, description: 'Compás métrico ej. 4/4, 3/4, 6/8' },
+              timeSignature: { type: Type.STRING, description: 'Compás métrico ej. 4/4, 3/4, 6/8, 5/4, 7/8, 7/4, 5/8, 9/8, 12/8' },
               tuning: { type: Type.STRING, description: 'Afinación del instrumento' },
               chordProgression: { type: Type.STRING, description: 'Secuencia principal ej. Am - F - C - G' },
               chords: {

@@ -34,7 +34,16 @@ import { BeatTimeline } from './BeatTimeline';
 import { ChordSegment, exportChordsToJSON, exportChordsToCSV, downloadChordExport } from '../lib/audio/chords';
 import { PitchShiftPlayer, AudioEqMode } from '../lib/audio/pitchShiftPlayer';
 import { AccidentalPreference, respellChord, isValidPlayableAudioUrl } from '../utils/markdownParser';
-import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } from '../lib/audio/meter';
+import {
+  MeterAnalysis,
+  estimateMeter,
+  recalculateDownbeats,
+  TimeSignature,
+  COMMON_TIME_SIGNATURES_LIST,
+  UNCOMMON_TIME_SIGNATURES_LIST,
+  getMeterDescription,
+  computeMedianBeatInterval
+} from '../lib/audio/meter';
 import type { MusicalSection, StructureAnalysisResult } from '../lib/audio/structure';
 import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
 import { ChromaticTunerModal } from './ChromaticTunerModal';
@@ -223,13 +232,28 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
   const handleManualMeterChange = (newMeter: TimeSignature) => {
     if (!beatAnalysis || beatAnalysis.beats.length === 0) return;
-    const newDownbeats = recalculateDownbeats(beatAnalysis.beats, newMeter, meterAnalysis?.phase ?? 0);
+    const beatIOI = computeMedianBeatInterval(beatAnalysis.beats, beatAnalysis.tempo);
+    let gridMode: 'beat' | 'subdivision2x' | 'subdivision3x' = 'beat';
+    if (meterAnalysis?.meter === newMeter && meterAnalysis.gridMode) {
+      gridMode = meterAnalysis.gridMode;
+    } else if ((newMeter === '5/8' || newMeter === '7/8') && beatIOI >= 0.36) {
+      gridMode = 'subdivision2x';
+    }
+
+    const newDownbeats = recalculateDownbeats(
+      beatAnalysis.beats,
+      newMeter,
+      meterAnalysis?.phase ?? 0,
+      { gridMode }
+    );
     setMeterAnalysis({
       meter: newMeter,
       confidence: 1.0,
       downbeats: newDownbeats,
       barCount: newDownbeats.length,
       phase: meterAnalysis?.phase ?? 0,
+      grouping: meterAnalysis?.meter === newMeter ? meterAnalysis.grouping : undefined,
+      gridMode,
       candidates: meterAnalysis?.candidates
     });
   };
@@ -1236,9 +1260,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
             <div className="flex items-center gap-2 self-end sm:self-auto">
               {/* Selector de corrección manual de compás */}
-              <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono shadow-2xs">
+              <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono shadow-2xs flex-wrap">
                 <span className="px-2 text-[10px] text-[var(--text-muted)] font-semibold hidden sm:inline">Ajuste:</span>
-                {(['2/4', '3/4', '4/4', '6/8'] as const).map(m => (
+                {COMMON_TIME_SIGNATURES_LIST.map(m => (
                   <button
                     key={m}
                     type="button"
@@ -1253,6 +1277,34 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     {m}
                   </button>
                 ))}
+                <select
+                  aria-label="Seleccionar compás irregular o compuesto"
+                  value={
+                    meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
+                      ? meterAnalysis.meter
+                      : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleManualMeterChange(e.target.value as TimeSignature);
+                    }
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors focus:outline-none ${
+                    meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Compases irregulares o compuestos (5/4, 7/4, 5/8, 7/8, 9/8, 12/8)"
+                >
+                  <option value="" disabled className="bg-[var(--bg-modal)] text-[var(--text-muted)]">
+                    Irregular…
+                  </option>
+                  {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
+                    <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
+                      {m}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -1269,25 +1321,27 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           {meterAnalysis && !isAnalyzingBeats && (
             <div className="space-y-3 pt-0.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
+                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
                   <div>
                     <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
                       <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
                       <span>Compás Estimado</span>
                     </span>
-                    <div className="flex items-baseline gap-2 mt-0.5">
+                    <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
                       <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
                         {meterAnalysis.meter}
                       </span>
                       <span className="text-xs font-semibold text-[var(--text-primary)]">
-                        {meterAnalysis.meter === '4/4'
-                          ? 'Cuaternario (Común)'
-                          : meterAnalysis.meter === '3/4'
-                          ? 'Ternario (Vals/Zamba)'
-                          : meterAnalysis.meter === '6/8'
-                          ? 'Compuesto (6/8)'
-                          : 'Binario (2/4)'}
+                        {getMeterDescription(meterAnalysis.meter)}
                       </span>
+                      {meterAnalysis.grouping && !['2', '3', '4'].includes(meterAnalysis.grouping) && (
+                        <span
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 font-semibold"
+                          title="Subdivisión acentual detectada dentro del compás"
+                        >
+                          {meterAnalysis.grouping}
+                        </span>
+                      )}
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
                         {meterAnalysis.confidence === 1.0 ? 'Ajuste manual' : `${Math.round(meterAnalysis.confidence * 100)}% conf.`}
                       </span>
@@ -1297,7 +1351,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyOnlyMeter}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border shrink-0 ${
                       appliedMeter
                         ? 'bg-emerald-600 text-white border-emerald-600'
                         : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
@@ -1320,11 +1374,21 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     <Activity className="w-3 h-3 text-emerald-500" />
                     <span>Downbeats & Rejilla de Compases</span>
                   </span>
-                  <div className="flex items-baseline gap-2 mt-0.5">
+                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
                     <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                       {meterAnalysis.barCount || meterAnalysis.downbeats.length}
                     </span>
                     <span className="text-xs font-medium text-[var(--text-muted)]">compases calculados</span>
+                    {meterAnalysis.gridMode === 'subdivision2x' && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
+                        Subdivisión corcheas
+                      </span>
+                    )}
+                    {meterAnalysis.gridMode === 'subdivision3x' && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
+                        Subdivisión ternaria
+                      </span>
+                    )}
                   </div>
                   <p className="text-[10px] text-[var(--text-muted)]">
                     Cada compás comienza en un downbeat acentuado resaltado en verde en la línea de tiempo
@@ -1334,7 +1398,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
 
               {/* Nota sobre limitaciones esperadas */}
               <div className="p-2.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-muted)] leading-relaxed">
-                💡 <strong>Nota técnica de estimación:</strong> El compás se infiere evaluando autocorrelación periódica (2, 3, 4 y 6 beats), picos de energía acústica en el ataque y sincronía con cambios de acordes. <em>En interpretaciones con rubato, canciones con métricas cambiantes, síncopas pronunciadas o directos sin metrónomo, utiliza los botones de ajuste superior para fijar el compás deseado.</em>
+                💡 <strong>Nota técnica de estimación:</strong> El compás se infiere evaluando autocorrelación periódica (incluyendo métricas asimétricas y de amalgama: 2/4, 3/4, 4/4, 5/4, 7/4, 5/8, 6/8, 7/8, 9/8, 12/8), subdivisión de corcheas, picos de energía acústica en bajos/ataques y sincronía con cambios de acordes. <em>En interpretaciones con rubato, cambios constantes de métrica o directos sin metrónomo, utiliza los controles de ajuste superior para fijar el compás deseado.</em>
               </div>
             </div>
           )}

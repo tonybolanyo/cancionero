@@ -1,4 +1,14 @@
-export type MetronomeTimeSignature = '2/4' | '3/4' | '4/4' | '6/8';
+export type MetronomeTimeSignature =
+  | '2/4'
+  | '3/4'
+  | '4/4'
+  | '5/4'
+  | '7/4'
+  | '5/8'
+  | '6/8'
+  | '7/8'
+  | '9/8'
+  | '12/8';
 
 export interface MetronomeBeatEvent {
   beatIndex: number; // 0-based beat inside current bar
@@ -9,11 +19,8 @@ export interface MetronomeBeatEvent {
 
 export function getBeatsPerBar(timeSignature: string = '4/4'): number {
   const clean = (timeSignature || '4/4').trim();
-  if (clean.startsWith('2/')) return 2;
-  if (clean.startsWith('3/')) return 3;
-  if (clean.startsWith('6/8')) return 6;
-  if (clean.startsWith('5/')) return 5;
-  if (clean.startsWith('7/')) return 7;
+  const num = parseInt(clean.split('/')[0], 10);
+  if (Number.isFinite(num) && num >= 2 && num <= 16) return num;
   return 4;
 }
 
@@ -190,9 +197,9 @@ export class PrecisionMetronome {
 
   private advanceBeat(): void {
     const beatsPerBar = getBeatsPerBar(this.timeSignature);
-    // In 6/8 compound feel, each eighth-note click runs at half a beat if BPM is dotted quarter,
-    // or standard subdivision at 2x quarter BPM when treated as 6 beats/bar.
-    const secondsPerBeat = this.timeSignature === '6/8' ? 60 / (this.bpm * 2) : 60 / this.bpm;
+    // In /8 compound or irregular meters (5/8, 6/8, 7/8, 9/8, 12/8), eighth-note clicks run at 2x quarter BPM.
+    const isEighthMeter = this.timeSignature.trim().endsWith('/8');
+    const secondsPerBeat = isEighthMeter ? 60 / (this.bpm * 2) : 60 / this.bpm;
     this.nextNoteTime += secondsPerBeat;
     this.currentBeatInBar = (this.currentBeatInBar + 1) % beatsPerBar;
   }
@@ -201,7 +208,13 @@ export class PrecisionMetronome {
     if (!this.ctx) return;
     const beatsPerBar = getBeatsPerBar(this.timeSignature);
     const isDownbeat = beatIndex === 0;
-    const isSubdivisionAccent = this.timeSignature === '6/8' && beatIndex === 3;
+    const cleanMeter = this.timeSignature.trim();
+    const isSubdivisionAccent =
+      (cleanMeter === '6/8' && beatIndex === 3) ||
+      (cleanMeter === '9/8' && (beatIndex === 3 || beatIndex === 6)) ||
+      (cleanMeter === '12/8' && (beatIndex === 3 || beatIndex === 6 || beatIndex === 9)) ||
+      ((cleanMeter === '5/4' || cleanMeter === '5/8') && beatIndex === 3) ||
+      ((cleanMeter === '7/4' || cleanMeter === '7/8') && (beatIndex === 2 || beatIndex === 4));
 
     // Woodblock / crisp percussive click synthesized cleanly
     const osc = this.ctx.createOscillator();

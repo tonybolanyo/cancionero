@@ -12,6 +12,8 @@ import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { MusicalSection } from '../lib/audio/structure';
 import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
 import { estimateDetuningCents } from '../lib/audio/tuning';
+import { analyzeBeatsAndOnsets } from '../lib/audio/onsets';
+import { estimateMeter, getMeterDescription } from '../lib/audio/meter';
 
 export interface DetectedChord {
   timestamp: string;
@@ -425,6 +427,41 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       );
     }
 
+    // Estimate musical meter (supports 2/4, 3/4, 4/4, 5/4, 7/4, 5/8, 6/8, 7/8, 9/8, 12/8)
+    let detectedTimeSignature = '4/4';
+    let meterGrouping: string | undefined;
+    try {
+      let detectedBeats: number[] = [];
+      let detectedOnsets: number[] = [];
+      try {
+        const beatRes = await analyzeBeatsAndOnsets(audioBuffer, { minBpm: 60, maxBpm: 180 });
+        detectedBeats = beatRes.beats;
+        detectedOnsets = beatRes.onsets;
+      } catch {
+        // Fallback beat grid from tempo & offset if worker unavailable
+        const interval = 60 / Math.max(40, bpm);
+        const startT = Math.max(0, tempoOffset);
+        for (let t = startT; t < audioBuffer.duration; t += interval) {
+          detectedBeats.push(t);
+        }
+      }
+
+      if (detectedBeats.length >= 4) {
+        const meterRes = estimateMeter({
+          beats: detectedBeats,
+          onsets: detectedOnsets,
+          channelData,
+          sampleRate: audioBuffer.sampleRate,
+          bpm,
+          chords: dspSegments
+        });
+        detectedTimeSignature = meterRes.meter;
+        meterGrouping = meterRes.grouping;
+      }
+    } catch (meterErr) {
+      console.warn('DSP meter estimation warning:', meterErr);
+    }
+
     const structureSummary = detectedSections.length > 0
       ? ` Estructura detectada (SSM): ${detectedSections.map(s => s.label).join(' → ')}.`
       : '';
@@ -433,6 +470,8 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       ? ` Desviación de afinación: ${detuning.cents > 0 ? '+' : ''}${detuning.cents} cents (A4≈${calibratedA4} Hz).`
       : '';
 
+    const meterNote = `${detectedTimeSignature}${meterGrouping && !['2', '3', '4'].includes(meterGrouping) ? ` (${meterGrouping})` : ''} — ${getMeterDescription(detectedTimeSignature)}`;
+
     return {
       tempo: bpm,
       tempoConfidence: confidence,
@@ -440,7 +479,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       rawTempo,
       key,
       scale,
-      timeSignature: '4/4',
+      timeSignature: detectedTimeSignature,
       tuning: 'Estándar (EADGBE)',
       detuningCents: detuning.cents,
       referenceA4Hz: calibratedA4,
@@ -448,7 +487,7 @@ export async function analyzeAudioWithWebAudio(file: File): Promise<AudioAnalysi
       chordProgression: progressionStr,
       chords: chordTimeline,
       sections: detectedSections.length > 0 ? detectedSections : undefined,
-      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.${tuningNote}${structureSummary}`,
+      musicalNotes: `Análisis de audio procesado por DSP local (Viterbi + doble banda). Tonalidad detectada ${key} (${scale}), compás ${meterNote}, pulso rítmico estimado en ${bpm} BPM (offset 1er beat: ${tempoOffset.toFixed(3)}s). Progresión tonal detectada: ${progressionStr}.${tuningNote}${structureSummary}`,
       suggestedLyricsChords: suggestedLyricsBlocks.join('\n\n'),
       source: 'client_dsp'
     };
