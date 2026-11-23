@@ -205,3 +205,66 @@ export const SONGWRITING_TEMPLATES = [
     lyrics: `## Intro\n[C]  [G]  [Am]  [F]\n\n## Estrofa 1\n[C] Salí muy temprano sin rumbo ni miedo,\n[G] la vida en la espalda y el viento a favor.\n[Am] No llevo cadenas ni piedras que arrastre,\n[F] tan solo las ganas de hacerme mejor.\n\n## Estribillo\n[C] Que todo lo bueno nos pille despiertos,\n[G] que nadie nos robe la risa al cantar.\n[Am] Se abren los puertos, se rompen los huertos,\n[F] y el mundo de nuevo se vuelve a inventar.`
   }
 ];
+
+export interface SectionInsertionResult {
+  text: string;
+  cursorOffset: number;
+}
+
+/**
+ * Inserts a Markdown section header (`## Section`) at the specified cursor/selection
+ * position while ensuring clean surrounding line breaks and returning the updated
+ * cursor offset placed on the line immediately following the header.
+ */
+export function insertSectionHeaderAtCursor(
+  lyrics: string,
+  sectionName: string,
+  selectionStart: number,
+  selectionEnd: number = selectionStart
+): SectionInsertionResult {
+  const safeStart = Math.max(0, Math.min(selectionStart, lyrics.length));
+  const safeEnd = Math.max(safeStart, Math.min(selectionEnd, lyrics.length));
+
+  const before = lyrics.slice(0, safeStart);
+  const after = lyrics.slice(safeEnd);
+  const header = `## ${sectionName}`;
+
+  const lastNewlineIdx = before.lastIndexOf('\n');
+  const currentLineBefore = lastNewlineIdx === -1 ? before : before.slice(lastNewlineIdx + 1);
+
+  let beforeBase = before;
+  let prefix = '';
+
+  if (currentLineBefore.trim() === '') {
+    beforeBase = lastNewlineIdx === -1 ? '' : before.slice(0, lastNewlineIdx + 1);
+    if (beforeBase.trim().length === 0) {
+      prefix = '';
+    } else if (beforeBase.endsWith('\n\n')) {
+      prefix = '';
+    } else {
+      prefix = '\n';
+    }
+  } else {
+    prefix = '\n\n';
+  }
+
+  let suffix = '\n';
+  if (after.length === 0) {
+    suffix = '\n';
+  } else if (after.startsWith('\n\n') || after === '\n') {
+    suffix = '';
+  } else if (after.startsWith('\n')) {
+    suffix = '\n';
+  } else if (after.startsWith('#')) {
+    suffix = '\n\n';
+  } else {
+    suffix = '\n';
+  }
+
+  const inserted = `${prefix}${header}${suffix}`;
+  const text = `${beforeBase}${inserted}${after}`;
+  const cursorOffset = beforeBase.length + prefix.length + header.length + 1;
+
+  return { text, cursorOffset };
+}
+

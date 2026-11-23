@@ -97,7 +97,8 @@ import {
 import { Mp3MetadataComparisonModal } from '../components/Mp3MetadataComparisonModal';
 import {
   calculateSongCompleteness,
-  SONGWRITING_TEMPLATES
+  SONGWRITING_TEMPLATES,
+  insertSectionHeaderAtCursor
 } from '../utils/songwriterHelper';
 import { exportSongToPdf } from '../utils/pdfGenerator';
 import {
@@ -500,12 +501,14 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       newCursorPos = start + chordTag.length + selected.length;
     }
 
+    const prevScrollTop = textarea.scrollTop;
     setLyrics(nextText);
     showFeedback(`Acorde ${chordTag} insertado`);
 
     setTimeout(() => {
-      textarea.focus();
+      textarea.scrollTop = prevScrollTop;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
+      textarea.focus();
       updateCursorPosition();
     }, 0);
   };
@@ -518,18 +521,37 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     }
   };
 
-  // Section Header Insertion
+  // Section Header Insertion at current cursor position
   const handleInsertSection = (sectionName: string) => {
-    const block = `\n\n## ${sectionName}\n`;
-    setLyrics(prev => prev.trimEnd() + block);
-    showFeedback(`Sección ${sectionName} añadida`);
+    const textarea = lyricsTextareaRef.current;
+
+    if (!textarea) {
+      const trimmed = lyrics.trimEnd();
+      const block = trimmed ? `\n\n## ${sectionName}\n` : `## ${sectionName}\n`;
+      setLyrics(trimmed + block);
+      showFeedback(`Sección ${sectionName} añadida`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const prevScrollTop = textarea.scrollTop;
+    const { text: nextText, cursorOffset: nextCursorPos } = insertSectionHeaderAtCursor(
+      lyrics,
+      sectionName,
+      start,
+      end
+    );
+
+    setLyrics(nextText);
+    showFeedback(`Sección ${sectionName} insertada`);
+
     setTimeout(() => {
-      if (lyricsTextareaRef.current) {
-        lyricsTextareaRef.current.focus();
-        lyricsTextareaRef.current.scrollTop = lyricsTextareaRef.current.scrollHeight;
-        updateCursorPosition();
-      }
-    }, 50);
+      textarea.scrollTop = prevScrollTop;
+      textarea.setSelectionRange(nextCursorPos, nextCursorPos);
+      textarea.focus();
+      updateCursorPosition();
+    }, 0);
   };
 
   // Apply complete songwriter template
@@ -2392,6 +2414,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                         }}
                         onKeyUp={updateCursorPosition}
                         onClick={updateCursorPosition}
+                        onSelect={updateCursorPosition}
                         placeholder="Escribe aquí los versos. Ejemplo: [Am] En la noche que nos [G] vimos..."
                         className="flex-1 p-3 font-mono text-xs sm:text-sm bg-transparent text-[var(--text-primary)] leading-relaxed resize-none focus:outline-none"
                         spellCheck={false}
