@@ -51,7 +51,9 @@ import {
   Volume2,
   Hand,
   Sliders,
-  Key
+  Key,
+  Square,
+  Feather
 } from 'lucide-react';
 import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
 import { Album } from '../types/album';
@@ -106,7 +108,19 @@ import {
   findLastChordBeforeCursor,
   HarmonicChordEntry
 } from '../lib/music/harmonyEngine';
-import { playChordPreview } from '../lib/audio/chordSynth';
+import {
+  playChordPreview,
+  playChordProgression,
+  ProgressionPlaybackHandle
+} from '../lib/audio/chordSynth';
+import {
+  extractSectionProgressions,
+  buildTimedChordEventsFromSong,
+  exportChordsToMidiBytes,
+  downloadMidiFile
+} from '../lib/music/midiExporter';
+import { analyzePoeticMetrics } from '../lib/lyrics/poeticAnalysis';
+import { chordProToSong, downloadChordProFile } from '../lib/music/chordPro';
 import { TapTempoTracker } from '../lib/audio/metronome';
 import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
 
@@ -236,12 +250,17 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [cursorOffset, setCursorOffset] = useState<number>(0);
   const lyricsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Harmonic Theory & Tuner & Tap Tempo states
+  // Harmonic Theory & Tuner & Tap Tempo & Poetic/Progression Preview states
   const [musicalMode, setMusicalMode] = useState<MusicalMode | 'auto'>('auto');
   const [chordPaletteTab, setChordPaletteTab] = useState<HarmonicChordEntry['category']>('diatonic');
   const [isTunerOpen, setIsTunerOpen] = useState<boolean>(false);
   const [tapCount, setTapCount] = useState<number>(0);
   const tapTrackerRef = useRef<TapTempoTracker>(new TapTempoTracker());
+  const [showPoeticAnalysis, setShowPoeticAnalysis] = useState<boolean>(false);
+  const [playingProgressionId, setPlayingProgressionId] = useState<string | null>(null);
+  const [activeProgressionStep, setActiveProgressionStep] = useState<{ id: string; index: number } | null>(null);
+  const progressionHandleRef = useRef<ProgressionPlaybackHandle | null>(null);
+  const chordProInputRef = useRef<HTMLInputElement | null>(null);
 
   // Initialize fields on load or change
   useEffect(() => {
@@ -346,6 +365,14 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Stop progression preview playback on unmount
+  useEffect(() => {
+    return () => {
+      progressionHandleRef.current?.stop();
+      progressionHandleRef.current = null;
+    };
   }, []);
 
   // Global Keyboard Shortcuts (Ctrl+S, Ctrl+B, etc.)
@@ -567,6 +594,120 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       accidentalPreference
     });
     showFeedback('Generando PDF de atril para imprimir...');
+  };
+
+  // Poetic metrics & section chord progressions
+  const poeticAnalysis = useMemo(
+    () => (showPoeticAnalysis ? analyzePoeticMetrics(lyrics) : null),
+    [lyrics, showPoeticAnalysis]
+  );
+
+  const sectionProgressions = useMemo(
+    () => extractSectionProgressions(lyrics),
+    [lyrics]
+  );
+
+  const stopProgressionPlayback = () => {
+    progressionHandleRef.current?.stop();
+    progressionHandleRef.current = null;
+    setPlayingProgressionId(null);
+    setActiveProgressionStep(null);
+  };
+
+  const handleToggleProgression = (progId: string, chords: string[]) => {
+    if (playingProgressionId === progId) {
+      stopProgressionPlayback();
+      return;
+    }
+    stopProgressionPlayback();
+    if (chords.length === 0) return;
+
+    const parsedTempo = parseInt(tempo, 10);
+    setPlayingProgressionId(progId);
+    progressionHandleRef.current = playChordProgression(chords, {
+      tempo: Number.isFinite(parsedTempo) && parsedTempo > 0 ? parsedTempo : 96,
+      timeSignature: timeSignature || '4/4',
+      instrument: 'guitar',
+      tuning,
+      onChordChange: (idx) => setActiveProgressionStep({ id: progId, index: idx }),
+      onEnded: () => {
+        setPlayingProgressionId(null);
+        setActiveProgressionStep(null);
+        progressionHandleRef.current = null;
+      }
+    });
+  };
+
+  const handleExportCurrentMidi = () => {
+    const parsedTempo = parseInt(tempo, 10);
+    const effectiveTempo = Number.isFinite(parsedTempo) && parsedTempo > 0 ? parsedTempo : 96;
+    const events = buildTimedChordEventsFromSong(
+      { lyrics, tempo: effectiveTempo, timeSignature },
+      { tempoOverride: effectiveTempo, timeSignatureOverride: timeSignature }
+    );
+    if (events.length === 0) {
+      showFeedback('Añade al menos un acorde [Am] para exportar a MIDI');
+      return;
+    }
+    const midiBytes = exportChordsToMidiBytes(events, {
+      title: title || 'Composicion',
+      tempo: effectiveTempo,
+      timeSignature: timeSignature || '4/4',
+      instrument: 'guitar',
+      tuning
+    });
+    downloadMidiFile(midiBytes, `${id || 'cancion'}_progresion.mid`);
+    showFeedback('Archivo MIDI (.mid) descargado');
+  };
+
+  const handleExportCurrentChordPro = () => {
+    const songSnapshot: Song = {
+      id: id || `cancion-${Date.now()}`,
+      title: title || 'Sin título',
+      status,
+      albumId: selectedAlbumId || undefined,
+      genre: genre || 'Canción de Autor',
+      key,
+      tempo: tempo ? parseInt(tempo, 10) : undefined,
+      timeSignature,
+      tuning,
+      lyrics,
+      notes: notes || undefined,
+      year,
+      createdAt: song?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    downloadChordProFile(songSnapshot, { accidentalPreference });
+    showFeedback('Archivo ChordPro (.cho) descargado');
+  };
+
+  const handleImportChordProFile = async (file: File) => {
+    try {
+      const content = await file.text();
+      const fallbackTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      const parsed = chordProToSong(content, fallbackTitle);
+
+      if (lyrics.trim() && !lyrics.includes('Escribe aquí el primer verso')) {
+        setLyricsUndoHistory(lyrics);
+      }
+
+      setTitle(parsed.title || fallbackTitle);
+      setLyrics(parsed.lyrics);
+      if (parsed.key) setKey(parsed.key);
+      if (parsed.tempo) setTempo(String(parsed.tempo));
+      if (parsed.timeSignature) setTimeSignature(parsed.timeSignature);
+      if (parsed.tuning) setTuning(parsed.tuning);
+      if (parsed.genre) setGenre(parsed.genre);
+      if (parsed.year) setYear(parsed.year);
+      if (parsed.notes) {
+        setNotes(prev => (prev ? `${prev}\n${parsed.notes}` : parsed.notes || ''));
+      }
+      setEditorMode('studio');
+      setActiveTab('lyrics.md');
+      showFeedback(`ChordPro "${parsed.title}" importado al editor`);
+    } catch (err: any) {
+      showFeedback(`No se pudo importar el archivo ChordPro: ${err?.message || 'formato inválido'}`);
+    }
   };
 
   // Audio Upload & Google Drive Handler
@@ -960,42 +1101,138 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     navigate({ name: 'song-detail', songId: songToSave.id });
   };
 
-  // Render stand-preview chords over text
+  // Render stand-preview chords over text + optional poetic meter & rhyme analysis
   const renderLyricsStandPreview = () => {
     const lines = lyrics.split('\n');
+    let currentSecId = 'section-0';
+    let chordIndexInSec = 0;
+
     return lines.map((line, idx) => {
       if (line.startsWith('##') || line.startsWith('#')) {
-        const heading = line.replace(/^#+\s*/, '');
+        const heading = line.replace(/^#+\s*/, '').trim();
+        const matchedSec = sectionProgressions.find(
+          s => s.title.toLowerCase() === heading.toLowerCase()
+        );
+        currentSecId = matchedSec?.id || `heading-${idx}`;
+        chordIndexInSec = 0;
+        const isPlayingThisSec = matchedSec && playingProgressionId === matchedSec.id;
+
         return (
-          <h4 key={idx} className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-bold mt-5 mb-1.5 border-b border-[var(--border-subtle)] pb-0.5">
-            {heading}
-          </h4>
+          <div key={idx} className="flex items-center justify-between gap-2 mt-5 mb-1.5 border-b border-[var(--border-subtle)] pb-0.5">
+            <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-bold">
+              {heading}
+            </h4>
+            {matchedSec && matchedSec.chords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleToggleProgression(matchedSec.id, matchedSec.chords)}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+                  isPlayingThisSec
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)]'
+                }`}
+                title={isPlayingThisSec ? 'Detener progresión' : `Escuchar progresión (${matchedSec.chords.join(' - ')})`}
+              >
+                {isPlayingThisSec ? <Square className="w-2.5 h-2.5 fill-current" /> : <Volume2 className="w-2.5 h-2.5" />}
+                <span>{isPlayingThisSec ? 'Detener' : 'Oír'}</span>
+              </button>
+            )}
+          </div>
         );
       }
       if (!line.trim()) return <div key={idx} className="h-3" />;
 
+      const metricInfo = poeticAnalysis?.lines[idx];
+      const renderMetricTag = () => {
+        if (!showPoeticAnalysis || !metricInfo || metricInfo.isEmpty || metricInfo.isSectionHeader) {
+          return null;
+        }
+        const stressTooltip =
+          metricInfo.stressType === 'aguda'
+            ? 'Aguda (+1)'
+            : metricInfo.stressType === 'esdrujula'
+            ? 'Esdrújula (-1)'
+            : 'Llana (0)';
+        const detailTitle = `${metricInfo.verseName}: ${metricInfo.grammaticalSyllables} gram.${
+          metricInfo.sinalefas > 0 ? ` - ${metricInfo.sinalefas} sinalefa(s)` : ''
+        } · Final ${stressTooltip} = ${metricInfo.metricSyllables} síl. métricas`;
+
+        return (
+          <div
+            className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] tabular-nums select-none self-end pb-0.5"
+            title={detailTitle}
+          >
+            <span className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
+              {metricInfo.metricSyllables} síl.
+              {metricInfo.sinalefas > 0 && (
+                <span className="ml-1 text-[var(--accent-primary)]">({metricInfo.sinalefas} sin.)</span>
+              )}
+            </span>
+            {metricInfo.rhymeLetter !== '-' ? (
+              <span
+                className={`px-1.5 py-0.5 rounded font-bold border ${
+                  metricInfo.rhymeType === 'consonante'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                }`}
+                title={`Rima ${metricInfo.rhymeType}`}
+              >
+                {metricInfo.rhymeLetter} {metricInfo.rhymeType === 'consonante' ? 'cons' : 'ason'}
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded text-[var(--text-muted)] border border-transparent">
+                -
+              </span>
+            )}
+          </div>
+        );
+      };
+
       if (/\[([A-G][#b]?[^\]]*)\]/.test(line)) {
         const segments = parseLyricLine(line);
         return (
-          <div key={idx} className="flex flex-wrap items-end my-0.5 font-mono leading-none">
-            {segments.map((segment, sIdx) => (
-              <span key={sIdx} className="inline-flex flex-col mr-1">
-                <span className="text-[11px] font-bold text-[var(--accent-primary)] select-none h-3.5">
-                  {segment.chord || '\u00A0'}
-                </span>
-                <span className="font-serif text-sm text-[var(--text-primary)] leading-normal">
-                  {segment.text || '\u00A0'}
-                </span>
-              </span>
-            ))}
+          <div key={idx} className="flex items-end justify-between gap-3 my-0.5">
+            <div className="flex flex-wrap items-end font-mono leading-none min-w-0">
+              {segments.map((segment, sIdx) => {
+                let isStepActive = false;
+                if (segment.chord) {
+                  const thisChordIdx = chordIndexInSec;
+                  chordIndexInSec++;
+                  isStepActive =
+                    activeProgressionStep !== null &&
+                    activeProgressionStep.id === currentSecId &&
+                    activeProgressionStep.index === thisChordIdx;
+                }
+                return (
+                  <span key={sIdx} className="inline-flex flex-col mr-1">
+                    <span
+                      className={`text-[11px] font-bold select-none h-3.5 rounded px-0.5 transition-colors ${
+                        isStepActive
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                          : 'text-[var(--accent-primary)]'
+                      }`}
+                    >
+                      {segment.chord || '\u00A0'}
+                    </span>
+                    <span className="font-serif text-sm text-[var(--text-primary)] leading-normal">
+                      {segment.text || '\u00A0'}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+            {renderMetricTag()}
           </div>
         );
       }
 
       return (
-        <p key={idx} className="font-serif text-sm text-[var(--text-secondary)] leading-relaxed my-0.5">
-          {line.replace(/\[[^\]]+\]/g, '')}
-        </p>
+        <div key={idx} className="flex items-baseline justify-between gap-3 my-0.5">
+          <p className="font-serif text-sm text-[var(--text-secondary)] leading-relaxed min-w-0">
+            {line.replace(/\[[^\]]+\]/g, '')}
+          </p>
+          {renderMetricTag()}
+        </div>
       );
     });
   };
@@ -1090,6 +1327,39 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   >
                     <span>Exportar PDF para Atril</span>
                     <kbd className="font-mono text-[10px] opacity-70">PDF</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleExportCurrentChordPro();
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] flex items-center justify-between cursor-pointer"
+                  >
+                    <span>Exportar ChordPro</span>
+                    <kbd className="font-mono text-[10px] opacity-70">.cho</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleExportCurrentMidi();
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] flex items-center justify-between cursor-pointer"
+                  >
+                    <span>Exportar Progresión MIDI</span>
+                    <kbd className="font-mono text-[10px] opacity-70">.mid</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      chordProInputRef.current?.click();
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)] flex items-center justify-between cursor-pointer"
+                  >
+                    <span>Importar ChordPro...</span>
+                    <kbd className="font-mono text-[10px] opacity-70">.cho</kbd>
                   </button>
                   <button
                     type="button"
@@ -1830,6 +2100,21 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
           className="hidden"
         />
 
+        {/* Hidden ChordPro File Input */}
+        <input
+          ref={chordProInputRef}
+          type="file"
+          accept=".cho,.chopro,.crd,.txt"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              void handleImportChordProFile(file);
+              e.target.value = '';
+            }
+          }}
+          className="hidden"
+        />
+
         {/* Global Hidden Audio Element */}
         {isValidPlayableAudioUrl(audioUrl) && (
           <audio
@@ -2056,16 +2341,37 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                 <div className={`flex-1 grid ${showStandPreview ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'} divide-y lg:divide-y-0 lg:divide-x divide-[var(--border-subtle)] min-h-[460px]`}>
                   {/* Left: Code/Lyrics Editor */}
                   <div className="flex flex-col relative bg-[var(--bg-surface)]">
-                    <div className="px-4 py-2 bg-[var(--bg-surface-subtle)]/50 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-mono flex items-center justify-between">
+                    <div className="px-4 py-2 bg-[var(--bg-surface-subtle)]/50 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-mono flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span>Editor de Versos y Armonía</span>
                         {savedAudioAnalysis && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 font-sans">
-                            🎵 Análisis guardado ({savedAudioAnalysis.key || key} · {savedAudioAnalysis.tempo || tempo} BPM)
+                            Análisis guardado ({savedAudioAnalysis.key || key} · {savedAudioAnalysis.tempo || tempo} BPM)
                           </span>
                         )}
                       </div>
-                      <span>Inserta <code>[Acorde]</code> justo antes de la sílaba acentuada</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !showPoeticAnalysis;
+                            setShowPoeticAnalysis(next);
+                            if (next && !showStandPreview) {
+                              setShowStandPreview(true);
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] transition-colors cursor-pointer ${
+                            showPoeticAnalysis
+                              ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--accent-border)] font-semibold'
+                              : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                          }`}
+                          title="Analizar métrica poética (sílabas, sinalefas, ley del acento final) y esquema de rimas por estrofa"
+                        >
+                          <Feather className="w-3 h-3" />
+                          <span>Métrica y Rima</span>
+                        </button>
+                        <span className="hidden sm:inline">Inserta <code>[Acorde]</code> justo antes de la sílaba acentuada</span>
+                      </div>
                     </div>
 
                     <div className="flex-1 flex relative">
@@ -2096,15 +2402,74 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
                   {/* Right: Live Stand Preview (Atril interactivo) */}
                   {showStandPreview && (
                     <div className="flex flex-col bg-[var(--bg-surface-subtle)]/30">
-                      <div className="px-4 py-2 bg-[var(--bg-surface-subtle)]/70 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-mono flex items-center justify-between">
+                      <div className="px-4 py-2 bg-[var(--bg-surface-subtle)]/70 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-mono flex flex-wrap items-center justify-between gap-2">
                         <span className="flex items-center gap-1.5 font-bold text-[var(--text-primary)]">
                           <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                          <span>Atril en Vivo (Acordes sobre sílabas)</span>
+                          <span>Atril en Vivo</span>
                         </span>
-                        <span className="font-bold text-[var(--accent-primary)]">
-                          Tono: {key}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {sectionProgressions.length > 0 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allChords = sectionProgressions.flatMap(s => s.chords);
+                                  handleToggleProgression('__full_song__', allChords);
+                                }}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] transition-colors cursor-pointer ${
+                                  playingProgressionId === '__full_song__'
+                                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)] font-semibold'
+                                    : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--accent-primary)]'
+                                }`}
+                                title="Reproducir progresión armónica completa al tempo configurado"
+                              >
+                                {playingProgressionId === '__full_song__' ? (
+                                  <Square className="w-2.5 h-2.5 fill-current" />
+                                ) : (
+                                  <Volume2 className="w-3 h-3 text-[var(--accent-primary)]" />
+                                )}
+                                <span>{playingProgressionId === '__full_song__' ? 'Detener' : 'Oír progresión'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleExportCurrentMidi}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[10px] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer"
+                                title="Exportar progresión armónica a archivo MIDI (.mid)"
+                              >
+                                <Download className="w-2.5 h-2.5" />
+                                <span>MIDI</span>
+                              </button>
+                            </>
+                          )}
+                          <span className="font-bold text-[var(--accent-primary)]">
+                            Tono: {key}
+                          </span>
+                        </div>
                       </div>
+
+                      {showPoeticAnalysis && poeticAnalysis && poeticAnalysis.totalVerses > 0 && (
+                        <div className="px-4 py-2 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                          <div className="flex items-center gap-2 font-mono tabular-nums text-[var(--text-secondary)]">
+                            <Feather className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                            <span>{poeticAnalysis.totalVerses} versos</span>
+                            {poeticAnalysis.dominantMetricLength && (
+                              <span>· Dominante: <strong className="text-[var(--text-primary)]">{poeticAnalysis.dominantMetricLength} síl.</strong></span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                            {poeticAnalysis.stanzas.map((st, sIdx) => (
+                              <span
+                                key={st.stanzaIndex}
+                                className="px-1.5 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)]"
+                                title={st.title || `Estrofa ${sIdx + 1}`}
+                              >
+                                {st.title ? `${st.title}: ` : `E${sIdx + 1}: `}
+                                <strong className="text-[var(--accent-primary)]">{st.scheme}</strong>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex-1 p-5 overflow-y-auto max-h-[580px] space-y-1">
                         {renderLyricsStandPreview()}

@@ -21,6 +21,7 @@ export interface BeatTimelineProps {
   onRecalculate?: () => void;
   onExportJSON?: () => void;
   onExportCSV?: () => void;
+  onExportMIDI?: () => void;
   // Pitch-Shifting props
   pitchShiftSemitones?: number;
   onPitchShiftChange?: (semitones: number) => void;
@@ -114,6 +115,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   onRecalculate,
   onExportJSON,
   onExportCSV,
+  onExportMIDI,
   pitchShiftSemitones = 0,
   onPitchShiftChange,
   preserveTempo = true,
@@ -721,6 +723,18 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             >
               <Download className="w-2.5 h-2.5 text-purple-400" />
               <span>CSV</span>
+            </button>
+          )}
+
+          {chords && chords.length > 0 && onExportMIDI && (
+            <button
+              type="button"
+              onClick={onExportMIDI}
+              className="px-2 py-0.5 rounded text-[10px] font-mono border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+              title="Exportar progresión armónica detectada a archivo MIDI (.mid)"
+            >
+              <Download className="w-2.5 h-2.5 text-emerald-400" />
+              <span>MIDI</span>
             </button>
           )}
 

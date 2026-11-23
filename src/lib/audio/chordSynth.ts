@@ -201,3 +201,158 @@ export function playReferenceNote(frequencyHz: number, durationSec: number = 1.6
   src.start(now);
   src.stop(now + durationSec + 0.05);
 }
+
+export interface ProgressionChordStep {
+  chord: string;
+  /** Duration in beats (defaults to beatsPerBar if omitted) */
+  beats?: number;
+}
+
+export interface ProgressionPlayOptions {
+  tempo?: number;
+  timeSignature?: string;
+  instrument?: InstrumentType;
+  tuning?: string;
+  /** Default beats per chord when step.beats is omitted (defaults to 1 bar) */
+  beatsPerChord?: number;
+  loop?: boolean;
+  onChordChange?: (index: number, chord: string) => void;
+  onEnded?: () => void;
+}
+
+export interface ProgressionPlaybackHandle {
+  stop: () => void;
+}
+
+function parseBeatsPerBar(timeSignature?: string): number {
+  if (!timeSignature) return 4;
+  const parts = timeSignature.split('/').map(Number);
+  if (parts.length === 2 && Number.isFinite(parts[0]) && parts[0] > 0) {
+    if (parts[0] === 6 && parts[1] === 8) return 2; // 6/8 felt in 2 dotted-quarter beats (or 3s)
+    if (parts[0] === 12 && parts[1] === 8) return 4;
+    return Math.min(8, Math.max(2, parts[0]));
+  }
+  return 4;
+}
+
+/**
+ * Plays a chord progression in real time synced to BPM and time signature
+ * using Web Audio Karplus-Strong / additive synthesis with strummed voicing.
+ */
+export function playChordProgression(
+  steps: Array<string | ProgressionChordStep>,
+  options: ProgressionPlayOptions = {}
+): ProgressionPlaybackHandle {
+  const normalized: ProgressionChordStep[] = steps
+    .map(s => (typeof s === 'string' ? { chord: s } : s))
+    .filter(s => s.chord && s.chord !== 'N.C.');
+
+  if (normalized.length === 0) {
+    options.onEnded?.();
+    return { stop: () => {} };
+  }
+
+  const ctx = getAudioContext();
+  if (!ctx) {
+    options.onEnded?.();
+    return { stop: () => {} };
+  }
+
+  const tempo = Math.max(40, Math.min(240, options.tempo || 96));
+  const beatSec = 60 / tempo;
+  const defaultBeats = options.beatsPerChord ?? parseBeatsPerBar(options.timeSignature);
+  const instrument: InstrumentType = options.instrument || 'guitar';
+
+  let stopped = false;
+  const activeTimers: number[] = [];
+  const masterGain = ctx.createGain();
+  masterGain.gain.setValueAtTime(0.42, ctx.currentTime);
+  masterGain.connect(ctx.destination);
+
+  const schedulePass = (passStartTime: number) => {
+    if (stopped) return;
+
+    let offsetSec = 0;
+    normalized.forEach((step, idx) => {
+      const chordBeats = Math.max(0.5, step.beats ?? defaultBeats);
+      const stepDurationSec = chordBeats * beatSec;
+      const startTime = passStartTime + offsetSec;
+      const delayMs = Math.max(0, (startTime - ctx.currentTime) * 1000);
+
+      const timer = window.setTimeout(() => {
+        if (stopped) return;
+        options.onChordChange?.(idx, step.chord);
+      }, delayMs);
+      activeTimers.push(timer);
+
+      const voicing = getChordVoicing(step.chord, instrument, options.tuning);
+      const notes = voicing.midiNotes;
+      const ringDuration = Math.min(2.6, Math.max(0.45, stepDurationSec * 0.96));
+
+      if (instrument === 'piano') {
+        const perNoteGain = Math.min(0.22, 0.72 / Math.max(1, notes.length));
+        notes.forEach((midi, nIdx) => {
+          playPianoNote(ctx, masterGain, midi, startTime + nIdx * 0.01, ringDuration, perNoteGain);
+        });
+      } else {
+        const strumStep = instrument === 'ukulele' ? 0.018 : 0.022;
+        const damping = instrument === 'ukulele' ? 0.994 : 0.996;
+        const perNoteGain = Math.min(0.24, 0.82 / Math.max(1, notes.length));
+
+        // Downstroke on chord start
+        notes.forEach((midi, nIdx) => {
+          playPluckedNote(ctx, masterGain, midi, startTime + nIdx * strumStep, ringDuration, perNoteGain, damping);
+        });
+
+        // Subtle mid-bar acoustic brush on longer bars (>= 3 beats)
+        if (chordBeats >= 3 && stepDurationSec >= 1.2) {
+          const halfTime = startTime + stepDurationSec * 0.5;
+          const upperNotes = notes.slice(-3);
+          upperNotes.forEach((midi, nIdx) => {
+            playPluckedNote(
+              ctx,
+              masterGain,
+              midi,
+              halfTime + nIdx * 0.016,
+              Math.max(0.35, stepDurationSec * 0.45),
+              perNoteGain * 0.55,
+              damping
+            );
+          });
+        }
+      }
+
+      offsetSec += stepDurationSec;
+    });
+
+    const endMs = Math.max(0, (passStartTime + offsetSec - ctx.currentTime) * 1000);
+    const endTimer = window.setTimeout(() => {
+      if (stopped) return;
+      if (options.loop) {
+        schedulePass(ctx.currentTime + 0.04);
+      } else {
+        options.onEnded?.();
+      }
+    }, endMs);
+    activeTimers.push(endTimer);
+  };
+
+  schedulePass(ctx.currentTime + 0.03);
+
+  return {
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      activeTimers.forEach(id => clearTimeout(id));
+      activeTimers.length = 0;
+      try {
+        masterGain.gain.cancelScheduledValues(ctx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+      } catch {
+        // ignore audio context teardown errors
+      }
+      options.onEnded?.();
+    }
+  };
+}
+

@@ -38,6 +38,11 @@ import { MeterAnalysis, estimateMeter, recalculateDownbeats, TimeSignature } fro
 import type { MusicalSection, StructureAnalysisResult } from '../lib/audio/structure';
 import { analyzeStructureWithWorker } from '../lib/audio/structureWorkerClient';
 import { ChromaticTunerModal } from './ChromaticTunerModal';
+import {
+  buildTimedChordEventsFromSegments,
+  exportChordsToMidiBytes,
+  downloadMidiFile
+} from '../lib/music/midiExporter';
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -395,6 +400,41 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     downloadChordExport(csvStr, `${baseName}_acordes.csv`, 'text/csv');
   };
 
+  const handleExportChordsMIDI = (overrideChords?: ChordSegment[], overrideSections?: MusicalSection[]) => {
+    const sourceChords = overrideChords || keyAnalysis?.chords || savedAudioAnalysis?.chords;
+    if (!sourceChords || sourceChords.length === 0) return;
+
+    const respelledChords: ChordSegment[] = sourceChords.map(seg => ({
+      ...seg,
+      chord: respellChord(seg.chord, accidentalPreference)
+    }));
+    const sectionsList = overrideSections || structureAnalysis?.sections || analysisResult?.sections || savedAudioAnalysis?.sections;
+    const events = buildTimedChordEventsFromSegments(respelledChords, sectionsList);
+    if (events.length === 0) return;
+
+    const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'acordes-detectados';
+    const bpm =
+      tempoAnalysis?.bpm ||
+      analysisResult?.tempo ||
+      savedAudioAnalysis?.tempo ||
+      (currentTempo ? parseInt(currentTempo, 10) : 96) ||
+      96;
+    const meter =
+      meterAnalysis?.meter ||
+      analysisResult?.timeSignature ||
+      savedAudioAnalysis?.timeSignature ||
+      '4/4';
+
+    const midiBytes = exportChordsToMidiBytes(events, {
+      title: baseName,
+      tempo: bpm,
+      timeSignature: meter,
+      instrument: 'guitar',
+      tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning
+    });
+    downloadMidiFile(midiBytes, `${baseName}_acordes.mid`);
+  };
+
   const handleSeek = (targetTime: number) => {
     if (playerRef.current && decodedAudioBuffer) {
       playerRef.current.seek(targetTime);
@@ -732,7 +772,19 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleExportChordsMIDI(savedAudioAnalysis.chords, savedAudioAnalysis.sections)}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Exportar los acordes detectados en un archivo MIDI (.mid)"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>MIDI</span>
+                </button>
+              )}
+
               {onInsertChordsIntoLyrics && savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
                 <button
                   type="button"
@@ -964,6 +1016,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           onRecalculate={() => handleCalculateTempo(file)}
           onExportJSON={handleExportChordsJSON}
           onExportCSV={handleExportChordsCSV}
+          onExportMIDI={() => handleExportChordsMIDI()}
           pitchShiftSemitones={pitchShiftSemitones}
           onPitchShiftChange={handlePitchShiftChange}
           preserveTempo={preserveTempo}
@@ -1502,6 +1555,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                           <Download className="w-2.5 h-2.5" />
                           <span>CSV</span>
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExportChordsMIDI()}
+                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Descargar progresión armónica como archivo MIDI (.mid)"
+                        >
+                          <Download className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>MIDI</span>
+                        </button>
                         {onInsertChordsIntoLyrics && (
                           <div className="flex items-center gap-1">
                             <button
@@ -1641,7 +1703,31 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {((analysisResult.chords && analysisResult.chords.length > 0) || (keyAnalysis?.chords && keyAnalysis.chords.length > 0)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+                      handleExportChordsMIDI(keyAnalysis.chords, structureAnalysis?.sections ?? analysisResult.sections);
+                    } else if (analysisResult.chords && analysisResult.chords.length > 0) {
+                      const mapped: ChordSegment[] = analysisResult.chords.map((c, idx, arr) => {
+                        const start = typeof c.seconds === 'number' ? c.seconds : idx * 3.0;
+                        const nextStart = arr[idx + 1]?.seconds;
+                        const end = typeof nextStart === 'number' ? nextStart : start + 3.0;
+                        return { startTime: start, endTime: end, chord: c.chord, confidence: 0.95 };
+                      });
+                      handleExportChordsMIDI(mapped, analysisResult.sections ?? structureAnalysis?.sections);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-[var(--bg-surface)] hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)]"
+                  title="Exportar secuencia armónica a archivo MIDI (.mid)"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>MIDI</span>
+                </button>
+              )}
+
               {onInsertChordsIntoLyrics && ((analysisResult.chords && analysisResult.chords.length > 0) || (keyAnalysis?.chords && keyAnalysis.chords.length > 0)) && (
                 <div className="flex items-center gap-1.5">
                   <button

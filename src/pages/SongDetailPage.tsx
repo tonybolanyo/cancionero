@@ -21,7 +21,9 @@ import {
   Youtube,
   Sliders,
   Repeat,
-  Maximize2
+  Maximize2,
+  Volume2,
+  Square
 } from 'lucide-react';
 import { SongVideoVisualizerModal } from '../components/SongVideoVisualizerModal';
 import { Song } from '../types/song';
@@ -50,7 +52,14 @@ import {
   chordShapeWithCapo
 } from '../lib/music/chordDiagrams';
 import { chordToFunctionalSymbol } from '../lib/music/harmonyEngine';
-import { playChordPreview } from '../lib/audio/chordSynth';
+import { playChordPreview, playChordProgression, ProgressionPlaybackHandle } from '../lib/audio/chordSynth';
+import {
+  extractSectionProgressions,
+  buildTimedChordEventsFromSong,
+  exportChordsToMidiBytes,
+  downloadMidiFile
+} from '../lib/music/midiExporter';
+import { downloadChordProFile } from '../lib/music/chordPro';
 import { SongChordsBar, HarmonicNotationView } from '../components/ChordDiagramCard';
 import { MetronomeWidget } from '../components/MetronomeWidget';
 import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
@@ -122,6 +131,9 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [capoFret, setCapoFret] = useState<number>(0);
   const [notationView, setNotationView] = useState<HarmonicNotationView>('chords');
   const [activeChordDiagram, setActiveChordDiagram] = useState<string | null>(null);
+  const [playingProgressionId, setPlayingProgressionId] = useState<string | null>(null);
+  const [activeProgressionStep, setActiveProgressionStep] = useState<{ id: string; index: number } | null>(null);
+  const progressionHandleRef = useRef<ProgressionPlaybackHandle | null>(null);
 
   const completeness = React.useMemo(() => calculateSongCompleteness(song), [song]);
 
@@ -178,6 +190,8 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     return () => {
       dspPlayerRef.current?.dispose();
       dspPlayerRef.current = null;
+      progressionHandleRef.current?.stop();
+      progressionHandleRef.current = null;
     };
   }, []);
 
@@ -241,6 +255,10 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     setEqMode('normal');
     dspPlayerRef.current?.pause();
     dspPlayerRef.current?.clearLoop();
+    progressionHandleRef.current?.stop();
+    progressionHandleRef.current = null;
+    setPlayingProgressionId(null);
+    setActiveProgressionStep(null);
 
     const sourceText = song.lrc || (isLrcContent(song.lyrics) ? song.lyrics : (song.id === 'si-me-pierdo' ? SAMPLE_LRC_TEXT : ''));
     if (sourceText) {
@@ -520,6 +538,71 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     () => extractUniqueChordsFromLyrics(transposedLyrics),
     [transposedLyrics]
   );
+  const sectionProgressions = useMemo(
+    () => extractSectionProgressions(transposedLyrics),
+    [transposedLyrics]
+  );
+
+  const stopProgressionPlayback = () => {
+    progressionHandleRef.current?.stop();
+    progressionHandleRef.current = null;
+    setPlayingProgressionId(null);
+    setActiveProgressionStep(null);
+  };
+
+  const handleToggleProgression = (progId: string, chords: string[]) => {
+    if (playingProgressionId === progId) {
+      stopProgressionPlayback();
+      return;
+    }
+    stopProgressionPlayback();
+    if (chords.length === 0) return;
+
+    setPlayingProgressionId(progId);
+    progressionHandleRef.current = playChordProgression(chords, {
+      tempo: song.tempo || 96,
+      timeSignature: song.timeSignature || '4/4',
+      instrument,
+      tuning: song.tuning,
+      onChordChange: (idx) => setActiveProgressionStep({ id: progId, index: idx }),
+      onEnded: () => {
+        setPlayingProgressionId(null);
+        setActiveProgressionStep(null);
+        progressionHandleRef.current = null;
+      }
+    });
+  };
+
+  const handleExportChordPro = () => {
+    downloadChordProFile(song, {
+      semitones,
+      accidentalPreference,
+      capoFret
+    });
+  };
+
+  const handleExportMidi = () => {
+    const events = buildTimedChordEventsFromSong(
+      {
+        lyrics: transposedLyrics,
+        tempo: song.tempo,
+        timeSignature: song.timeSignature
+      },
+      {
+        tempoOverride: song.tempo,
+        timeSignatureOverride: song.timeSignature
+      }
+    );
+    if (events.length === 0) return;
+    const midiBytes = exportChordsToMidiBytes(events, {
+      title: song.title || 'Cancion',
+      tempo: song.tempo || 96,
+      timeSignature: song.timeSignature || '4/4',
+      instrument,
+      tuning: song.tuning
+    });
+    downloadMidiFile(midiBytes, `${song.id || 'cancion'}_progresion.mid`);
+  };
 
   const formatDisplayedChord = (soundingChord: string): string => {
     if (notationView !== 'chords') {
@@ -548,16 +631,43 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   const renderLyrics = () => {
     const lines = transposedLyrics.split('\n');
+    let currentSecId = 'section-0';
+    let chordIndexInSec = 0;
+
     return lines.map((line, idx) => {
       if (line.startsWith('##') || line.startsWith('#')) {
-        const title = line.replace(/^#+\s*/, '');
+        const headingTitle = line.replace(/^#+\s*/, '').trim();
+        const matchedSec = sectionProgressions.find(
+          s => s.title.toLowerCase() === headingTitle.toLowerCase()
+        );
+        currentSecId = matchedSec?.id || `heading-${idx}`;
+        chordIndexInSec = 0;
+        const isPlayingThisSec = matchedSec && playingProgressionId === matchedSec.id;
+
         return (
-          <h4
+          <div
             key={idx}
-            className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold mt-6 mb-2 border-b border-[var(--border-subtle)] pb-1"
+            className="flex items-center justify-between gap-2 mt-6 mb-2 border-b border-[var(--border-subtle)] pb-1"
           >
-            {title}
-          </h4>
+            <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold">
+              {headingTitle}
+            </h4>
+            {showChords && matchedSec && matchedSec.chords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleToggleProgression(matchedSec.id, matchedSec.chords)}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors cursor-pointer ${
+                  isPlayingThisSec
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)]'
+                }`}
+                title={isPlayingThisSec ? 'Detener progresión de la sección' : `Escuchar progresión (${matchedSec.chords.join(' - ')})`}
+              >
+                {isPlayingThisSec ? <Square className="w-2.5 h-2.5 fill-current" /> : <Volume2 className="w-3 h-3" />}
+                <span>{isPlayingThisSec ? 'Detener' : 'Oír sección'}</span>
+              </button>
+            )}
+          </div>
         );
       }
 
@@ -574,13 +684,26 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 const chord = segment.chord;
                 const text = segment.text;
                 const displayChord = chord ? formatDisplayedChord(chord) : '';
+                let isStepActive = false;
+                if (chord) {
+                  const thisChordIdx = chordIndexInSec;
+                  chordIndexInSec++;
+                  isStepActive =
+                    activeProgressionStep !== null &&
+                    activeProgressionStep.id === currentSecId &&
+                    activeProgressionStep.index === thisChordIdx;
+                }
                 return (
                   <span key={sIdx} className="inline-flex flex-col mr-1">
                     {chord ? (
                       <button
                         type="button"
                         onClick={() => handleInlineChordClick(chord)}
-                        className="text-left text-xs font-bold text-[var(--accent-primary)] hover:underline select-none h-4 cursor-pointer"
+                        className={`text-left text-xs font-bold hover:underline select-none h-4 cursor-pointer rounded px-0.5 transition-colors ${
+                          isStepActive
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                            : 'text-[var(--accent-primary)]'
+                        }`}
                         title={`Oír y ver diagrama de ${chord}`}
                       >
                         {displayChord}
@@ -606,12 +729,22 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             {parts.map((part, pIdx) => {
               if (part.startsWith('[') && part.endsWith(']')) {
                 const chordSymbol = part.slice(1, -1);
+                const thisChordIdx = chordIndexInSec;
+                chordIndexInSec++;
+                const isStepActive =
+                  activeProgressionStep !== null &&
+                  activeProgressionStep.id === currentSecId &&
+                  activeProgressionStep.index === thisChordIdx;
                 return (
                   <button
                     key={pIdx}
                     type="button"
                     onClick={() => handleInlineChordClick(chordSymbol)}
-                    className="inline-block px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] font-mono font-semibold text-xs border border-[var(--accent-border)] -translate-y-1 mx-0.5 select-none cursor-pointer transition-colors"
+                    className={`inline-block px-1.5 py-0.5 rounded font-mono font-semibold text-xs border -translate-y-1 mx-0.5 select-none cursor-pointer transition-colors ${
+                      isStepActive
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] border-[var(--accent-border)]'
+                    }`}
                     title={`Oír y ver diagrama de ${chordSymbol}`}
                   >
                     {formatDisplayedChord(chordSymbol)}
@@ -718,6 +851,24 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           >
             <Download className="w-4 h-4" />
           </button>
+          <button
+            type="button"
+            onClick={handleExportChordPro}
+            className="px-2 py-1.5 text-[11px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer border border-[var(--border-subtle)]"
+            title="Exportar a formato ChordPro (.cho) compatible con OnSong / SongBook"
+          >
+            .cho
+          </button>
+          {uniqueSongChords.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportMidi}
+              className="px-2 py-1.5 text-[11px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer border border-[var(--border-subtle)]"
+              title="Exportar progresión armónica a archivo MIDI (.mid)"
+            >
+              .mid
+            </button>
+          )}
           <button
             onClick={handleExportPdf}
             className="p-2 text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
@@ -1276,6 +1427,30 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 </select>
               )}
             </div>
+
+            {/* Preescucha progresión de acordes */}
+            {showChords && sectionProgressions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const allChords = sectionProgressions.flatMap(s => s.chords);
+                  handleToggleProgression('__full_song__', allChords);
+                }}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
+                  playingProgressionId === '__full_song__'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--accent-primary)]'
+                }`}
+                title="Reproducir la progresión completa de acordes del tema al tempo configurado"
+              >
+                {playingProgressionId === '__full_song__' ? (
+                  <Square className="w-3 h-3 fill-current" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                )}
+                <span>{playingProgressionId === '__full_song__' ? 'Detener' : 'Oír progresión'}</span>
+              </button>
+            )}
 
             {/* Copy lyrics */}
             <button
