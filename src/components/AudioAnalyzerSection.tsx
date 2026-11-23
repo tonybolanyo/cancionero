@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Upload,
   Music,
@@ -15,14 +15,15 @@ import {
   RotateCcw,
   ShieldCheck,
   CheckCircle2,
-  Wand2,
   SlidersHorizontal,
-  Timer,
   BarChart3,
   Cpu,
   Download,
   Activity,
-  Undo2
+  Undo2,
+  ChevronDown,
+  ChevronUp,
+  Info
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
@@ -55,6 +56,8 @@ import {
 
 const CHROMATIC_NOTES_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CHROMATIC_NOTES_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+type AnalyzerTab = 'chords' | 'rhythm' | 'advanced';
 
 interface AudioAnalyzerSectionProps {
   onApplyDetection: (data: {
@@ -112,13 +115,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [appliedMeter, setAppliedMeter] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // UI Navigation & Menus
+  const [activeTab, setActiveTab] = useState<AnalyzerTab>('chords');
+  const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
+  const [showChromaChart, setShowChromaChart] = useState<boolean>(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
   // Dedicated Tempo (web-audio-beat-detector) states
   const [tempoAnalysis, setTempoAnalysis] = useState<TempoAnalysis | null>(null);
   const [isCalculatingTempo, setIsCalculatingTempo] = useState<boolean>(false);
   const [tempoError, setTempoError] = useState<string | null>(null);
   const [minTempo, setMinTempo] = useState<number>(60);
   const [maxTempo, setMaxTempo] = useState<number>(180);
-  const [showTempoSettings, setShowTempoSettings] = useState<boolean>(false);
 
   // Onsets & Beat Grid (@audio/beat) states
   const [decodedAudioBuffer, setDecodedAudioBuffer] = useState<AudioBuffer | null>(null);
@@ -162,6 +170,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       playerRef.current?.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showExportMenu]);
 
   useEffect(() => {
     if (decodedAudioBuffer) {
@@ -358,7 +378,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         setBeatAnalysis(beats);
         detectedBeats = beats.beats;
 
-        // 2b. Estimate musical meter (2/4, 3/4, 4/4, 6/8) using pre-calculated beats & onsets
+        // 2b. Estimate musical meter
         try {
           const estimatedMeter = estimateMeter({
             beats: beats.beats,
@@ -375,10 +395,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         console.warn('Onsets / Beat grid analysis warning:', beatErr);
       }
 
-      // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker (con beats para alineación armónica)
+      // 3. Analyze Key & Scale with Essentia.js WASM via Web Worker
       void analyzeKey(audioBuffer, detectedBeats);
 
-      // 4. Analyze real Musical Structure (SSM + Checkerboard Novelty) via Web Worker
+      // 4. Analyze Musical Structure via Web Worker
       setIsAnalyzingStructure(true);
       void analyzeStructureWithWorker({
         audioBuffer,
@@ -410,29 +430,68 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     }
   };
 
+  // Unified effective chords & sections across engines (Essentia -> Gemini/AI -> Saved)
+  const effectiveChords = useMemo<ChordSegment[]>(() => {
+    if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+      return keyAnalysis.chords;
+    }
+    if (analysisResult?.chords && analysisResult.chords.length > 0) {
+      return analysisResult.chords.map((c, idx, arr) => {
+        const start = typeof c.seconds === 'number' ? c.seconds : idx * 3.0;
+        const nextStart = arr[idx + 1]?.seconds;
+        const end = typeof nextStart === 'number' ? nextStart : start + 3.0;
+        return {
+          startTime: start,
+          endTime: end,
+          chord: c.chord,
+          confidence: 0.9
+        };
+      });
+    }
+    if (savedAudioAnalysis?.chords && savedAudioAnalysis.chords.length > 0) {
+      return savedAudioAnalysis.chords;
+    }
+    return [];
+  }, [keyAnalysis?.chords, analysisResult?.chords, savedAudioAnalysis?.chords]);
+
+  const effectiveSections = useMemo<MusicalSection[]>(() => {
+    if (structureAnalysis?.sections && structureAnalysis.sections.length > 0) {
+      return structureAnalysis.sections;
+    }
+    if (analysisResult?.sections && analysisResult.sections.length > 0) {
+      return analysisResult.sections;
+    }
+    if (savedAudioAnalysis?.sections && savedAudioAnalysis.sections.length > 0) {
+      return savedAudioAnalysis.sections;
+    }
+    return [];
+  }, [structureAnalysis?.sections, analysisResult?.sections, savedAudioAnalysis?.sections]);
+
   const handleExportChordsJSON = () => {
-    if (!keyAnalysis?.chords || keyAnalysis.chords.length === 0) return;
+    if (effectiveChords.length === 0) return;
     const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'chords';
-    const jsonStr = exportChordsToJSON(keyAnalysis.chords, baseName);
+    const jsonStr = exportChordsToJSON(effectiveChords, baseName);
     downloadChordExport(jsonStr, `${baseName}_acordes.json`, 'application/json');
+    setShowExportMenu(false);
   };
 
   const handleExportChordsCSV = () => {
-    if (!keyAnalysis?.chords || keyAnalysis.chords.length === 0) return;
+    if (effectiveChords.length === 0) return;
     const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'chords';
-    const csvStr = exportChordsToCSV(keyAnalysis.chords);
+    const csvStr = exportChordsToCSV(effectiveChords);
     downloadChordExport(csvStr, `${baseName}_acordes.csv`, 'text/csv');
+    setShowExportMenu(false);
   };
 
   const handleExportChordsMIDI = (overrideChords?: ChordSegment[], overrideSections?: MusicalSection[]) => {
-    const sourceChords = overrideChords || keyAnalysis?.chords || savedAudioAnalysis?.chords;
+    const sourceChords = overrideChords || effectiveChords;
     if (!sourceChords || sourceChords.length === 0) return;
 
     const respelledChords: ChordSegment[] = sourceChords.map(seg => ({
       ...seg,
       chord: respellChord(seg.chord, accidentalPreference)
     }));
-    const sectionsList = overrideSections || structureAnalysis?.sections || analysisResult?.sections || savedAudioAnalysis?.sections;
+    const sectionsList = overrideSections || effectiveSections;
     const events = buildTimedChordEventsFromSegments(respelledChords, sectionsList);
     if (events.length === 0) return;
 
@@ -457,6 +516,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning
     });
     downloadMidiFile(midiBytes, `${baseName}_acordes.mid`);
+    setShowExportMenu(false);
   };
 
   const handleSeek = (targetTime: number) => {
@@ -567,7 +627,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const getEffectiveKey = () => {
-    let raw = currentKey || analysisResult?.key || 'Am';
+    let raw = analysisResult?.key || savedAudioAnalysis?.key || currentKey || 'Am';
     if (keyAnalysis) {
       raw = keyAnalysis.scale === 'minor'
         ? (keyAnalysis.key.endsWith('m') ? keyAnalysis.key : `${keyAnalysis.key}m`)
@@ -576,43 +636,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     return respellChord(raw, accidentalPreference);
   };
 
-  const handleApplyOnlyTempo = () => {
-    if (!tempoAnalysis) return;
-    onApplyDetection({
-      tempo: tempoAnalysis.bpm,
-      key: getEffectiveKey(),
-      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
-      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
-      audioUrl: audioUrl || undefined,
-      chordProgression: analysisResult?.chordProgression,
-      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis.offset
-    });
-    setAppliedTempo(true);
-    setTimeout(() => setAppliedTempo(false), 2500);
-  };
-
-  const handleApplyOnlyMeter = () => {
-    if (!meterAnalysis) return;
-    onApplyDetection({
-      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
-      key: getEffectiveKey(),
-      timeSignature: meterAnalysis.meter,
-      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
-      audioUrl: audioUrl || undefined,
-      chordProgression: getChordProgressionSummary(),
-      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
-      chords: keyAnalysis?.chords || undefined
-    });
-    setAppliedMeter(true);
-    setTimeout(() => setAppliedMeter(false), 2500);
-  };
-
   const getChordProgressionSummary = (): string | undefined => {
-    if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
+    if (effectiveChords.length > 0) {
       const seq: string[] = [];
-      for (const s of keyAnalysis.chords) {
+      for (const s of effectiveChords) {
         const chordName = respellChord(s.chord, accidentalPreference);
         if (seq.length === 0 || seq[seq.length - 1] !== chordName) {
           seq.push(chordName);
@@ -620,73 +647,99 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       }
       return seq.slice(0, 8).join(' - ');
     }
-    return analysisResult?.chordProgression;
+    return analysisResult?.chordProgression || savedAudioAnalysis?.chordProgression;
+  };
+
+  const handleApplyOnlyTempo = () => {
+    const bpm = tempoAnalysis?.bpm ?? analysisResult?.tempo ?? savedAudioAnalysis?.tempo;
+    if (!bpm) return;
+    onApplyDetection({
+      tempo: bpm,
+      key: getEffectiveKey(),
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || savedAudioAnalysis?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning || 'Estándar (EADGBE)',
+      audioUrl: audioUrl || undefined,
+      chordProgression: getChordProgressionSummary(),
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset
+    });
+    setAppliedTempo(true);
+    setTimeout(() => setAppliedTempo(false), 2500);
+  };
+
+  const handleApplyOnlyMeter = () => {
+    const meter = meterAnalysis?.meter ?? analysisResult?.timeSignature ?? savedAudioAnalysis?.timeSignature;
+    if (!meter) return;
+    onApplyDetection({
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || savedAudioAnalysis?.tempo || 120,
+      key: getEffectiveKey(),
+      timeSignature: meter,
+      tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning || 'Estándar (EADGBE)',
+      audioUrl: audioUrl || undefined,
+      chordProgression: getChordProgressionSummary(),
+      suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
+      chords: effectiveChords.length > 0 ? effectiveChords : undefined
+    });
+    setAppliedMeter(true);
+    setTimeout(() => setAppliedMeter(false), 2500);
   };
 
   const handleApplyOnlyKey = () => {
-    if (!keyAnalysis) return;
+    if (!keyAnalysis && !analysisResult?.key && !savedAudioAnalysis?.key) return;
     const key = getEffectiveKey();
-    const chordProgression = getChordProgressionSummary();
     onApplyDetection({
-      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
+      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || savedAudioAnalysis?.tempo || 120,
       key,
-      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
-      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || savedAudioAnalysis?.timeSignature || '4/4',
+      tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning || 'Estándar (EADGBE)',
       audioUrl: audioUrl || undefined,
-      chordProgression,
+      chordProgression: getChordProgressionSummary(),
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
-      chords: keyAnalysis?.chords || undefined
+      chords: effectiveChords.length > 0 ? effectiveChords : undefined
     });
     setAppliedKey(true);
     setTimeout(() => setAppliedKey(false), 2500);
   };
 
   const handleApplyAll = () => {
-    if (!analysisResult && !tempoAnalysis && !keyAnalysis && !meterAnalysis) return;
+    if (!analysisResult && !tempoAnalysis && !keyAnalysis && !meterAnalysis && !savedAudioAnalysis) return;
 
-    const chordsList = keyAnalysis?.chords || (analysisResult?.chords ? analysisResult.chords.map(c => ({
-      startTime: c.seconds ?? 0,
-      endTime: (c.seconds ?? 0) + 4,
-      chord: c.chord,
-      confidence: 0.85
-    })) : undefined);
-
-    const effectiveSections =
-      structureAnalysis?.sections && structureAnalysis.sections.length > 0
-        ? structureAnalysis.sections
-        : analysisResult?.sections;
+    const resolvedTempo: number = tempoAnalysis?.bpm || analysisResult?.tempo || savedAudioAnalysis?.tempo || 120;
+    const resolvedKey: string = getEffectiveKey();
+    const resolvedTimeSignature: string = meterAnalysis?.meter || analysisResult?.timeSignature || savedAudioAnalysis?.timeSignature || '4/4';
 
     const completeAudioAnalysis: SavedAudioAnalysis = {
       analyzedAt: new Date().toISOString(),
-      source: analysisResult?.source || (keyAnalysis ? 'essentia_wasm' : 'client_dsp'),
-      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
-      tempoConfidence: tempoAnalysis ? 0.95 : analysisResult?.tempoConfidence,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
-      rawTempo: tempoAnalysis?.tempo ?? analysisResult?.rawTempo,
-      key: getEffectiveKey(),
-      scale: keyAnalysis?.scale === 'minor' ? 'Menor' : keyAnalysis?.scale === 'major' ? 'Mayor' : analysisResult?.scale,
-      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
-      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
-      detuningCents: keyAnalysis?.detuningCents ?? analysisResult?.detuningCents,
-      referenceA4Hz: keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz,
-      durationSeconds: duration || analysisResult?.durationSeconds,
+      source: analysisResult?.source || (keyAnalysis ? 'essentia_wasm' : savedAudioAnalysis?.source || 'client_dsp'),
+      tempo: resolvedTempo,
+      tempoConfidence: tempoAnalysis ? 0.95 : analysisResult?.tempoConfidence ?? savedAudioAnalysis?.tempoConfidence,
+      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset ?? savedAudioAnalysis?.tempoOffset,
+      rawTempo: tempoAnalysis?.tempo ?? analysisResult?.rawTempo ?? savedAudioAnalysis?.rawTempo,
+      key: resolvedKey,
+      scale: keyAnalysis?.scale === 'minor' ? 'Menor' : keyAnalysis?.scale === 'major' ? 'Mayor' : (analysisResult?.scale || savedAudioAnalysis?.scale),
+      timeSignature: resolvedTimeSignature,
+      tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning || 'Estándar (EADGBE)',
+      detuningCents: keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents,
+      referenceA4Hz: keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? savedAudioAnalysis?.referenceA4Hz,
+      durationSeconds: duration || analysisResult?.durationSeconds || savedAudioAnalysis?.durationSeconds,
       chordProgression: getChordProgressionSummary(),
-      chords: chordsList,
-      sections: effectiveSections,
-      musicalNotes: analysisResult?.musicalNotes || (keyAnalysis ? `Tonalidad ${getEffectiveKey()} analizada con Essentia WASM.` : undefined)
+      chords: effectiveChords.length > 0 ? effectiveChords : undefined,
+      sections: effectiveSections.length > 0 ? effectiveSections : undefined,
+      musicalNotes: analysisResult?.musicalNotes || savedAudioAnalysis?.musicalNotes || (keyAnalysis ? `Tonalidad ${resolvedKey} analizada con Essentia WASM.` : undefined)
     };
 
     onApplyDetection({
-      tempo: tempoAnalysis?.bpm || analysisResult?.tempo || 120,
-      key: getEffectiveKey(),
-      timeSignature: meterAnalysis?.meter || analysisResult?.timeSignature || '4/4',
-      tuning: analysisResult?.tuning || 'Estándar (EADGBE)',
+      tempo: resolvedTempo,
+      key: resolvedKey,
+      timeSignature: resolvedTimeSignature,
+      tuning: completeAudioAnalysis.tuning,
       audioUrl: audioUrl || undefined,
-      chordProgression: getChordProgressionSummary(),
+      chordProgression: completeAudioAnalysis.chordProgression,
       suggestedLyricsChords: analysisResult?.suggestedLyricsChords,
-      tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset,
-      chords: chordsList,
+      tempoOffset: completeAudioAnalysis.tempoOffset,
+      chords: effectiveChords.length > 0 ? effectiveChords : undefined,
       audioAnalysis: completeAudioAnalysis
     });
 
@@ -717,136 +770,110 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     }
   };
 
+  // Derived display values for the unified Summary Card
+  const displayTempo = tempoAnalysis?.bpm ?? analysisResult?.tempo ?? savedAudioAnalysis?.tempo ?? null;
+  const displayOffset = tempoAnalysis?.offset ?? analysisResult?.tempoOffset ?? savedAudioAnalysis?.tempoOffset;
+  const displayMeter = meterAnalysis?.meter ?? (analysisResult?.timeSignature as TimeSignature | undefined) ?? (savedAudioAnalysis?.timeSignature as TimeSignature | undefined) ?? null;
+  const displayKey = (keyAnalysis || analysisResult?.key || savedAudioAnalysis?.key) ? getEffectiveKey() : null;
+  const displayScale = keyAnalysis
+    ? (keyAnalysis.scale === 'minor' ? 'Menor Natural' : 'Mayor Natural')
+    : (analysisResult?.scale || savedAudioAnalysis?.scale || null);
+  const progressionSummary = getChordProgressionSummary();
+
+  const isAnyLocalAnalyzing = isCalculatingTempo || isAnalyzingBeats || isAnalyzingKey || isAnalyzingStructure;
+  const hasAnyAnalysisData = Boolean(
+    tempoAnalysis ||
+    meterAnalysis ||
+    keyAnalysis ||
+    analysisResult ||
+    (!file && savedAudioAnalysis)
+  );
+
+  const formatClock = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const activeChordNow = effectiveChords.find(c => currentTime >= c.startTime && currentTime < c.endTime);
+
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-4 text-xs transition-colors duration-200">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
-            <Wand2 className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-serif font-bold text-sm text-[var(--text-primary)]">
-                Detector Automático de Audio (MP3 / WAV)
-              </h4>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" />
-                <span>DSP Local & Beat Worker</span>
-              </span>
-            </div>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Sube tu maqueta grabada para calcular tempo, BPMs, tonalidad, compás y progresión de acordes
-            </p>
-          </div>
+    <div className="space-y-4 text-xs transition-colors duration-200">
+      {/* Compact Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
+        <div className="min-w-0">
+          <h4 className="font-serif font-bold text-sm sm:text-base text-[var(--text-primary)]">
+            Análisis musical del audio
+          </h4>
+          <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
+            Tempo, compás, tonalidad y progresión armónica en un solo panel
+          </p>
         </div>
 
-        <div className="flex items-center gap-3 text-[11px] text-[var(--text-muted)] font-mono">
-          <button
-            type="button"
-            onClick={() => setIsTunerOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] font-semibold transition-colors cursor-pointer whitespace-nowrap"
-          >
-            Afinador
-          </button>
-          <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Cero secretos expuestos</span>
-          </span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsTunerOpen(true)}
+          className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+        >
+          Afinador
+        </button>
       </div>
 
-      {/* Error message */}
-      {error && (
-        <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-300 flex items-center gap-2 text-xs">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-          <span>{error}</span>
+      {/* Unified Error States */}
+      {(error || tempoError || keyError) && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-700 dark:text-red-300 space-y-1.5 text-xs">
+          {error && (
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+              <span className="flex-1">{error}</span>
+            </div>
+          )}
+          {tempoError && !isCalculatingTempo && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>Ritmo: {tempoError}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCalculateTempo()}
+                className="underline font-semibold cursor-pointer shrink-0"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+          {keyError && !isAnalyzingKey && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>Tonalidad: {keyError}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (decodedAudioBuffer) void analyzeKey(decodedAudioBuffer);
+                  else if (file) void handleCalculateTempo(file);
+                }}
+                className="underline font-semibold cursor-pointer shrink-0"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Saved Audio Analysis Card (when song already has audio analysis saved) */}
-      {savedAudioAnalysis && !file && (
-        <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-2.5 animate-fadeIn">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center justify-center shrink-0 shadow-2xs">
-                <Music className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-                    Análisis de Audio Guardado en la Canción
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 font-semibold">
-                    {savedAudioAnalysis.chords?.length || 0} acordes detectados
-                  </span>
-                  {savedAudioAnalysis.analyzedAt && (
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                      ({new Date(savedAudioAnalysis.analyzedAt).toLocaleDateString('es-ES')})
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                  Tono: <strong className="text-[var(--accent-primary)] font-mono">{savedAudioAnalysis.key}</strong>
-                  {savedAudioAnalysis.scale && ` (${savedAudioAnalysis.scale})`} · Tempo: <strong className="font-mono">{savedAudioAnalysis.tempo} BPM</strong> · Compás: <strong className="font-mono">{savedAudioAnalysis.timeSignature || '4/4'}</strong>
-                  {savedAudioAnalysis.chordProgression && (
-                    <span className="hidden sm:inline font-mono text-[var(--text-muted)]"> · {savedAudioAnalysis.chordProgression}</span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => handleExportChordsMIDI(savedAudioAnalysis.chords, savedAudioAnalysis.sections)}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Exportar los acordes detectados en un archivo MIDI (.mid)"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>MIDI</span>
-                </button>
-              )}
-
-              {onInsertChordsIntoLyrics && savedAudioAnalysis.chords && savedAudioAnalysis.chords.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onInsertChordsIntoLyrics(savedAudioAnalysis.chords!, savedAudioAnalysis.sections)}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Insertar automáticamente los acordes detectados en las sílabas y secciones de la letra"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Insertar acordes en sílabas</span>
-                </button>
-              )}
-
-              {canUndoInsertChords && onUndoInsertChords && (
-                <button
-                  type="button"
-                  onClick={onUndoInsertChords}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Deshacer el cambio de letra y restaurar la versión anterior"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  <span>Deshacer</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Drop zone & file selector */}
+      {/* Unified Audio Source / Dropzone */}
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        className={`p-4 sm:p-6 rounded-xl border-2 border-dashed transition-all text-center flex flex-col items-center justify-center gap-2 cursor-pointer ${
-          file
-            ? 'bg-[var(--accent-subtle)]/40 border-[var(--accent-border)]'
-            : 'bg-[var(--bg-modal)]/60 border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--bg-surface)]'
+        onClick={() => !file && !driveFileId && fileInputRef.current?.click()}
+        className={`p-3.5 sm:p-4 rounded-xl border transition-colors ${
+          file || driveFileId
+            ? 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)]'
+            : 'border-2 border-dashed bg-[var(--bg-modal)]/60 border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--bg-surface)] cursor-pointer text-center flex flex-col items-center justify-center gap-2 py-6'
         }`}
-        onClick={() => !file && fileInputRef.current?.click()}
       >
         <input
           type="file"
@@ -861,24 +888,32 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         />
 
         {file ? (
-          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-3 text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] flex items-center justify-center shrink-0 shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
                 <FileAudio className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
+                <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
                   {file.name}
                 </p>
-                <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] font-mono">
+                <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] font-mono tabular-nums">
                   <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
-                  <span>·</span>
-                  <span className="uppercase text-[var(--accent-primary)] font-semibold">{file.name.split('.').pop()}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="uppercase text-[var(--accent-primary)] font-semibold">
+                    {file.name.split('.').pop()}
+                  </span>
+                  {duration > 0 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{formatClock(duration)}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {audioUrl && (
                 <button
                   type="button"
@@ -886,7 +921,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     e.stopPropagation();
                     togglePlayback();
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-border)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-border)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium whitespace-nowrap"
                 >
                   {isPlaying ? <Pause className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> : <Play className="w-3.5 h-3.5" />}
                   <span>{isPlaying ? 'Pausar' : 'Escuchar'}</span>
@@ -897,64 +932,62 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setFile(null);
-                  setAudioUrl('');
-                  setAnalysisResult(null);
-                  setStructureAnalysis(null);
-                  resetKeyAnalysis();
-                  if (audioRef.current) audioRef.current.pause();
+                  handleRunAnalysis();
                 }}
-                className="px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                title="Quitar archivo"
+                disabled={isAnalyzing}
+                className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
               >
-                Cambiar
+                {isAnalyzing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
+                    <span>Analizando…</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo'}</span>
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleRunAnalysis();
+                  setFile(null);
+                  setAudioUrl('');
+                  setAnalysisResult(null);
+                  setTempoAnalysis(null);
+                  setBeatAnalysis(null);
+                  setMeterAnalysis(null);
+                  setStructureAnalysis(null);
+                  resetKeyAnalysis();
+                  if (audioRef.current) audioRef.current.pause();
                 }}
-                disabled={isAnalyzing}
-                className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="min-h-[40px] sm:min-h-[34px] px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer font-medium whitespace-nowrap"
+                title="Quitar archivo"
               >
-                {isAnalyzing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                    <span>Analizando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{analysisResult ? 'Reanalizar Audio' : 'Analizar Audio (DSP Local)'}</span>
-                  </>
-                )}
+                Cambiar
               </button>
             </div>
           </div>
         ) : driveFileId ? (
-          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-3 text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0 shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25 flex items-center justify-center shrink-0">
                 <FileAudio className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
-                    {driveFileName || 'Maqueta guardada en Google Drive'}
-                  </p>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold shrink-0">
-                    Google Drive (Privada)
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                  Maqueta almacenada de forma privada. Puedes reanalizarla directamente sin volver a subirla.
+                <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)] truncate">
+                  {driveFileName || 'Maqueta guardada en Google Drive'}
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Google Drive privado · Lista para reanalizar sin volver a subirla
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {onReanalyzeDriveAudio && (
                 <button
                   type="button"
@@ -963,17 +996,17 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     void onReanalyzeDriveAudio();
                   }}
                   disabled={isDriveLoading}
-                  className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {isDriveLoading ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                      <span>Cargando de Drive...</span>
+                      <span>Cargando…</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Reanalizar maqueta de Drive</span>
+                      <span>Reanalizar de Drive</span>
                     </>
                   )}
                 </button>
@@ -985,7 +1018,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   e.stopPropagation();
                   fileInputRef.current?.click();
                 }}
-                className="px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer whitespace-nowrap"
               >
                 Subir otra
               </button>
@@ -993,22 +1026,22 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           </div>
         ) : (
           <>
-            <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)]">
-              <Upload className="w-5 h-5 text-[var(--accent-primary)]" />
+            <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
+              <Upload className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-semibold text-xs text-[var(--text-primary)]">
-                Arrastra o haz clic para subir tu maqueta en <span className="text-[var(--accent-primary)] font-mono">.mp3</span> o <span className="text-[var(--accent-primary)] font-mono">.wav</span>
+              <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)]">
+                Arrastra o pulsa para subir tu maqueta (.mp3 o .wav)
               </p>
               <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                Se almacenará de forma privada en tu Google Drive y se analizará automáticamente
+                Se analiza automáticamente al seleccionarla
               </p>
             </div>
           </>
         )}
       </div>
 
-      {/* Hidden audio element for playback preview and timing synchronization */}
+      {/* Hidden audio element for playback preview */}
       {isValidPlayableAudioUrl(audioUrl) && (
         <audio
           ref={audioRef}
@@ -1024,13 +1057,320 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         />
       )}
 
-      {/* Visualización interactiva de Beat Timeline (Waveform, Onsets, Beat Grid, Estructura SSM y Acordes en Canvas) */}
+      {/* Single Unified Progress Banner */}
+      {(isAnalyzing || isAnyLocalAnalyzing) && (
+        <div className="px-3.5 py-2.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)]">
+          <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+          <span className="truncate font-medium">
+            {isAnalyzing
+              ? (progressMessage || 'Procesando armonía, estructura y ritmo…')
+              : isCalculatingTempo
+              ? 'Calculando tempo y primer pulso…'
+              : isAnalyzingKey
+              ? 'Detectando tonalidad y progresión de acordes…'
+              : 'Mapeando estructura y compases…'}
+          </span>
+        </div>
+      )}
+
+      {/* =====================================================================
+          1. UNIFIED SUMMARY CARD (4 KPI Grid + Primary Actions)
+         ===================================================================== */}
+      {hasAnyAnalysisData && (
+        <div className="rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] overflow-visible">
+          {/* Summary Header & Primary CTAs */}
+          <div className="p-3.5 sm:p-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h5 className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                  Resumen musical
+                </h5>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  {!file && savedAudioAnalysis
+                    ? `Guardado en la canción${savedAudioAnalysis.analyzedAt ? ` · ${new Date(savedAudioAnalysis.analyzedAt).toLocaleDateString('es-ES')}` : ''}`
+                    : analysisResult?.source === 'gemini_ai'
+                    ? 'Análisis completo IA'
+                    : 'Detección automática'}
+                </span>
+              </div>
+              {progressionSummary && (
+                <p className="text-[11px] font-mono text-[var(--text-secondary)] truncate mt-0.5">
+                  Progresión: <strong className="text-[var(--text-primary)]">{progressionSummary}</strong>
+                </p>
+              )}
+            </div>
+
+            {/* Primary Action Cluster */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {effectiveChords.length > 0 && (
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowExportMenu(prev => !prev)}
+                    className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Exportar</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                  </button>
+
+                  {showExportMenu && (
+                    <div className="absolute right-0 mt-1.5 w-40 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1 z-30">
+                      <button
+                        type="button"
+                        onClick={() => handleExportChordsMIDI()}
+                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Archivo MIDI</span>
+                        <span className="font-mono text-[10px] text-emerald-500">.mid</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportChordsCSV}
+                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Tabla CSV</span>
+                        <span className="font-mono text-[10px] text-[var(--text-muted)]">.csv</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportChordsJSON}
+                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Datos JSON</span>
+                        <span className="font-mono text-[10px] text-[var(--text-muted)]">.json</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {onInsertChordsIntoLyrics && effectiveChords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onInsertChordsIntoLyrics(effectiveChords, effectiveSections)}
+                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                  title="Insertar los acordes detectados en las sílabas de la letra"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Insertar acordes ({effectiveChords.length})</span>
+                </button>
+              )}
+
+              {canUndoInsertChords && onUndoInsertChords && (
+                <button
+                  type="button"
+                  onClick={onUndoInsertChords}
+                  className="min-h-[40px] sm:min-h-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/35 flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                  title="Deshacer inserción de acordes"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Deshacer</span>
+                </button>
+              )}
+
+              {(analysisResult || tempoAnalysis || keyAnalysis || meterAnalysis) && (
+                <button
+                  type="button"
+                  onClick={handleApplyAll}
+                  className={`min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    applied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)]'
+                  }`}
+                >
+                  {applied ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>¡Aplicado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Aplicar a la canción</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 4-Metric Hairline Grid (2x2 Mobile, 4-col Desktop) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-[var(--border-subtle)]">
+            {/* KPI 1: Tempo */}
+            <div className="p-3.5 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  <span>Tempo</span>
+                </span>
+                {displayTempo !== null && (
+                  <button
+                    type="button"
+                    onClick={handleApplyOnlyTempo}
+                    className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
+                      appliedTempo ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                    }`}
+                  >
+                    {appliedTempo ? '¡Usado!' : 'Usar'}
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                    {displayTempo ?? '—'}
+                  </span>
+                  <span className="text-xs font-mono text-[var(--text-muted)]">BPM</span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5 truncate">
+                  {typeof displayOffset === 'number'
+                    ? `1.er golpe: ${displayOffset.toFixed(2)}s`
+                    : isCalculatingTempo
+                    ? 'Calculando…'
+                    : 'Sin offset'}
+                </p>
+              </div>
+            </div>
+
+            {/* KPI 2: Key & Scale */}
+            <div className="p-3.5 flex flex-col justify-between gap-2 border-l border-[var(--border-subtle)] lg:border-l-0">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  <span>Tonalidad</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleAccidentalPreference}
+                    className="px-1.5 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[10px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap"
+                    title="Alternar entre sostenidos (♯) y bemoles (♭)"
+                  >
+                    {accidentalPreference === 'flats' ? '♭' : '♯'}
+                  </button>
+                  {displayKey && (
+                    <button
+                      type="button"
+                      onClick={handleApplyOnlyKey}
+                      className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
+                        appliedKey ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                      }`}
+                    >
+                      {appliedKey ? '¡Usado!' : 'Usar'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-xl sm:text-2xl font-bold font-mono text-[var(--accent-primary)]">
+                    {displayKey ?? '—'}
+                  </span>
+                  {displayScale && (
+                    <span className="text-[11px] font-medium text-[var(--text-secondary)] truncate">
+                      {displayScale}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5">
+                  {keyAnalysis
+                    ? `${Math.round(keyAnalysis.confidence * 100)}% confianza`
+                    : isAnalyzingKey
+                    ? 'Analizando…'
+                    : 'Escala armónica'}
+                </p>
+              </div>
+            </div>
+
+            {/* KPI 3: Meter */}
+            <div className="p-3.5 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  <span>Compás</span>
+                </span>
+                {displayMeter && (
+                  <button
+                    type="button"
+                    onClick={handleApplyOnlyMeter}
+                    className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
+                      appliedMeter ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                    }`}
+                  >
+                    {appliedMeter ? '¡Usado!' : 'Usar'}
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                    {displayMeter ?? '—'}
+                  </span>
+                  {displayMeter && (
+                    <span className="text-[11px] text-[var(--text-secondary)] truncate">
+                      {getMeterDescription(displayMeter)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5">
+                  {meterAnalysis
+                    ? (meterAnalysis.confidence === 1.0
+                        ? `Manual · ${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases`
+                        : `${Math.round(meterAnalysis.confidence * 100)}% conf. · ${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases`)
+                    : isAnalyzingBeats
+                    ? 'Estimando…'
+                    : 'Métrica base'}
+                </p>
+              </div>
+            </div>
+
+            {/* KPI 4: Chords & Structure */}
+            <div className="p-3.5 flex flex-col justify-between gap-2 border-l border-[var(--border-subtle)] lg:border-l-0">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Armonía</span>
+                </span>
+                {activeChordNow && (
+                  <span className="text-[11px] font-mono font-bold text-purple-600 dark:text-purple-300">
+                    {respellChord(activeChordNow.chord, accidentalPreference)}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                    {effectiveChords.length}
+                  </span>
+                  <span className="text-xs text-[var(--text-muted)]">acordes</span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5">
+                  {effectiveSections.length > 0
+                    ? `${effectiveSections.length} secciones detectadas`
+                    : isAnalyzingStructure
+                    ? 'Detectando secciones…'
+                    : 'Segmentos armónicos'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          2. INTERACTIVE BEAT TIMELINE (Waveform, Chords, Practice Tools)
+         ===================================================================== */}
       {file && (
         <BeatTimeline
           audioBuffer={decodedAudioBuffer}
           beatAnalysis={beatAnalysis}
           chords={keyAnalysis?.chords}
-          sections={structureAnalysis?.sections ?? analysisResult?.sections ?? savedAudioAnalysis?.sections ?? null}
+          sections={effectiveSections.length > 0 ? effectiveSections : null}
           currentTime={currentTime}
           duration={duration || (decodedAudioBuffer?.duration ?? 0)}
           isPlaying={isPlaying}
@@ -1062,937 +1402,449 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
         />
       )}
 
-      {/* Sección / Tarjeta "Tempo" con BPM, offset del primer beat, estado de carga, error y recalcular */}
-      {file && (
-        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
-                <Gauge className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-                  Sección Tempo & Primer Beat
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
-                  web-audio-beat-detector
-                </span>
-              </div>
-            </div>
+      {/* =====================================================================
+          3. UNIFIED TABBED DETAILS (Chords & Structure | Rhythm & Meter | Advanced)
+         ===================================================================== */}
+      {(file || hasAnyAnalysisData) && (
+        <div className="rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] overflow-hidden">
+          {/* Segmented Tab Header */}
+          <div
+            role="tablist"
+            aria-label="Detalles del análisis de audio"
+            className="grid grid-cols-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] p-1 gap-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'chords'}
+              onClick={() => setActiveTab('chords')}
+              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'chords'
+                  ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+              <span className="truncate">Acordes y Secciones</span>
+            </button>
 
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setShowTempoSettings(!showTempoSettings)}
-                className={`p-1.5 rounded-lg border transition-colors cursor-pointer text-xs flex items-center gap-1 ${
-                  showTempoSettings
-                    ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--accent-border)]'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] border-[var(--border-subtle)] hover:bg-[var(--bg-surface-subtle)]'
-                }`}
-                title="Configurar rango de búsqueda de BPM"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span className="text-[11px] font-mono">{minTempo}-{maxTempo}</span>
-              </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'rhythm'}
+              onClick={() => setActiveTab('rhythm')}
+              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'rhythm'
+                  ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">Ritmo y Compás</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleCalculateTempo()}
-                disabled={isCalculatingTempo}
-                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
-                title="Recalcular BPM y offset del primer beat con Web Audio"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${isCalculatingTempo ? 'animate-spin' : ''}`} />
-                <span>{isCalculatingTempo ? 'Calculando...' : 'Recalcular'}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'advanced'}
+              onClick={() => setActiveTab('advanced')}
+              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'advanced'
+                  ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
+              <span className="truncate">Avanzado</span>
+            </button>
           </div>
 
-          {/* Configuración de Rango (minTempo y maxTempo) */}
-          {showTempoSettings && (
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex flex-wrap items-center gap-3 text-xs">
-              <span className="font-medium text-[var(--text-secondary)]">Rango esperado:</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[var(--text-muted)] font-mono text-[11px]">Mín:</span>
-                <input
-                  type="number"
-                  min={40}
-                  max={200}
-                  value={minTempo}
-                  onChange={(e) => setMinTempo(Math.max(30, Number(e.target.value) || 60))}
-                  className="w-16 px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-center text-xs"
-                />
-                <span className="text-[var(--text-muted)] font-mono text-[11px]">BPM</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[var(--text-muted)] font-mono text-[11px]">Máx:</span>
-                <input
-                  type="number"
-                  min={80}
-                  max={300}
-                  value={maxTempo}
-                  onChange={(e) => setMaxTempo(Math.max(minTempo + 10, Number(e.target.value) || 180))}
-                  className="w-16 px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-center text-xs"
-                />
-                <span className="text-[var(--text-muted)] font-mono text-[11px]">BPM</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCalculateTempo(file, minTempo, maxTempo)}
-                disabled={isCalculatingTempo}
-                className="ml-auto px-2.5 py-1 rounded bg-[var(--accent-primary)] text-[var(--accent-text)] text-[11px] font-semibold hover:bg-[var(--accent-hover)] transition-colors cursor-pointer"
-              >
-                Aplicar y recalcular
-              </button>
-            </div>
-          )}
-
-          {/* Estado de carga */}
-          {isCalculatingTempo && (
-            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
-              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
-              <span>Detectando pulsos rítmicos y calculando offset del primer beat en segundo plano...</span>
-            </div>
-          )}
-
-          {/* Estado de error */}
-          {tempoError && !isCalculatingTempo && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold">Error al estimar tempo</p>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{tempoError}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCalculateTempo()}
-                className="text-[11px] underline hover:no-underline font-medium shrink-0 cursor-pointer"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {/* Valores: BPM y Offset */}
-          {tempoAnalysis && !isCalculatingTempo && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
-              <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                    <Gauge className="w-3 h-3 text-[var(--accent-primary)]" />
-                    <span>Tempo Detectado</span>
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-0.5">
-                    <span className="text-2xl font-bold font-mono text-[var(--text-primary)]">
-                      {tempoAnalysis.bpm}
-                    </span>
-                    <span className="text-xs font-mono text-[var(--text-muted)]">BPM</span>
-                    {tempoAnalysis.tempo && Math.abs(tempoAnalysis.tempo - tempoAnalysis.bpm) > 0.05 && (
-                      <span className="text-[10px] font-mono text-[var(--text-muted)] opacity-75" title="Tempo continuo exacto">
-                        ({tempoAnalysis.tempo})
+          {/* Tab Panels */}
+          <div className="p-3.5 sm:p-4 space-y-4">
+            {/* TAB 1: CHORDS & STRUCTURE */}
+            {activeTab === 'chords' && (
+              <div className="space-y-4">
+                {/* Musical Sections */}
+                {effectiveSections.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Estructura de la canción
                       </span>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleApplyOnlyTempo}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
-                    appliedTempo
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
-                  }`}
-                  title="Usar este BPM en el formulario"
-                >
-                  {appliedTempo ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>¡Aplicado!</span>
-                    </>
-                  ) : (
-                    <span>Usar BPM</span>
-                  )}
-                </button>
-              </div>
-
-              <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-0.5">
-                <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
-                  <span>Offset del Primer Beat</span>
-                </span>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
-                    {tempoAnalysis.offset.toFixed(3)}
-                  </span>
-                  <span className="text-xs font-mono text-[var(--text-muted)]">s</span>
-                  <span className="text-[11px] font-mono text-[var(--text-muted)] opacity-80">
-                    ({Math.round(tempoAnalysis.offset * 1000)} ms)
-                  </span>
-                </div>
-                <p className="text-[10px] text-[var(--text-muted)]">
-                  Desfase temporal exacto hasta el primer golpe rítmico
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sección / Tarjeta "Compás & Métrica" con estimación de Downbeats y Heurística */}
-      {file && (
-        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
-                <Clock className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-                  Sección Compás & Métrica
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
-                  <Activity className="w-2.5 h-2.5" />
-                  <span>Heurística de Downbeats & Beat Grid</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              {/* Selector de corrección manual de compás */}
-              <div className="flex items-center gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono shadow-2xs flex-wrap">
-                <span className="px-2 text-[10px] text-[var(--text-muted)] font-semibold hidden sm:inline">Ajuste:</span>
-                {COMMON_TIME_SIGNATURES_LIST.map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => handleManualMeterChange(m)}
-                    className={`px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                      meterAnalysis?.meter === m
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]'
-                    }`}
-                    title={`Corregir manualmente a compás ${m}`}
-                  >
-                    {m}
-                  </button>
-                ))}
-                <select
-                  aria-label="Seleccionar compás irregular o compuesto"
-                  value={
-                    meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
-                      ? meterAnalysis.meter
-                      : ''
-                  }
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleManualMeterChange(e.target.value as TimeSignature);
-                    }
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors focus:outline-none ${
-                    meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                  title="Compases irregulares o compuestos (5/4, 7/4, 5/8, 7/8, 9/8, 12/8)"
-                >
-                  <option value="" disabled className="bg-[var(--bg-modal)] text-[var(--text-muted)]">
-                    Irregular…
-                  </option>
-                  {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
-                    <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Estado de carga */}
-          {isAnalyzingBeats && (
-            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
-              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
-              <span>Estimando compás musical y alineando downbeats sobre la rejilla de pulsos...</span>
-            </div>
-          )}
-
-          {/* Valores: Compás, Confianza y Downbeats */}
-          {meterAnalysis && !isAnalyzingBeats && (
-            <div className="space-y-3 pt-0.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
-                      <span>Compás Estimado</span>
-                    </span>
-                    <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
-                      <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
-                        {meterAnalysis.meter}
-                      </span>
-                      <span className="text-xs font-semibold text-[var(--text-primary)]">
-                        {getMeterDescription(meterAnalysis.meter)}
-                      </span>
-                      {meterAnalysis.grouping && !['2', '3', '4'].includes(meterAnalysis.grouping) && (
-                        <span
-                          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 font-semibold"
-                          title="Subdivisión acentual detectada dentro del compás"
-                        >
-                          {meterAnalysis.grouping}
-                        </span>
-                      )}
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
-                        {meterAnalysis.confidence === 1.0 ? 'Ajuste manual' : `${Math.round(meterAnalysis.confidence * 100)}% conf.`}
+                      <span className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums">
+                        {effectiveSections.length} partes · Pulsa para saltar
                       </span>
                     </div>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={handleApplyOnlyMeter}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border shrink-0 ${
-                      appliedMeter
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
-                    }`}
-                    title="Usar este compás en el formulario de la canción"
-                  >
-                    {appliedMeter ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>¡Aplicado!</span>
-                      </>
-                    ) : (
-                      <span>Usar Compás</span>
-                    )}
-                  </button>
-                </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {effectiveSections.map((sec) => {
+                        const isActive = currentTime >= sec.startTime && currentTime < sec.endTime;
+                        const badgeTone =
+                          sec.type === 'Intro'
+                            ? 'border-indigo-400/50 text-indigo-600 dark:text-indigo-300'
+                            : sec.type === 'Estribillo'
+                            ? 'border-amber-400/60 text-amber-600 dark:text-amber-300'
+                            : sec.type === 'Puente'
+                            ? 'border-pink-400/60 text-pink-600 dark:text-pink-300'
+                            : sec.type === 'Instrumental' || sec.type === 'Outro'
+                            ? 'border-slate-400/60 text-slate-600 dark:text-slate-300'
+                            : 'border-teal-400/50 text-teal-600 dark:text-teal-300';
 
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                    <Activity className="w-3 h-3 text-emerald-500" />
-                    <span>Downbeats & Rejilla de Compases</span>
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
-                    <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                      {meterAnalysis.barCount || meterAnalysis.downbeats.length}
-                    </span>
-                    <span className="text-xs font-medium text-[var(--text-muted)]">compases calculados</span>
-                    {meterAnalysis.gridMode === 'subdivision2x' && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
-                        Subdivisión corcheas
-                      </span>
-                    )}
-                    {meterAnalysis.gridMode === 'subdivision3x' && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
-                        Subdivisión ternaria
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    Cada compás comienza en un downbeat acentuado resaltado en verde en la línea de tiempo
-                  </p>
-                </div>
-              </div>
-
-              {/* Nota sobre limitaciones esperadas */}
-              <div className="p-2.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-muted)] leading-relaxed">
-                💡 <strong>Nota técnica de estimación:</strong> El compás se infiere evaluando autocorrelación periódica (incluyendo métricas asimétricas y de amalgama: 2/4, 3/4, 4/4, 5/4, 7/4, 5/8, 6/8, 7/8, 9/8, 12/8), subdivisión de corcheas, picos de energía acústica en bajos/ataques y sincronía con cambios de acordes. <em>En interpretaciones con rubato, cambios constantes de métrica o directos sin metrónomo, utiliza los controles de ajuste superior para fijar el compás deseado.</em>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sección / Tarjeta "Tonalidad & Escala" con Essentia.js WASM */}
-      {file && (
-        <div className="p-4 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] space-y-3 shadow-xs transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-[var(--accent-subtle)] text-[var(--accent-primary)] flex items-center justify-center shrink-0">
-                <KeyRound className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-                  Sección Tonalidad & Escala
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold flex items-center gap-1">
-                  <Cpu className="w-2.5 h-2.5" />
-                  <span>essentia.js WASM Worker</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <button
-                type="button"
-                onClick={handleToggleAccidentalPreference}
-                className="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--accent-primary)] transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                title={`Preferencia enarmónica activa: ${accidentalPreference === 'flats' ? 'Bemoles (♭)' : 'Sostenidos (♯)'}. Pulsa para alternar.`}
-              >
-                <span>{accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (decodedAudioBuffer) {
-                    void analyzeKey(decodedAudioBuffer, beatAnalysis?.beats);
-                  } else if (file) {
-                    void handleCalculateTempo(file);
-                  }
-                }}
-                disabled={isAnalyzingKey}
-                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-[var(--text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
-                title="Recalcular tonalidad con Essentia WebAssembly"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${isAnalyzingKey ? 'animate-spin' : ''}`} />
-                <span>{isAnalyzingKey ? 'Analizando...' : 'Recalcular'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Estado de carga */}
-          {isAnalyzingKey && (
-            <div className="p-3 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-2.5 text-xs text-[var(--accent-primary)] animate-pulse">
-              <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
-              <span>Calculando cromagrama armónico (HPCP) y estimando tonalidad en Web Worker WASM...</span>
-            </div>
-          )}
-
-          {/* Estado de error */}
-          {keyError && !isAnalyzingKey && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold">Error al estimar tonalidad con Essentia</p>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{keyError}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (decodedAudioBuffer) void analyzeKey(decodedAudioBuffer);
-                  else if (file) void handleCalculateTempo(file);
-                }}
-                className="text-[11px] underline hover:no-underline font-medium shrink-0 cursor-pointer"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {/* Resultado de Tonalidad, Escala y Cromagrama */}
-          {keyAnalysis && !isAnalyzingKey && (
-            <div className="space-y-3 pt-0.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                      <KeyRound className="w-3 h-3 text-[var(--accent-primary)]" />
-                      <span>Tonalidad Estimada</span>
-                    </span>
-                    <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-2xl font-bold font-mono text-[var(--accent-primary)]">
-                        {getEffectiveKey()}
-                      </span>
-                      <span className="text-xs font-semibold text-[var(--text-primary)]">
-                        Escala {keyAnalysis.scale === 'minor' ? 'Menor' : 'Mayor'}
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
-                        {Math.round(keyAnalysis.confidence * 100)}% conf.
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleApplyOnlyKey}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border ${
-                      appliedKey
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-[var(--accent-subtle)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-text)] border border-[var(--accent-border)]'
-                    }`}
-                    title="Usar esta tonalidad en el formulario"
-                  >
-                    {appliedKey ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>¡Aplicado!</span>
-                      </>
-                    ) : (
-                      <span>Usar Tono</span>
-                    )}
-                  </button>
-                </div>
-
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                    <Cpu className="w-3 h-3 text-[var(--accent-primary)]" />
-                    <span>Algoritmo MIR & Calibración A4</span>
-                  </span>
-                  <p className="text-xs font-semibold text-[var(--text-primary)] truncate font-mono">
-                    {keyAnalysis.algorithm}
-                  </p>
-                  <p className="text-[10px] font-mono text-[var(--text-muted)]">
-                    {typeof keyAnalysis.referenceA4Hz === 'number'
-                      ? `Calibración A4: ${keyAnalysis.referenceA4Hz.toFixed(1)} Hz (${(keyAnalysis.detuningCents ?? 0) >= 0 ? '+' : ''}${keyAnalysis.detuningCents ?? 0} cents)`
-                      : 'Procesado 100% en el navegador con WebAssembly en hilo secundario'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Cromagrama HPCP (12 Clases de Altura) */}
-              {keyAnalysis.chroma && keyAnalysis.chroma.length === 12 && (
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
-                      <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                      <span>Cromagrama Armónico (HPCP de 12 clases de tono)</span>
-                    </span>
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                      Nota tónica detectada: <strong className="text-[var(--accent-primary)]">{keyAnalysis.key}</strong>
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-12 gap-1 pt-1 items-end h-20 bg-[var(--bg-modal)] p-2 rounded-lg border border-[var(--border-subtle)]">
-                    {(accidentalPreference === 'flats' ? CHROMATIC_NOTES_FLATS : CHROMATIC_NOTES_SHARPS).map((note, idx) => {
-                      const value = keyAnalysis.chroma[idx] ?? 0;
-                      const heightPercent = Math.max(6, Math.round(value * 100));
-                      const rootPitch = respellChord(keyAnalysis.key.replace(/m$/, ''), accidentalPreference);
-                      const isRoot = note === rootPitch;
-
-                      return (
-                        <div key={note} className="flex flex-col items-center justify-end h-full group" title={`${note}: ${(value * 100).toFixed(1)}%`}>
-                          <div className="w-full flex items-end justify-center h-12">
-                            <div
-                              style={{ height: `${heightPercent}%` }}
-                              className={`w-full max-w-[14px] rounded-t transition-all ${
-                                isRoot
-                                  ? 'bg-[var(--accent-primary)] shadow-xs'
-                                  : 'bg-[var(--accent-subtle)] group-hover:bg-[var(--accent-primary)]/60'
-                              }`}
-                            />
-                          </div>
-                          <span
-                            className={`text-[9px] font-mono mt-1 font-semibold ${
-                              isRoot ? 'text-[var(--accent-primary)] scale-110' : 'text-[var(--text-muted)]'
+                        return (
+                          <button
+                            key={sec.id}
+                            type="button"
+                            onClick={() => handleSeek(sec.startTime)}
+                            className={`min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg font-mono text-xs font-semibold transition-colors shrink-0 cursor-pointer flex items-center gap-2 border whitespace-nowrap ${
+                              isActive
+                                ? 'bg-teal-600 text-white border-teal-500'
+                                : `bg-[var(--bg-surface-subtle)] ${badgeTone} hover:bg-[var(--bg-surface)]`
                             }`}
                           >
-                            {note}
-                          </span>
-                        </div>
-                      );
-                    })}
+                            <span className="text-[10px] opacity-75 tabular-nums">
+                              {formatClock(sec.startTime)}
+                            </span>
+                            <span>{sec.label}</span>
+                            {sec.isVocal === false && (
+                              <span className="text-[10px] opacity-75 font-normal">Inst.</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unified Chords Sequence */}
+                {effectiveChords.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-semibold text-xs text-[var(--text-primary)]">
+                        Secuencia de acordes ({effectiveChords.length})
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleToggleAccidentalPreference}
+                          className="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap"
+                        >
+                          {accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                      {effectiveChords.map((chordSeg, idx) => {
+                        const isActive = currentTime >= chordSeg.startTime && currentTime < chordSeg.endTime;
+                        const displayedChord = respellChord(chordSeg.chord, accidentalPreference);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSeek(chordSeg.startTime)}
+                            className={`min-h-[44px] sm:min-h-[38px] px-2 py-1.5 rounded-lg font-mono transition-colors cursor-pointer flex flex-col items-center justify-center border ${
+                              isActive
+                                ? 'bg-purple-600 text-white border-purple-500'
+                                : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-purple-400/60'
+                            }`}
+                            title={`Saltar a ${displayedChord} (${chordSeg.startTime.toFixed(1)}s)`}
+                          >
+                            <strong className="text-xs sm:text-sm leading-tight">{displayedChord}</strong>
+                            <span className="text-[10px] opacity-70 tabular-nums">
+                              {formatClock(chordSeg.startTime)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-[var(--text-muted)]">
+                    {isAnalyzingKey
+                      ? 'Detectando progresión armónica…'
+                      : 'No hay segmentos de acordes detectados todavía.'}
+                  </div>
+                )}
+
+                {/* Musical Notes from AI Analysis (if any) */}
+                {analysisResult?.musicalNotes && (
+                  <div className="pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                    {analysisResult.musicalNotes}
+                  </div>
+                )}
+
+                {/* Optional Collapsible Chromagram */}
+                {keyAnalysis?.chroma && keyAnalysis.chroma.length === 12 && (
+                  <div className="pt-2 border-t border-[var(--border-subtle)]">
+                    <button
+                      type="button"
+                      onClick={() => setShowChromaChart(prev => !prev)}
+                      className="flex items-center justify-between w-full text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer py-1"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        <span>Perfil armónico por nota (12 tonos)</span>
+                      </span>
+                      {showChromaChart ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {showChromaChart && (
+                      <div className="grid grid-cols-12 gap-1 mt-2 items-end h-20 bg-[var(--bg-surface-subtle)] p-2 rounded-lg border border-[var(--border-subtle)]">
+                        {(accidentalPreference === 'flats' ? CHROMATIC_NOTES_FLATS : CHROMATIC_NOTES_SHARPS).map((note, idx) => {
+                          const value = keyAnalysis.chroma[idx] ?? 0;
+                          const heightPercent = Math.max(6, Math.round(value * 100));
+                          const rootPitch = respellChord(keyAnalysis.key.replace(/m$/, ''), accidentalPreference);
+                          const isRoot = note === rootPitch;
+
+                          return (
+                            <div key={note} className="flex flex-col items-center justify-end h-full" title={`${note}: ${(value * 100).toFixed(1)}%`}>
+                              <div className="w-full flex items-end justify-center h-12">
+                                <div
+                                  style={{ height: `${heightPercent}%` }}
+                                  className={`w-full max-w-[14px] rounded-t ${
+                                    isRoot ? 'bg-[var(--accent-primary)]' : 'bg-[var(--accent-primary)]/30'
+                                  }`}
+                                />
+                              </div>
+                              <span
+                                className={`text-[9px] font-mono mt-1 font-semibold ${
+                                  isRoot ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'
+                                }`}
+                              >
+                                {note}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: RHYTHM & METER */}
+            {activeTab === 'rhythm' && (
+              <div className="space-y-4">
+                {/* Manual Meter Adjustment */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h6 className="font-semibold text-xs text-[var(--text-primary)]">
+                        Ajuste manual de compás
+                      </h6>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        Corrige la métrica si la canción tiene rubato o cambios de acento
+                      </p>
+                    </div>
+                    {!beatAnalysis && file && (
+                      <span className="text-[11px] text-[var(--text-muted)]">
+                        Esperando rejilla de pulsos…
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {COMMON_TIME_SIGNATURES_LIST.map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        disabled={!beatAnalysis}
+                        onClick={() => handleManualMeterChange(m)}
+                        className={`min-h-[42px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer transition-colors border disabled:opacity-40 whitespace-nowrap ${
+                          meterAnalysis?.meter === m
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+
+                    <select
+                      aria-label="Seleccionar compás irregular o compuesto"
+                      disabled={!beatAnalysis}
+                      value={
+                        meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
+                          ? meterAnalysis.meter
+                          : ''
+                      }
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleManualMeterChange(e.target.value as TimeSignature);
+                        }
+                      }}
+                      className={`min-h-[42px] sm:min-h-[34px] px-3 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer border disabled:opacity-40 focus:outline-none ${
+                        meterAnalysis && UNCOMMON_TIME_SIGNATURES_LIST.includes(meterAnalysis.meter)
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border-[var(--border-subtle)]'
+                      }`}
+                    >
+                      <option value="" disabled>
+                        Irregular…
+                      </option>
+                      {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
+                        <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
+                          {m}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-              )}
 
-              {/* Progresión Continua de Acordes (Essentia ChordsDetection) */}
-              {keyAnalysis.chords && keyAnalysis.chords.length > 0 && (
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
-                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
-                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
-                      <Music className="w-3.5 h-3.5 text-purple-500" />
-                      <span>Progresión Armónica Continua (ChordsDetection frame a frame)</span>
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                        {keyAnalysis.chords.length} cambios
-                      </span>
-                      <div className="flex items-center gap-1 border-l border-[var(--border-subtle)] pl-2">
+                {/* Tempo Range Search & Beat Stats */}
+                <div className="pt-3 border-t border-[var(--border-subtle)] grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h6 className="font-semibold text-xs text-[var(--text-primary)]">
+                      Rango de búsqueda de BPM
+                    </h6>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                        <span>Mín</span>
+                        <input
+                          type="number"
+                          min={40}
+                          max={200}
+                          value={minTempo}
+                          onChange={(e) => setMinTempo(Math.max(30, Number(e.target.value) || 60))}
+                          className="w-16 min-h-[38px] sm:min-h-[32px] px-2 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] font-mono tabular-nums text-center text-xs"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                        <span>Máx</span>
+                        <input
+                          type="number"
+                          min={80}
+                          max={300}
+                          value={maxTempo}
+                          onChange={(e) => setMaxTempo(Math.max(minTempo + 10, Number(e.target.value) || 180))}
+                          className="w-16 min-h-[38px] sm:min-h-[32px] px-2 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] font-mono tabular-nums text-center text-xs"
+                        />
+                      </label>
+                      {file && (
                         <button
                           type="button"
-                          onClick={handleExportChordsJSON}
-                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
-                          title="Descargar acordes en formato JSON estructurado"
+                          onClick={() => handleCalculateTempo(file, minTempo, maxTempo)}
+                          disabled={isCalculatingTempo}
+                          className="min-h-[38px] sm:min-h-[32px] px-3 py-1 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] text-xs font-semibold cursor-pointer disabled:opacity-50 whitespace-nowrap"
                         >
-                          <Download className="w-2.5 h-2.5" />
-                          <span>JSON</span>
+                          {isCalculatingTempo ? 'Calculando…' : 'Recalcular ritmo'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={handleExportChordsCSV}
-                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
-                          title="Descargar acordes en formato CSV tabular"
-                        >
-                          <Download className="w-2.5 h-2.5" />
-                          <span>CSV</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleExportChordsMIDI()}
-                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-modal)] hover:bg-[var(--accent-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)] transition-colors flex items-center gap-1 cursor-pointer"
-                          title="Descargar progresión armónica como archivo MIDI (.mid)"
-                        >
-                          <Download className="w-2.5 h-2.5 text-emerald-500" />
-                          <span>MIDI</span>
-                        </button>
-                        {onInsertChordsIntoLyrics && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onInsertChordsIntoLyrics(
-                                  keyAnalysis.chords!,
-                                  structureAnalysis?.sections ?? analysisResult?.sections
-                                )
-                              }
-                              className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                              title="Insertar esta progresión de acordes automáticamente en las sílabas y secciones correspondientes de la letra"
-                            >
-                              <Sparkles className="w-2.5 h-2.5" />
-                              <span>Insertar en sílabas</span>
-                            </button>
-                            {canUndoInsertChords && onUndoInsertChords && (
-                              <button
-                                type="button"
-                                onClick={onUndoInsertChords}
-                                className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Deshacer el cambio de letra y restaurar la versión anterior"
-                              >
-                                <Undo2 className="w-2.5 h-2.5 text-amber-500" />
-                                <span>Deshacer</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Beat & Offset Telemetry */}
+                  <div className="space-y-1.5 text-xs">
+                    <h6 className="font-semibold text-xs text-[var(--text-primary)]">
+                      Datos de rejilla rítmica
+                    </h6>
+                    <div className="grid grid-cols-2 gap-2 font-mono tabular-nums text-[11px] bg-[var(--bg-surface-subtle)] p-2.5 rounded-lg border border-[var(--border-subtle)]">
+                      <div>
+                        <span className="text-[var(--text-muted)] block">Offset 1.er beat</span>
+                        <strong className="text-[var(--text-primary)]">
+                          {typeof displayOffset === 'number'
+                            ? `${displayOffset.toFixed(3)}s (${Math.round(displayOffset * 1000)} ms)`
+                            : '—'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[var(--text-muted)] block">Pulsos / Ataques</span>
+                        <strong className="text-[var(--text-primary)]">
+                          {beatAnalysis
+                            ? `${beatAnalysis.beats.length} / ${beatAnalysis.onsets.length}`
+                            : '—'}
+                        </strong>
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                    {keyAnalysis.chords.map((chordSeg, idx) => {
-                      const isActive = currentTime >= chordSeg.startTime && currentTime < chordSeg.endTime;
-                      const displayedChord = respellChord(chordSeg.chord, accidentalPreference);
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleSeek(chordSeg.startTime)}
-                          className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                            isActive
-                              ? 'bg-purple-600 text-white shadow-xs scale-105 ring-1 ring-purple-400'
-                              : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-purple-400/60'
-                          }`}
-                          title={`Saltar a ${displayedChord} en ${chordSeg.startTime.toFixed(1)}s (Confianza: ${Math.round((chordSeg.confidence ?? chordSeg.strength ?? 0.8) * 100)}%)`}
-                        >
-                          <span className="text-[9px] opacity-70">
-                            {Math.floor(chordSeg.startTime / 60)}:{(chordSeg.startTime % 60).toFixed(0).padStart(2, '0')}
-                          </span>
-                          <strong className="text-xs">{displayedChord}</strong>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
-              )}
-
-              {/* Estructura Musical Detectada (Matriz de Autosimilitud SSM) */}
-              {structureAnalysis?.sections && structureAnalysis.sections.length > 0 && (
-                <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-2">
-                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
-                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1">
-                      <Layers className="w-3.5 h-3.5 text-teal-500" />
-                      <span>Estructura Musical Detectada (Matriz de Autosimilitud)</span>
-                    </span>
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                      {structureAnalysis.sections.length} secciones
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                    {structureAnalysis.sections.map((sec) => {
-                      const isActive = currentTime >= sec.startTime && currentTime < sec.endTime;
-                      const badgeTone =
-                        sec.type === 'Intro'
-                          ? 'border-indigo-400/50 text-indigo-600 dark:text-indigo-300'
-                          : sec.type === 'Estribillo'
-                          ? 'border-amber-400/60 text-amber-600 dark:text-amber-300'
-                          : sec.type === 'Puente'
-                          ? 'border-pink-400/60 text-pink-600 dark:text-pink-300'
-                          : sec.type === 'Instrumental' || sec.type === 'Outro'
-                          ? 'border-slate-400/60 text-slate-600 dark:text-slate-300'
-                          : 'border-teal-400/50 text-teal-600 dark:text-teal-300';
-                      const fmt = (s: number) =>
-                        `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
-                      return (
-                        <button
-                          key={sec.id}
-                          type="button"
-                          onClick={() => handleSeek(sec.startTime)}
-                          className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border ${
-                            isActive
-                              ? 'bg-teal-600 text-white border-teal-500 shadow-xs scale-105'
-                              : `bg-[var(--bg-modal)] ${badgeTone} hover:bg-[var(--bg-surface)]`
-                          }`}
-                          title={`${sec.label} (${fmt(sec.startTime)} - ${fmt(sec.endTime)}) · Confianza ${Math.round(sec.confidence * 100)}%`}
-                        >
-                          <span className="text-[9px] opacity-75">
-                            {fmt(sec.startTime)}–{fmt(sec.endTime)}
-                          </span>
-                          <strong>{sec.label}</strong>
-                          {sec.isVocal === false && (
-                            <span className="text-[9px] opacity-80 font-normal">· Inst.</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Analysis in progress status */}
-      {isAnalyzing && (
-        <div className="p-3.5 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center gap-3 text-xs text-[var(--accent-primary)] animate-pulse">
-          <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
-          <span>{progressMessage || 'Procesando armonía y pulso musical...'}</span>
-        </div>
-      )}
-
-      {/* Analysis Results Card */}
-      {analysisResult && (
-        <div className="p-4 sm:p-5 rounded-xl bg-[var(--bg-modal)] border border-[var(--accent-border)] space-y-4 shadow-sm animate-fadeIn">
-          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-            <div className="flex items-center gap-2">
-              <span className="font-serif font-bold text-xs text-[var(--text-primary)]">
-                Resultado de Detección Musical
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-                {analysisResult.source === 'gemini_ai' ? '✨ Modelo IA Gemini 3.8 Flash' : '⚡ Web Audio DSP Local'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {((analysisResult.chords && analysisResult.chords.length > 0) || (keyAnalysis?.chords && keyAnalysis.chords.length > 0)) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
-                      handleExportChordsMIDI(keyAnalysis.chords, structureAnalysis?.sections ?? analysisResult.sections);
-                    } else if (analysisResult.chords && analysisResult.chords.length > 0) {
-                      const mapped: ChordSegment[] = analysisResult.chords.map((c, idx, arr) => {
-                        const start = typeof c.seconds === 'number' ? c.seconds : idx * 3.0;
-                        const nextStart = arr[idx + 1]?.seconds;
-                        const end = typeof nextStart === 'number' ? nextStart : start + 3.0;
-                        return { startTime: start, endTime: end, chord: c.chord, confidence: 0.95 };
-                      });
-                      handleExportChordsMIDI(mapped, analysisResult.sections ?? structureAnalysis?.sections);
-                    }
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-[var(--bg-surface)] hover:bg-[var(--accent-subtle)] text-[var(--text-primary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)]"
-                  title="Exportar secuencia armónica a archivo MIDI (.mid)"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>MIDI</span>
-                </button>
-              )}
-
-              {onInsertChordsIntoLyrics && ((analysisResult.chords && analysisResult.chords.length > 0) || (keyAnalysis?.chords && keyAnalysis.chords.length > 0)) && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const chordsToInsert: ChordSegment[] = [];
-                      if (analysisResult.chords && analysisResult.chords.length > 0) {
-                        analysisResult.chords.forEach((c, idx, arr) => {
-                          const start = typeof c.seconds === 'number' ? c.seconds : idx * 3.0;
-                          const nextStart = arr[idx + 1]?.seconds;
-                          const end = typeof nextStart === 'number' ? nextStart : start + 3.0;
-                          chordsToInsert.push({
-                            startTime: start,
-                            endTime: end,
-                            chord: c.chord,
-                            confidence: 0.95
-                          });
-                        });
-                      } else if (keyAnalysis?.chords && keyAnalysis.chords.length > 0) {
-                        chordsToInsert.push(...keyAnalysis.chords);
-                      }
-                      if (chordsToInsert.length > 0) {
-                        onInsertChordsIntoLyrics(
-                          chordsToInsert,
-                          analysisResult.sections ?? structureAnalysis?.sections
-                        );
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
-                    title="Insertar acordes detectados automáticamente en las sílabas exactas de la letra"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Insertar en sílabas ({analysisResult.chords?.length || keyAnalysis?.chords?.length})</span>
-                  </button>
-                  {canUndoInsertChords && onUndoInsertChords && (
-                    <button
-                      type="button"
-                      onClick={onUndoInsertChords}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-                      title="Deshacer la inserción de acordes en la letra"
-                    >
-                      <Undo2 className="w-3.5 h-3.5" />
-                      <span>Deshacer</span>
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleApplyAll}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
-                  applied
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)]'
-                }`}
-              >
-                {applied ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>¡Aplicado al Formulario!</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Aplicar datos al formulario</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Metric Badges Grid: Tempo, Key, Scale, Meter */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {/* BPM */}
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                <Gauge className="w-3 h-3 text-[var(--accent-primary)]" />
-                <span>Tempo / BPM</span>
-              </span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-bold font-mono text-[var(--text-primary)]">
-                  {analysisResult.tempo}
-                </span>
-                <span className="text-[11px] text-[var(--text-muted)] font-mono">BPM</span>
               </div>
-              {analysisResult.tempoOffset !== undefined && (
-                <div className="text-[10px] font-mono text-[var(--text-muted)]">
-                  Offset: {analysisResult.tempoOffset.toFixed(3)}s
-                </div>
-              )}
-            </div>
+            )}
 
-            {/* Key */}
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <KeyRound className="w-3 h-3 text-[var(--accent-primary)]" />
-                  <span>Tonalidad (Key)</span>
-                </span>
-                {keyAnalysis && (
-                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-semibold">
-                    Essentia
+            {/* TAB 3: ADVANCED */}
+            {activeTab === 'advanced' && (
+              <div className="space-y-4">
+                {file && (
+                  <div className="space-y-2">
+                    <h6 className="font-semibold text-xs text-[var(--text-primary)]">
+                      Recalcular motores individuales
+                    </h6>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCalculateTempo(file)}
+                        disabled={isCalculatingTempo}
+                        className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-xs font-medium text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${isCalculatingTempo ? 'animate-spin' : ''}`} />
+                        <span>Recalcular ritmo y estructura</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (decodedAudioBuffer) {
+                            void analyzeKey(decodedAudioBuffer, beatAnalysis?.beats);
+                          } else {
+                            void handleCalculateTempo(file);
+                          }
+                        }}
+                        disabled={isAnalyzingKey}
+                        className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-xs font-medium text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 text-purple-500 ${isAnalyzingKey ? 'animate-spin' : ''}`} />
+                        <span>Recalcular tonalidad y acordes</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Calibration & Technical Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                  <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
+                    <span className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                      <Cpu className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Calibración A4 y motor armónico</span>
+                    </span>
+                    <p className="font-mono text-[var(--text-secondary)]">
+                      {keyAnalysis?.algorithm || (analysisResult?.source === 'gemini_ai' ? 'Análisis IA multimodal' : 'Web Audio DSP local')}
+                    </p>
+                    <p className="font-mono text-[var(--text-muted)] tabular-nums">
+                      {typeof (keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? savedAudioAnalysis?.referenceA4Hz) === 'number'
+                        ? `A4 = ${(keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? savedAudioAnalysis?.referenceA4Hz)!.toFixed(1)} Hz (${((keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents ?? 0) >= 0 ? '+' : '')}${keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents ?? 0} cents)`
+                        : 'Referencia estándar A4 = 440.0 Hz'}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
+                    <span className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      <span>Notas de estimación</span>
+                    </span>
+                    <p className="text-[var(--text-muted)] leading-relaxed">
+                      El análisis combina detección local en tu navegador (beats, downbeats, cromagrama y matriz de autosimilitud) y análisis completo bajo demanda. En temas con rubato libre, ajusta el compás en la pestaña Ritmo.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Security & Privacy */}
+                <div className="flex items-start gap-2 pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>
+                    El procesamiento DSP se ejecuta localmente en tu navegador y el análisis en servidor protege las credenciales en variables de entorno sin exponerlas al cliente.
                   </span>
-                )}
-              </span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-bold font-mono text-[var(--accent-primary)]">
-                  {keyAnalysis ? getEffectiveKey() : analysisResult.key}
-                </span>
-                <span className="text-[11px] text-[var(--text-muted)]">
-                  {keyAnalysis
-                    ? (keyAnalysis.scale === 'minor' ? 'Menor' : 'Mayor')
-                    : (analysisResult.key.endsWith('m') ? 'Menor' : 'Mayor')}
-                </span>
+                </div>
               </div>
-            </div>
-
-            {/* Scale */}
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                <Layers className="w-3 h-3 text-[var(--accent-primary)]" />
-                <span>Escala</span>
-              </span>
-              <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                {keyAnalysis
-                  ? (keyAnalysis.scale === 'minor' ? 'Menor Natural' : 'Mayor Natural')
-                  : (analysisResult.scale || 'Natural')}
-              </p>
-            </div>
-
-            {/* Compás */}
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
-              <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] flex items-center gap-1">
-                <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
-                <span>Compás / Métrica</span>
-              </span>
-              <p className="text-sm font-bold font-mono text-[var(--text-primary)]">
-                {analysisResult.timeSignature || '4/4'}
-              </p>
-            </div>
+            )}
           </div>
-
-          {/* Chord Progression */}
-          {analysisResult.chordProgression && (
-            <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1.5">
-              <span className="text-[11px] font-medium text-[var(--text-secondary)] block">
-                Progresión de acordes principal detectada:
-              </span>
-              <div className="font-mono text-sm font-bold text-[var(--accent-primary)] tracking-wide">
-                {analysisResult.chordProgression}
-              </div>
-            </div>
-          )}
-
-          {/* Detected Chords Sequence */}
-          {analysisResult.chords && analysisResult.chords.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-medium text-[var(--text-secondary)] block">
-                Secuencia armónica detectada en el audio:
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {analysisResult.chords.map((c, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-xs shadow-xs"
-                  >
-                    <span className="text-[10px] text-[var(--text-muted)]">{c.timestamp}</span>
-                    <strong className="text-[var(--accent-primary)] font-bold">{c.chord}</strong>
-                    {c.section && (
-                      <span className="text-[10px] text-[var(--text-muted)] font-sans italic">
-                        ({c.section})
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Notes & Style */}
-          {analysisResult.musicalNotes && (
-            <p className="text-[11px] text-[var(--text-muted)] italic leading-relaxed pt-1">
-              💡 {analysisResult.musicalNotes}
-            </p>
-          )}
         </div>
       )}
-
-      {/* Security note */}
-      <div className="text-[10px] text-[var(--text-muted)] flex items-start gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.2" />
-        <span>
-          <strong>Seguridad y Privacidad</strong>: El análisis de audio utiliza secrets del entorno en el servidor (<code className="font-mono">GEMINI_API_KEY</code>). Ninguna clave queda expuesta en el repositorio público ni en el navegador. En despliegues estáticos (GitHub Pages), se activa automáticamente el motor local Web Audio API DSP sin requerir claves externas.
-        </span>
-      </div>
 
       {isTunerOpen && (
         <ChromaticTunerModal
-          initialTuning={analysisResult?.tuning}
-          initialA4Hz={keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? 440}
+          initialTuning={analysisResult?.tuning || savedAudioAnalysis?.tuning}
+          initialA4Hz={keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? savedAudioAnalysis?.referenceA4Hz ?? 440}
           onClose={() => setIsTunerOpen(false)}
         />
       )}
