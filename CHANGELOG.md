@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.67.0] - 2026-11-24
+
+### 🎉 Features
+
+- add manual meter override support ([7afd156](../../commit/7afd156)) - Tony G. Bolaño
+
+### 🔄 Other Changes
+
+- feat ([38b2be8](../../commit/38b2be8)) - audio): add next chord preview and timeline panning (Tony G. Bolaño
+- feat ([d2040a4](../../commit/d2040a4)) - audio): add scroll-based timeline visibility tracking (Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.66.0] - 2026-11-24
 
 ### 🎉 Features
