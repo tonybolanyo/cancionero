@@ -23,7 +23,8 @@ import {
   Undo2,
   ChevronDown,
   ChevronUp,
-  Info
+  Info,
+  Repeat
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
@@ -123,7 +124,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [activeTab, setActiveTab] = useState<AnalyzerTab>('chords');
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [showChromaChart, setShowChromaChart] = useState<boolean>(false);
+  const [isTimelineVisible, setIsTimelineVisible] = useState<boolean>(true);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   // Dedicated Tempo (web-audio-beat-detector) states
   const [tempoAnalysis, setTempoAnalysis] = useState<TempoAnalysis | null>(null);
@@ -186,6 +189,26 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showExportMenu]);
+
+  useEffect(() => {
+    const el = timelineContainerRef.current;
+    if (!el || !file) {
+      setIsTimelineVisible(false);
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsTimelineVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsTimelineVisible(entry.isIntersecting);
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [file]);
 
   useEffect(() => {
     if (decodedAudioBuffer) {
@@ -803,9 +826,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const activeChordNow = effectiveChords.find(c => currentTime >= c.startTime && currentTime < c.endTime);
+  const activeSectionNow = effectiveSections.find(s => currentTime >= s.startTime && currentTime < s.endTime);
+  const hasPlayableAudio = Boolean(file || isValidPlayableAudioUrl(audioUrl));
+  const showMobileMiniPlayer = hasPlayableAudio && !isTunerOpen && (!file || !isTimelineVisible);
 
   return (
-    <div className="space-y-4 text-xs transition-colors duration-200">
+    <div className={`space-y-4 text-xs transition-colors duration-200 ${showMobileMiniPlayer ? 'pb-20 sm:pb-0' : ''}`}>
       {/* Compact Header (hidden when embedded in SongEditorPage to avoid duplicate titles) */}
       {!embedded && (
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
@@ -1012,20 +1038,6 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {audioUrl && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      togglePlayback();
-                    }}
-                    className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-border)] transition-colors flex items-center gap-1.5 cursor-pointer font-medium whitespace-nowrap"
-                  >
-                    {isPlaying ? <Pause className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> : <Play className="w-3.5 h-3.5" />}
-                    <span>{isPlaying ? 'Pausar' : 'Escuchar'}</span>
-                  </button>
-                )}
-
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1173,7 +1185,49 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       )}
 
       {/* =====================================================================
-          1. UNIFIED SUMMARY CARD (4 KPI Grid + Primary Actions)
+          1. INTERACTIVE BEAT TIMELINE (Waveform, Chords, Practice Tools)
+         ===================================================================== */}
+      {file && (
+        <div ref={timelineContainerRef}>
+          <BeatTimeline
+            audioBuffer={decodedAudioBuffer}
+            beatAnalysis={beatAnalysis}
+            chords={keyAnalysis?.chords}
+            sections={effectiveSections.length > 0 ? effectiveSections : null}
+            currentTime={currentTime}
+            duration={duration || (decodedAudioBuffer?.duration ?? 0)}
+            isPlaying={isPlaying}
+            onSeek={handleSeek}
+            onTogglePlay={togglePlayback}
+            isLoading={isAnalyzingBeats || isAnalyzingKey || isAnalyzingStructure}
+            onRecalculate={() => handleCalculateTempo(file)}
+            onExportJSON={handleExportChordsJSON}
+            onExportCSV={handleExportChordsCSV}
+            onExportMIDI={() => handleExportChordsMIDI()}
+            pitchShiftSemitones={pitchShiftSemitones}
+            onPitchShiftChange={handlePitchShiftChange}
+            preserveTempo={preserveTempo}
+            onTogglePreserveTempo={handleTogglePreserveTempo}
+            accidentalPreference={accidentalPreference}
+            onToggleAccidentalPreference={handleToggleAccidentalPreference}
+            meter={meterAnalysis?.meter}
+            downbeats={meterAnalysis?.downbeats}
+            onMeterChange={handleManualMeterChange}
+            playbackRate={playbackRate}
+            onPlaybackRateChange={handlePlaybackRateChange}
+            loopStart={loopStart}
+            loopEnd={loopEnd}
+            onSetLoopA={handleSetLoopA}
+            onSetLoopB={handleSetLoopB}
+            onClearLoop={handleClearLoop}
+            eqMode={eqMode}
+            onEqModeChange={handleEqModeChange}
+          />
+        </div>
+      )}
+
+      {/* =====================================================================
+          2. UNIFIED SUMMARY CARD (4 KPI Grid + Primary Actions)
          ===================================================================== */}
       {hasAnyAnalysisData && (
         <div className="rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] overflow-visible">
@@ -1459,46 +1513,6 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* =====================================================================
-          2. INTERACTIVE BEAT TIMELINE (Waveform, Chords, Practice Tools)
-         ===================================================================== */}
-      {file && (
-        <BeatTimeline
-          audioBuffer={decodedAudioBuffer}
-          beatAnalysis={beatAnalysis}
-          chords={keyAnalysis?.chords}
-          sections={effectiveSections.length > 0 ? effectiveSections : null}
-          currentTime={currentTime}
-          duration={duration || (decodedAudioBuffer?.duration ?? 0)}
-          isPlaying={isPlaying}
-          onSeek={handleSeek}
-          onTogglePlay={togglePlayback}
-          isLoading={isAnalyzingBeats || isAnalyzingKey || isAnalyzingStructure}
-          onRecalculate={() => handleCalculateTempo(file)}
-          onExportJSON={handleExportChordsJSON}
-          onExportCSV={handleExportChordsCSV}
-          onExportMIDI={() => handleExportChordsMIDI()}
-          pitchShiftSemitones={pitchShiftSemitones}
-          onPitchShiftChange={handlePitchShiftChange}
-          preserveTempo={preserveTempo}
-          onTogglePreserveTempo={handleTogglePreserveTempo}
-          accidentalPreference={accidentalPreference}
-          onToggleAccidentalPreference={handleToggleAccidentalPreference}
-          meter={meterAnalysis?.meter}
-          downbeats={meterAnalysis?.downbeats}
-          onMeterChange={handleManualMeterChange}
-          playbackRate={playbackRate}
-          onPlaybackRateChange={handlePlaybackRateChange}
-          loopStart={loopStart}
-          loopEnd={loopEnd}
-          onSetLoopA={handleSetLoopA}
-          onSetLoopB={handleSetLoopB}
-          onClearLoop={handleClearLoop}
-          eqMode={eqMode}
-          onEqModeChange={handleEqModeChange}
-        />
       )}
 
       {/* =====================================================================
@@ -1937,6 +1951,90 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Mobile Sticky Bottom Mini-Player (shown on mobile when main timeline is scrolled out of view or unavailable) */}
+      {showMobileMiniPlayer && (
+        <div
+          role="region"
+          aria-label="Controles rápidos de reproducción"
+          className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-header)] backdrop-blur-md border-t border-[var(--border-medium)] shadow-lg px-3 py-1.5 flex items-center justify-between gap-2"
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={togglePlayback}
+              aria-label={isPlaying ? 'Pausar audio' : 'Reproducir audio'}
+              className="min-h-[44px] min-w-[44px] rounded-xl bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+            >
+              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-mono text-sm font-bold text-purple-600 dark:text-purple-300 tabular-nums shrink-0">
+                  {activeChordNow
+                    ? respellChord(activeChordNow.chord, accidentalPreference)
+                    : '—'}
+                </span>
+                {activeSectionNow && (
+                  <>
+                    <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
+                    <span className="text-[11px] font-medium text-[var(--text-secondary)] truncate">
+                      {activeSectionNow.label}
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="text-[11px] font-mono tabular-nums text-[var(--text-muted)] leading-tight">
+                <span className="text-[var(--text-primary)] font-semibold">{formatClock(currentTime)}</span>
+                {duration > 0 && <span> / {formatClock(duration)}</span>}
+              </div>
+            </div>
+          </div>
+
+          {file && decodedAudioBuffer && (
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-0.5 shrink-0 font-mono text-xs">
+              <span className="px-1.5 text-[var(--text-muted)] flex items-center" aria-hidden="true">
+                <Repeat className="w-3.5 h-3.5 text-emerald-500" />
+              </span>
+              <button
+                type="button"
+                onClick={handleSetLoopA}
+                aria-label="Marcar punto A de bucle"
+                className={`min-h-[44px] min-w-[40px] px-2 rounded-lg font-semibold cursor-pointer transition-colors whitespace-nowrap ${
+                  loopStart !== null
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
+                }`}
+              >
+                A
+              </button>
+              <button
+                type="button"
+                onClick={handleSetLoopB}
+                aria-label="Marcar punto B de bucle"
+                className={`min-h-[44px] min-w-[40px] px-2 rounded-lg font-semibold cursor-pointer transition-colors whitespace-nowrap ${
+                  loopEnd !== null
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
+                }`}
+              >
+                B
+              </button>
+              {(loopStart !== null || loopEnd !== null) && (
+                <button
+                  type="button"
+                  onClick={handleClearLoop}
+                  aria-label="Quitar bucle A-B"
+                  className="min-h-[44px] min-w-[36px] px-1.5 rounded-lg font-bold text-[var(--text-muted)] hover:text-red-500 cursor-pointer"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

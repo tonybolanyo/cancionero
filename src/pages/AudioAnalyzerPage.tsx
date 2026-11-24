@@ -82,7 +82,7 @@ export const AudioAnalyzerPage: React.FC<AudioAnalyzerPageProps> = ({
         </p>
       </div>
 
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 sm:p-8 shadow-sm">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 sm:p-8 shadow-sm">
         <AudioAnalyzerSection
           onApplyDetection={handleApplyDetection}
         />

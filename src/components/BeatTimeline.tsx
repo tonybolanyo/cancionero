@@ -872,7 +872,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               <button
                 type="button"
                 onClick={onSetLoopA}
-                className={`min-h-[38px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
+                className={`min-h-[44px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
                   loopStart !== null
                     ? 'bg-emerald-600 text-white'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
@@ -884,7 +884,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               <button
                 type="button"
                 onClick={onSetLoopB}
-                className={`min-h-[38px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
+                className={`min-h-[44px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer font-semibold whitespace-nowrap transition-colors ${
                   loopEnd !== null
                     ? 'bg-emerald-600 text-white'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)]'
@@ -897,7 +897,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
                 <button
                   type="button"
                   onClick={onClearLoop}
-                  className="min-h-[38px] sm:min-h-[30px] px-2 py-1 rounded-md cursor-pointer text-[var(--text-muted)] hover:text-red-500 font-bold"
+                  className="min-h-[44px] sm:min-h-[30px] px-2.5 py-1 rounded-md cursor-pointer text-[var(--text-muted)] hover:text-red-500 font-bold"
                   title="Quitar bucle A-B"
                 >
                   ×
@@ -910,7 +910,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             <button
               type="button"
               onClick={() => setShowPracticeTools(prev => !prev)}
-              className={`min-h-[40px] sm:min-h-[32px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[32px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                 showPracticeTools || hasPracticeOverrides
                   ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)]'
                   : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)]'
