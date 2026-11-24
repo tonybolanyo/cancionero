@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.0] - 2026-11-24
+
+### 🎉 Features
+
+- nueva composición en el cancionero ([a0537e1](../../commit/a0537e1)) - Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.57.0] - 2026-11-23
 
 ### 🎉 Features
