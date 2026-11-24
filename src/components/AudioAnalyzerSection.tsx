@@ -24,7 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
-  Repeat
+  Repeat,
+  ArrowRight
 } from 'lucide-react';
 import { AudioAnalysisResult } from '../utils/webAudioAnalyzer';
 import { AudioAnalysisService } from '../services/audioAnalysisService';
@@ -825,7 +826,21 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const activeChordNow = effectiveChords.find(c => currentTime >= c.startTime && currentTime < c.endTime);
+  const activeChordIndex = effectiveChords.findIndex(c => currentTime >= c.startTime && currentTime < c.endTime);
+  const activeChordNow = activeChordIndex >= 0 ? effectiveChords[activeChordIndex] : undefined;
+  const nextChordNow = (() => {
+    if (effectiveChords.length === 0) return undefined;
+    if (activeChordIndex >= 0) {
+      const currentName = respellChord(effectiveChords[activeChordIndex].chord, accidentalPreference);
+      for (let i = activeChordIndex + 1; i < effectiveChords.length; i++) {
+        if (respellChord(effectiveChords[i].chord, accidentalPreference) !== currentName) {
+          return effectiveChords[i];
+        }
+      }
+      return undefined;
+    }
+    return effectiveChords.find(c => c.startTime > currentTime);
+  })();
   const activeSectionNow = effectiveSections.find(s => currentTime >= s.startTime && currentTime < s.endTime);
   const hasPlayableAudio = Boolean(file || isValidPlayableAudioUrl(audioUrl));
   const showMobileMiniPlayer = hasPlayableAudio && !isTunerOpen && (!file || !isTimelineVisible);
@@ -1192,7 +1207,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           <BeatTimeline
             audioBuffer={decodedAudioBuffer}
             beatAnalysis={beatAnalysis}
-            chords={keyAnalysis?.chords}
+            chords={effectiveChords.length > 0 ? effectiveChords : undefined}
             sections={effectiveSections.length > 0 ? effectiveSections : null}
             currentTime={currentTime}
             duration={duration || (decodedAudioBuffer?.duration ?? 0)}
@@ -1978,9 +1993,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     ? respellChord(activeChordNow.chord, accidentalPreference)
                     : '—'}
                 </span>
+                {nextChordNow && (
+                  <span className="inline-flex items-center gap-0.5 font-mono text-[11px] font-semibold text-[var(--text-muted)] tabular-nums shrink-0">
+                    <ArrowRight className="w-2.5 h-2.5" aria-hidden="true" />
+                    <span>{respellChord(nextChordNow.chord, accidentalPreference)}</span>
+                  </span>
+                )}
                 {activeSectionNow && (
                   <>
-                    <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
+                    <span className="text-[var(--text-muted)] shrink-0" aria-hidden="true">·</span>
                     <span className="text-[11px] font-medium text-[var(--text-secondary)] truncate">
                       {activeSectionNow.label}
                     </span>

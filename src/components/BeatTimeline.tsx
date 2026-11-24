@@ -7,11 +7,14 @@ import {
   Sliders,
   Repeat,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ZoomIn,
-  Check
+  Check,
+  ArrowRight
 } from 'lucide-react';
 import { BeatAnalysis } from '../lib/audio/onsets';
-import { ChordSegment } from '../lib/audio/keyAnalysis';
+import { ChordSegment } from '../lib/audio/chords';
 import { respellChord, AccidentalPreference } from '../utils/markdownParser';
 import {
   TimeSignature,
@@ -157,11 +160,16 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   const [showSections, setShowSections] = useState<boolean>(true);
   const [isTallWaveform, setIsTallWaveform] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<1 | 2 | 4>(1);
+  const [scrollRatio, setScrollRatio] = useState<number>(0);
   const [showLayersMenu, setShowLayersMenu] = useState<boolean>(false);
   const [showPracticeTools, setShowPracticeTools] = useState<boolean>(false);
 
   // Precomputed waveform peaks cache (high fidelity 1600 buckets for 4K / Retina)
   const peaksRef = useRef<number[]>([]);
+  const overviewBarRef = useRef<HTMLDivElement>(null);
+  const isPanningOverviewRef = useRef<boolean>(false);
+  const pinchStateRef = useRef<{ startDist: number; midRatio: number } | null>(null);
+  const touchTapRef = useRef<{ startX: number; startY: number; moved: boolean; isPinch: boolean } | null>(null);
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -221,9 +229,28 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   const currentSection = sections?.find(
     s => currentTime >= s.startTime && currentTime < s.endTime
   );
-  const currentChord = chords?.find(
-    c => currentTime >= c.startTime && currentTime < c.endTime
-  );
+  const currentChordIdx = chords
+    ? chords.findIndex(c => currentTime >= c.startTime && currentTime < c.endTime)
+    : -1;
+  const currentChord = currentChordIdx >= 0 && chords ? chords[currentChordIdx] : undefined;
+  const nextChord = (() => {
+    if (!chords || chords.length === 0) return undefined;
+    if (currentChordIdx >= 0) {
+      const currentName = accidentalPreference
+        ? respellChord(chords[currentChordIdx].chord, accidentalPreference)
+        : chords[currentChordIdx].chord;
+      for (let i = currentChordIdx + 1; i < chords.length; i++) {
+        const candidateName = accidentalPreference
+          ? respellChord(chords[i].chord, accidentalPreference)
+          : chords[i].chord;
+        if (candidateName !== currentName) {
+          return chords[i];
+        }
+      }
+      return undefined;
+    }
+    return chords.find(c => c.startTime > currentTime);
+  })();
 
   // Dynamic height calculation adapted to screen resolution and expand mode
   const getTimelineHeight = useCallback((w: number, chordsActive: boolean, sectionsActive: boolean, tall: boolean) => {
@@ -419,6 +446,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.stroke();
       });
 
+      let lastBarLabelX = -100;
       effectiveDownbeats.forEach((dbTime, idx) => {
         if (dbTime < 0 || dbTime > totalDuration) return;
         const x = (dbTime / totalDuration) * width;
@@ -436,12 +464,13 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         ctx.arc(x, topY + 2, 2.5, 0, Math.PI * 2);
         ctx.fill();
 
-        if (width > 420) {
+        if (x - lastBarLabelX >= 22) {
           ctx.fillStyle = '#10b981';
           ctx.font = 'bold 8px monospace';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
           ctx.fillText(`${barNumber}`, x + 3, topY + 1);
+          lastBarLabelX = x;
         }
       });
     }
@@ -627,31 +656,131 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
     setHoverTime(null);
   };
 
+  const applyZoomWithAnchor = useCallback((nextZoom: 1 | 2 | 4, anchorRatio: number) => {
+    setZoomLevel(nextZoom);
+    if (nextZoom === 1) {
+      setScrollRatio(0);
+      return;
+    }
+    requestAnimationFrame(() => {
+      const scroller = scrollContainerRef.current;
+      if (!scroller) return;
+      const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const targetLeft = Math.max(0, Math.min(maxScroll, anchorRatio * scroller.scrollWidth - scroller.clientWidth / 2));
+      scroller.scrollLeft = targetLeft;
+      setScrollRatio(maxScroll > 0 ? targetLeft / maxScroll : 0);
+    });
+  }, []);
+
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    setIsDragging(true);
-    if (e.touches[0]) {
-      seekFromCoord(e.touches[0].clientX);
+    if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const dist = Math.hypot(dx, dy);
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midRatio = canvasRect && canvasRect.width > 0
+        ? Math.max(0, Math.min(1, (midX - canvasRect.left) / canvasRect.width))
+        : 0.5;
+      pinchStateRef.current = { startDist: dist, midRatio };
+      touchTapRef.current = { startX: midX, startY: 0, moved: true, isPinch: true };
+      setIsDragging(false);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchTapRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        moved: false,
+        isPinch: false
+      };
+      if (zoomLevel === 1) {
+        setIsDragging(true);
+        seekFromCoord(t.clientX);
+      }
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches[0]) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = Math.max(0, Math.min(e.touches[0].clientX - rect.left, rect.width));
-        const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
-        setHoverTime((x / rect.width) * totalDuration);
+    if (e.touches.length === 2 && pinchStateRef.current) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const dist = Math.hypot(dx, dy);
+      const scale = dist / Math.max(1, pinchStateRef.current.startDist);
+
+      if (scale >= 1.35 && zoomLevel < 4) {
+        const nextZoom: 1 | 2 | 4 = zoomLevel === 1 ? 2 : 4;
+        pinchStateRef.current.startDist = dist;
+        applyZoomWithAnchor(nextZoom, pinchStateRef.current.midRatio);
+      } else if (scale <= 0.72 && zoomLevel > 1) {
+        const nextZoom: 1 | 2 | 4 = zoomLevel === 4 ? 2 : 1;
+        pinchStateRef.current.startDist = dist;
+        applyZoomWithAnchor(nextZoom, pinchStateRef.current.midRatio);
       }
-      if (isDragging && zoomLevel === 1) {
-        seekFromCoord(e.touches[0].clientX);
+      return;
+    }
+
+    if (e.touches.length === 1 && touchTapRef.current && !touchTapRef.current.isPinch) {
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - touchTapRef.current.startX) > 8 || Math.abs(t.clientY - touchTapRef.current.startY) > 8) {
+        touchTapRef.current.moved = true;
+      }
+
+      if (zoomLevel === 1) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const x = Math.max(0, Math.min(t.clientX - rect.left, rect.width));
+          const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
+          setHoverTime((x / rect.width) * totalDuration);
+        }
+        if (isDragging) {
+          seekFromCoord(t.clientX);
+        }
       }
     }
   };
 
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    setHoverTime(null);
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) {
+      pinchStateRef.current = null;
+    }
+    if (
+      zoomLevel > 1 &&
+      touchTapRef.current &&
+      !touchTapRef.current.isPinch &&
+      !touchTapRef.current.moved &&
+      e.changedTouches[0]
+    ) {
+      seekFromCoord(e.changedTouches[0].clientX);
+    }
+    if (e.touches.length === 0) {
+      touchTapRef.current = null;
+      setIsDragging(false);
+      setHoverTime(null);
+    }
   };
+
+  const handleContainerScroll = () => {
+    const scroller = scrollContainerRef.current;
+    if (!scroller) return;
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    setScrollRatio(maxScroll > 0 ? scroller.scrollLeft / maxScroll : 0);
+  };
+
+  const panFromOverviewCoord = useCallback((clientX: number) => {
+    const bar = overviewBarRef.current;
+    const scroller = scrollContainerRef.current;
+    if (!bar || !scroller) return;
+    const rect = bar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const targetLeft = Math.max(0, Math.min(maxScroll, ratio * scroller.scrollWidth - scroller.clientWidth / 2));
+    scroller.scrollLeft = targetLeft;
+    setScrollRatio(maxScroll > 0 ? targetLeft / maxScroll : 0);
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -660,11 +789,60 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
   };
 
   const cycleZoom = () => {
-    setZoomLevel(prev => (prev === 1 ? 2 : prev === 2 ? 4 : 1));
+    const nextZoom: 1 | 2 | 4 = zoomLevel === 1 ? 2 : zoomLevel === 2 ? 4 : 1;
+    const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
+    const anchor = totalDuration > 0 ? Math.max(0, Math.min(1, currentTime / totalDuration)) : 0.5;
+    applyZoomWithAnchor(nextZoom, anchor);
+  };
+
+  const stepSeek = (deltaSeconds: number) => {
+    const totalDuration = duration > 0 ? duration : (audioBuffer?.duration || 1);
+    const nextTime = Math.max(0, Math.min(totalDuration, currentTime + deltaSeconds));
+    onSeek(nextTime);
+  };
+
+  const availableDownbeats: number[] =
+    downbeats && downbeats.length > 0
+      ? downbeats
+      : beatAnalysis && beatAnalysis.beats.length > 0
+      ? (() => {
+          const k = getMeterBeatCount(meter);
+          const list: number[] = [];
+          for (let idx = 0; idx < beatAnalysis.beats.length; idx += k) {
+            list.push(beatAnalysis.beats[idx]);
+          }
+          return list;
+        })()
+      : [];
+
+  const stepBar = (direction: -1 | 1) => {
+    if (availableDownbeats.length === 0) return;
+    if (direction === 1) {
+      const next = availableDownbeats.find(db => db > currentTime + 0.08);
+      onSeek(next !== undefined ? next : availableDownbeats[availableDownbeats.length - 1]);
+    } else {
+      let prevIdx = -1;
+      for (let i = availableDownbeats.length - 1; i >= 0; i--) {
+        if (availableDownbeats[i] <= currentTime + 0.05) {
+          prevIdx = i;
+          break;
+        }
+      }
+      if (prevIdx <= 0) {
+        onSeek(availableDownbeats[0]);
+      } else if (currentTime - availableDownbeats[prevIdx] > 0.35) {
+        onSeek(availableDownbeats[prevIdx]);
+      } else {
+        onSeek(availableDownbeats[prevIdx - 1]);
+      }
+    }
   };
 
   const displayedCurrentChord = currentChord
     ? (accidentalPreference ? respellChord(currentChord.chord, accidentalPreference) : currentChord.chord)
+    : null;
+  const displayedNextChord = nextChord
+    ? (accidentalPreference ? respellChord(nextChord.chord, accidentalPreference) : nextChord.chord)
     : null;
 
   const hasPracticeOverrides =
@@ -682,20 +860,47 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       : null
   ].filter(Boolean);
 
+  const totalDur = duration > 0 ? duration : (audioBuffer?.duration || 1);
+  const thumbWidthPct = (1 / zoomLevel) * 100;
+  const thumbLeftPct = scrollRatio * (100 - thumbWidthPct);
+
   return (
     <div className={`rounded-xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] overflow-visible ${className}`}>
-      {/* Compact Live Readout + 3 Clean Actions */}
+      {/* Compact Live Readout (Current -> Next Chord) + Zoom/Layers/Recalculate */}
       <div className="px-3.5 py-2.5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {displayedCurrentChord ? (
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono text-base sm:text-lg font-bold text-purple-600 dark:text-purple-300 tabular-nums shrink-0">
-                {displayedCurrentChord}
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-mono text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-300 tabular-nums leading-none">
+                  {displayedCurrentChord}
+                </span>
+                {displayedNextChord && (
+                  <span className="inline-flex items-center gap-1 font-mono text-xs sm:text-sm font-semibold text-[var(--text-muted)] tabular-nums">
+                    <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    <span>{displayedNextChord}</span>
+                  </span>
+                )}
+              </div>
+              {currentSection && (
+                <>
+                  <span className="text-[var(--text-muted)] shrink-0" aria-hidden="true">·</span>
+                  <span className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                    {currentSection.label}
+                  </span>
+                </>
+              )}
+            </div>
+          ) : displayedNextChord ? (
+            <div className="flex items-center gap-1.5 min-w-0 text-xs">
+              <span className="text-[var(--text-muted)] shrink-0">Próx.</span>
+              <span className="font-mono font-bold text-purple-600 dark:text-purple-300 shrink-0">
+                {displayedNextChord}
               </span>
               {currentSection && (
                 <>
-                  <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
-                  <span className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                  <span className="text-[var(--text-muted)] shrink-0" aria-hidden="true">·</span>
+                  <span className="font-medium text-[var(--text-secondary)] truncate">
                     {currentSection.label}
                   </span>
                 </>
@@ -810,11 +1015,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
       {/* Interactive Zoomable Canvas Timeline */}
       <div
         ref={scrollContainerRef}
-        className={`relative w-full bg-[#0f1117] ${zoomLevel > 1 ? 'overflow-x-auto' : 'overflow-hidden'}`}
+        onScroll={handleContainerScroll}
+        className={`relative w-full bg-[#0f1117] ${zoomLevel > 1 ? 'overflow-x-auto touch-pan-x touch-pan-y' : 'overflow-hidden'}`}
       >
         <div
           ref={containerRef}
-          className={`relative select-none cursor-pointer ${zoomLevel === 1 ? 'touch-none' : ''}`}
+          className={`relative select-none cursor-pointer ${zoomLevel === 1 ? 'touch-none' : 'touch-pan-x touch-pan-y'}`}
           style={{
             width: `${zoomLevel * 100}%`,
             minHeight: (hasChords ? (isTallWaveform ? 190 : 136) : (isTallWaveform ? 165 : 112)) + (hasSections ? 22 : 0)
@@ -842,28 +1048,145 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
         </div>
       </div>
 
+      {/* Dedicated Overview Panner Bar when zoomed (separates horizontal panning from playhead seeking) */}
+      {zoomLevel > 1 && (
+        <div className="px-3 py-1.5 bg-[#0a0c10] border-t border-white/10 flex items-center gap-2.5 select-none">
+          <div
+            ref={overviewBarRef}
+            role="slider"
+            aria-label="Desplazar ventana de onda"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(scrollRatio * 100)}
+            tabIndex={0}
+            onMouseDown={(e) => {
+              isPanningOverviewRef.current = true;
+              panFromOverviewCoord(e.clientX);
+            }}
+            onMouseMove={(e) => {
+              if (isPanningOverviewRef.current) {
+                panFromOverviewCoord(e.clientX);
+              }
+            }}
+            onMouseUp={() => { isPanningOverviewRef.current = false; }}
+            onMouseLeave={() => { isPanningOverviewRef.current = false; }}
+            onTouchStart={(e) => {
+              if (e.touches[0]) {
+                isPanningOverviewRef.current = true;
+                panFromOverviewCoord(e.touches[0].clientX);
+              }
+            }}
+            onTouchMove={(e) => {
+              if (isPanningOverviewRef.current && e.touches[0]) {
+                panFromOverviewCoord(e.touches[0].clientX);
+              }
+            }}
+            onTouchEnd={() => { isPanningOverviewRef.current = false; }}
+            onTouchCancel={() => { isPanningOverviewRef.current = false; }}
+            className="relative flex-1 h-5 rounded-md bg-white/5 border border-white/10 overflow-hidden cursor-ew-resize touch-none"
+          >
+            {/* A-B Loop indicator inside overview */}
+            {loopStart !== null && loopEnd !== null && loopEnd > loopStart && totalDur > 0 && (
+              <div
+                className="absolute top-0 bottom-0 bg-emerald-500/25 border-x border-emerald-400/70 pointer-events-none"
+                style={{
+                  left: `${(loopStart / totalDur) * 100}%`,
+                  width: `${Math.max(1, ((loopEnd - loopStart) / totalDur) * 100)}%`
+                }}
+              />
+            )}
+
+            {/* Playhead indicator inside overview */}
+            {totalDur > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-amber-400 pointer-events-none"
+                style={{ left: `${Math.min(100, Math.max(0, (currentTime / totalDur) * 100))}%` }}
+              />
+            )}
+
+            {/* Draggable Viewport Thumb */}
+            <div
+              className="absolute top-0.5 bottom-0.5 rounded bg-white/20 border border-white/40 pointer-events-none transition-[left] duration-75"
+              style={{
+                left: `${thumbLeftPct}%`,
+                width: `${thumbWidthPct}%`
+              }}
+            />
+          </div>
+          <span className="text-[10px] font-mono text-white/55 whitespace-nowrap shrink-0">
+            Toca onda para saltar
+          </span>
+        </div>
+      )}
+
       {/* Row 1: Streamlined Transport Bar (Thumb-friendly) */}
       <div className="px-3.5 py-2.5 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5 text-xs">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => stepSeek(-5)}
+            aria-label="Retroceder 5 segundos"
+            title="Retroceder 5 segundos"
+            className="min-h-[44px] sm:min-h-[36px] px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-mono font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            -5s
+          </button>
+
           {onTogglePlay && (
             <button
               type="button"
               onClick={onTogglePlay}
-              className="min-h-[44px] sm:min-h-[36px] px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap"
+              className="min-h-[44px] sm:min-h-[36px] px-3.5 sm:px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               <span>{isPlaying ? 'Pausar' : 'Reproducir'}</span>
             </button>
           )}
 
-          <div className="font-mono tabular-nums text-xs text-[var(--text-primary)]">
+          <button
+            type="button"
+            onClick={() => stepSeek(5)}
+            aria-label="Avanzar 5 segundos"
+            title="Avanzar 5 segundos"
+            className="min-h-[44px] sm:min-h-[36px] px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-mono font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            +5s
+          </button>
+
+          <div className="font-mono tabular-nums text-xs text-[var(--text-primary)] ml-1 whitespace-nowrap">
             <span className="font-bold">{formatTime(currentTime)}</span>
             <span className="text-[var(--text-muted)]"> / {formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Right: Quick A-B Loop + Practice Tools Drawer Toggle */}
+        {/* Right: Bar Step + Quick A-B Loop + Practice Tools Drawer Toggle */}
         <div className="flex items-center gap-2 flex-wrap">
+          {availableDownbeats.length > 0 && (
+            <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => stepBar(-1)}
+                aria-label="Ir al compás anterior"
+                title="Ir al compás anterior"
+                className="min-h-[44px] sm:min-h-[30px] min-w-[38px] sm:min-w-[28px] px-1.5 rounded-md flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] cursor-pointer transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-1 font-mono text-[10px] font-semibold text-[var(--text-muted)] select-none whitespace-nowrap">
+                Compás
+              </span>
+              <button
+                type="button"
+                onClick={() => stepBar(1)}
+                aria-label="Ir al siguiente compás"
+                title="Ir al siguiente compás"
+                className="min-h-[44px] sm:min-h-[30px] min-w-[38px] sm:min-w-[28px] px-1.5 rounded-md flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] cursor-pointer transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {onSetLoopA && onSetLoopB && (
             <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-0.5 text-xs font-mono">
               <span className="px-1.5 text-[var(--text-muted)] hidden sm:inline-flex items-center">
