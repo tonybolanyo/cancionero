@@ -126,6 +126,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [showChromaChart, setShowChromaChart] = useState<boolean>(false);
   const [isTimelineVisible, setIsTimelineVisible] = useState<boolean>(true);
+  const [activeKpiEditor, setActiveKpiEditor] = useState<'key' | 'meter' | null>(null);
+  const [manualKeyOverride, setManualKeyOverride] = useState<string | null>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
@@ -279,7 +281,17 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   }, [keyAnalysis?.chords]);
 
   const handleManualMeterChange = (newMeter: TimeSignature) => {
-    if (!beatAnalysis || beatAnalysis.beats.length === 0) return;
+    if (!beatAnalysis || beatAnalysis.beats.length === 0) {
+      setMeterAnalysis({
+        meter: newMeter,
+        confidence: 1.0,
+        downbeats: [],
+        barCount: 0,
+        phase: 0,
+        candidates: meterAnalysis?.candidates
+      });
+      return;
+    }
     const beatIOI = computeMedianBeatInterval(beatAnalysis.beats, beatAnalysis.tempo);
     let gridMode: 'beat' | 'subdivision2x' | 'subdivision3x' = 'beat';
     if (meterAnalysis?.meter === newMeter && meterAnalysis.gridMode) {
@@ -570,6 +582,8 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     setMeterAnalysis(null);
     setStructureAnalysis(null);
     setIsAnalyzingStructure(false);
+    setManualKeyOverride(null);
+    setActiveKpiEditor(null);
     resetKeyAnalysis();
     setCurrentTime(0);
     setLoopStart(null);
@@ -658,6 +672,9 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   };
 
   const getEffectiveKey = () => {
+    if (manualKeyOverride) {
+      return respellChord(manualKeyOverride, accidentalPreference);
+    }
     let raw = analysisResult?.key || savedAudioAnalysis?.key || currentKey || 'Am';
     if (keyAnalysis) {
       raw = keyAnalysis.scale === 'minor'
@@ -749,7 +766,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       tempoOffset: tempoAnalysis?.offset ?? analysisResult?.tempoOffset ?? savedAudioAnalysis?.tempoOffset,
       rawTempo: tempoAnalysis?.tempo ?? analysisResult?.rawTempo ?? savedAudioAnalysis?.rawTempo,
       key: resolvedKey,
-      scale: keyAnalysis?.scale === 'minor' ? 'Menor' : keyAnalysis?.scale === 'major' ? 'Mayor' : (analysisResult?.scale || savedAudioAnalysis?.scale),
+      scale: manualKeyOverride
+        ? (manualKeyOverride.endsWith('m') ? 'Menor' : 'Mayor')
+        : keyAnalysis?.scale === 'minor'
+        ? 'Menor'
+        : keyAnalysis?.scale === 'major'
+        ? 'Mayor'
+        : (analysisResult?.scale || savedAudioAnalysis?.scale),
       timeSignature: resolvedTimeSignature,
       tuning: analysisResult?.tuning || savedAudioAnalysis?.tuning || 'Estándar (EADGBE)',
       detuningCents: keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents,
@@ -805,8 +828,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const displayTempo = tempoAnalysis?.bpm ?? analysisResult?.tempo ?? savedAudioAnalysis?.tempo ?? null;
   const displayOffset = tempoAnalysis?.offset ?? analysisResult?.tempoOffset ?? savedAudioAnalysis?.tempoOffset;
   const displayMeter = meterAnalysis?.meter ?? (analysisResult?.timeSignature as TimeSignature | undefined) ?? (savedAudioAnalysis?.timeSignature as TimeSignature | undefined) ?? null;
-  const displayKey = (keyAnalysis || analysisResult?.key || savedAudioAnalysis?.key) ? getEffectiveKey() : null;
-  const displayScale = keyAnalysis
+  const displayKey = (manualKeyOverride || keyAnalysis || analysisResult?.key || savedAudioAnalysis?.key) ? getEffectiveKey() : null;
+  const displayScale = manualKeyOverride
+    ? (manualKeyOverride.endsWith('m') ? 'Menor Natural' : 'Mayor Natural')
+    : keyAnalysis
     ? (keyAnalysis.scale === 'minor' ? 'Menor Natural' : 'Mayor Natural')
     : (analysisResult?.scale || savedAudioAnalysis?.scale || null);
   const progressionSummary = getChordProgressionSummary();
@@ -817,6 +842,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     meterAnalysis ||
     keyAnalysis ||
     analysisResult ||
+    manualKeyOverride ||
     (!file && savedAudioAnalysis)
   );
 
@@ -920,13 +946,15 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
           {file ? (
             <>
               <span className="text-xs text-[var(--text-secondary)]">
-                Audio listo para análisis armónico y rítmico
+                {analysisResult
+                  ? 'Análisis IA aplicado (afinación y notas musicales)'
+                  : 'Detección rápida lista · Opcional: refina afinación y notas con IA'}
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsTunerOpen(true)}
-                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[var(--text-primary)] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
                 >
                   Afinador
                 </button>
@@ -934,17 +962,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   type="button"
                   onClick={handleRunAnalysis}
                   disabled={isAnalyzing}
-                  className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Opcional: analiza afinación, notas musicales y letra/acordes sugeridos con IA"
+                  className="min-h-[44px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--accent-border)] text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {isAnalyzing ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                      <span>Analizando…</span>
+                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+                      <span>Refinando…</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo IA'}</span>
+                      <span>{analysisResult ? 'Reanalizar con IA' : 'Refinar con IA'}</span>
                     </>
                   )}
                 </button>
@@ -1060,17 +1089,18 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     handleRunAnalysis();
                   }}
                   disabled={isAnalyzing}
-                  className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Opcional: refina afinación de guitarra, notas musicales y sugerencias con IA"
+                  className="min-h-[44px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--accent-border)] text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {isAnalyzing ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-text)] border-t-transparent rounded-full animate-spin" />
-                      <span>Analizando…</span>
+                      <div className="w-3.5 h-3.5 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+                      <span>Refinando…</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>{analysisResult ? 'Reanalizar IA' : 'Análisis completo'}</span>
+                      <span>{analysisResult ? 'Reanalizar con IA' : 'Refinar con IA'}</span>
                     </>
                   )}
                 </button>
@@ -1086,10 +1116,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     setBeatAnalysis(null);
                     setMeterAnalysis(null);
                     setStructureAnalysis(null);
+                    setManualKeyOverride(null);
+                    setActiveKpiEditor(null);
                     resetKeyAnalysis();
                     if (audioRef.current) audioRef.current.pause();
                   }}
-                  className="min-h-[40px] sm:min-h-[34px] px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer font-medium whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer font-medium whitespace-nowrap"
                   title="Quitar archivo"
                 >
                   Cambiar
@@ -1121,7 +1153,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                       void onReanalyzeDriveAudio();
                     }}
                     disabled={isDriveLoading}
-                    className="min-h-[40px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    className="min-h-[44px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] hover:bg-[var(--accent-hover)] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   >
                     {isDriveLoading ? (
                       <>
@@ -1143,7 +1175,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     e.stopPropagation();
                     fileInputRef.current?.click();
                   }}
-                  className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg bg-[var(--bg-modal)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer whitespace-nowrap"
                 >
                   Subir otra
                 </button>
@@ -1159,7 +1191,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   Arrastra o pulsa para subir tu maqueta (.mp3 o .wav)
                 </p>
                 <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                  Se analiza automáticamente al seleccionarla
+                  Detección rápida al instante (tempo, tono, acordes y estructura)
                 </p>
               </div>
             </>
@@ -1376,8 +1408,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyOnlyTempo}
-                    className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
-                      appliedTempo ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                    className={`min-h-[44px] sm:min-h-[28px] px-2.5 -my-2 sm:my-0 rounded-lg text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap flex items-center ${
+                      appliedTempo
+                        ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                        : 'text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)]'
                     }`}
                   >
                     {appliedTempo ? '¡Usado!' : 'Usar'}
@@ -1392,29 +1426,30 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   </span>
                   <span className="text-xs font-mono text-[var(--text-muted)]">BPM</span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5 truncate">
-                  {typeof displayOffset === 'number'
-                    ? `1.er golpe: ${displayOffset.toFixed(2)}s`
-                    : isCalculatingTempo
-                    ? 'Calculando…'
-                    : 'Sin offset'}
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate">
+                  {isCalculatingTempo
+                    ? 'Calculando pulso…'
+                    : displayTempo !== null
+                    ? 'Pulso automático'
+                    : 'Sin datos'}
                 </p>
               </div>
             </div>
 
-            {/* KPI 2: Key & Scale */}
+            {/* KPI 2: Key & Scale (Interactive quick-edit + 44px touch targets) */}
             <div className="p-3.5 flex flex-col justify-between gap-2 border-l border-[var(--border-subtle)] lg:border-l-0">
               <div className="flex items-center justify-between gap-1">
                 <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                   <span>Tonalidad</span>
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={handleToggleAccidentalPreference}
-                    className="px-1.5 py-0.5 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[10px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap"
+                    className="min-h-[44px] min-w-[44px] sm:min-h-[28px] sm:min-w-[28px] px-2 -my-2 sm:my-0 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs sm:text-[11px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap flex items-center justify-center"
                     title="Alternar entre sostenidos (♯) y bemoles (♭)"
+                    aria-label="Alternar sostenidos y bemoles"
                   >
                     {accidentalPreference === 'flats' ? '♭' : '♯'}
                   </button>
@@ -1422,8 +1457,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                     <button
                       type="button"
                       onClick={handleApplyOnlyKey}
-                      className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
-                        appliedKey ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                      className={`min-h-[44px] sm:min-h-[28px] px-2.5 -my-2 sm:my-0 rounded-lg text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap flex items-center ${
+                        appliedKey
+                          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                          : 'text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)]'
                       }`}
                     >
                       {appliedKey ? '¡Usado!' : 'Usar'}
@@ -1433,7 +1470,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
 
               <div>
-                <div className="flex items-baseline gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiEditor(prev => (prev === 'key' ? null : 'key'))}
+                  aria-expanded={activeKpiEditor === 'key'}
+                  title="Toca para ajustar la tonalidad manualmente"
+                  className="min-h-[44px] sm:min-h-[32px] -ml-1.5 px-1.5 rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors flex items-baseline gap-1.5 flex-wrap text-left cursor-pointer w-full"
+                >
                   <span className="text-xl sm:text-2xl font-bold font-mono text-[var(--accent-primary)]">
                     {displayKey ?? '—'}
                   </span>
@@ -1442,18 +1485,23 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                       {displayScale}
                     </span>
                   )}
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5">
-                  {keyAnalysis
-                    ? `${Math.round(keyAnalysis.confidence * 100)}% confianza`
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[var(--text-muted)] ml-auto self-center transition-transform ${
+                      activeKpiEditor === 'key' ? 'rotate-180 text-[var(--accent-primary)]' : ''
+                    }`}
+                  />
+                </button>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate">
+                  {manualKeyOverride
+                    ? 'Ajustada manualmente'
                     : isAnalyzingKey
-                    ? 'Analizando…'
-                    : 'Escala armónica'}
+                    ? 'Analizando armonía…'
+                    : 'Toca para corregir'}
                 </p>
               </div>
             </div>
 
-            {/* KPI 3: Meter */}
+            {/* KPI 3: Meter (Interactive quick-edit + 44px touch targets) */}
             <div className="p-3.5 flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between gap-1">
                 <span className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
@@ -1464,8 +1512,10 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={handleApplyOnlyMeter}
-                    className={`text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${
-                      appliedMeter ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--accent-primary)] hover:underline'
+                    className={`min-h-[44px] sm:min-h-[28px] px-2.5 -my-2 sm:my-0 rounded-lg text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap flex items-center ${
+                      appliedMeter
+                        ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                        : 'text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)]'
                     }`}
                   >
                     {appliedMeter ? '¡Usado!' : 'Usar'}
@@ -1474,7 +1524,13 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
 
               <div>
-                <div className="flex items-baseline gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiEditor(prev => (prev === 'meter' ? null : 'meter'))}
+                  aria-expanded={activeKpiEditor === 'meter'}
+                  title="Toca para corregir el compás manualmente"
+                  className="min-h-[44px] sm:min-h-[32px] -ml-1.5 px-1.5 rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors flex items-baseline gap-1.5 flex-wrap text-left cursor-pointer w-full"
+                >
                   <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
                     {displayMeter ?? '—'}
                   </span>
@@ -1483,15 +1539,20 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                       {getMeterDescription(displayMeter)}
                     </span>
                   )}
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5">
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[var(--text-muted)] ml-auto self-center transition-transform ${
+                      activeKpiEditor === 'meter' ? 'rotate-180 text-[var(--accent-primary)]' : ''
+                    }`}
+                  />
+                </button>
+                <p className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums mt-0.5 truncate">
                   {meterAnalysis
                     ? (meterAnalysis.confidence === 1.0
-                        ? `Manual · ${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases`
-                        : `${Math.round(meterAnalysis.confidence * 100)}% conf. · ${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases`)
+                        ? `Manual${meterAnalysis.barCount || meterAnalysis.downbeats.length ? ` · ${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases` : ''}`
+                        : `${meterAnalysis.barCount || meterAnalysis.downbeats.length} compases`)
                     : isAnalyzingBeats
                     ? 'Estimando…'
-                    : 'Métrica base'}
+                    : 'Toca para corregir'}
                 </p>
               </div>
             </div>
@@ -1527,6 +1588,138 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Inline Quick-Editor Strip for Key or Meter */}
+          {activeKpiEditor === 'key' && (
+            <div className="p-3.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  Ajustar tonalidad manualmente
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {(['major', 'minor'] as const).map(mode => {
+                    const currentIsMinor = (displayKey || 'Am').endsWith('m');
+                    const isSelected = mode === 'minor' ? currentIsMinor : !currentIsMinor;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => {
+                          const root = (displayKey || 'A').replace(/m$/, '');
+                          setManualKeyOverride(mode === 'minor' ? `${root}m` : root);
+                        }}
+                        className={`min-h-[40px] sm:min-h-[30px] px-3 rounded-lg text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                          isSelected
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
+                            : 'bg-[var(--bg-modal)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {mode === 'major' ? 'Mayor' : 'Menor'}
+                      </button>
+                    );
+                  })}
+                  {manualKeyOverride && (
+                    <button
+                      type="button"
+                      onClick={() => setManualKeyOverride(null)}
+                      className="min-h-[40px] sm:min-h-[30px] px-2.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] bg-[var(--bg-modal)] cursor-pointer whitespace-nowrap"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-1.5">
+                {(accidentalPreference === 'flats' ? CHROMATIC_NOTES_FLATS : CHROMATIC_NOTES_SHARPS).map(note => {
+                  const isMinor = (displayKey || 'Am').endsWith('m');
+                  const candidate = isMinor ? `${note}m` : note;
+                  const isSelected = displayKey === candidate;
+                  return (
+                    <button
+                      key={note}
+                      type="button"
+                      onClick={() => {
+                        setManualKeyOverride(candidate);
+                        setActiveKpiEditor(null);
+                      }}
+                      className={`min-h-[44px] sm:min-h-[34px] rounded-lg font-mono text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                        isSelected
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
+                          : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]'
+                      }`}
+                    >
+                      {candidate}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeKpiEditor === 'meter' && (
+            <div className="p-3.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  Seleccionar compás
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiEditor(null)}
+                  className="text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {COMMON_TIME_SIGNATURES_LIST.map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      handleManualMeterChange(m);
+                      setActiveKpiEditor(null);
+                    }}
+                    className={`min-h-[44px] sm:min-h-[34px] px-3.5 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer transition-colors border whitespace-nowrap ${
+                      displayMeter === m
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+                <select
+                  aria-label="Seleccionar compás irregular o compuesto"
+                  value={
+                    displayMeter && UNCOMMON_TIME_SIGNATURES_LIST.includes(displayMeter)
+                      ? displayMeter
+                      : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleManualMeterChange(e.target.value as TimeSignature);
+                      setActiveKpiEditor(null);
+                    }
+                  }}
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer border focus:outline-none ${
+                    displayMeter && UNCOMMON_TIME_SIGNATURES_LIST.includes(displayMeter)
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-[var(--bg-modal)] text-[var(--text-primary)] border-[var(--border-subtle)]'
+                  }`}
+                >
+                  <option value="" disabled>
+                    Irregular…
+                  </option>
+                  {UNCOMMON_TIME_SIGNATURES_LIST.map(m => (
+                    <option key={m} value={m} className="bg-[var(--bg-modal)] text-[var(--text-primary)]">
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1933,7 +2126,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
                     <span className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
                       <Cpu className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                      <span>Calibración A4 y motor armónico</span>
+                      <span>Calibración A4, confianza y motor</span>
                     </span>
                     <p className="font-mono text-[var(--text-secondary)]">
                       {keyAnalysis?.algorithm || (analysisResult?.source === 'gemini_ai' ? 'Análisis IA multimodal' : 'Web Audio DSP local')}
@@ -1943,6 +2136,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                         ? `A4 = ${(keyAnalysis?.referenceA4Hz ?? analysisResult?.referenceA4Hz ?? savedAudioAnalysis?.referenceA4Hz)!.toFixed(1)} Hz (${((keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents ?? 0) >= 0 ? '+' : '')}${keyAnalysis?.detuningCents ?? analysisResult?.detuningCents ?? savedAudioAnalysis?.detuningCents ?? 0} cents)`
                         : 'Referencia estándar A4 = 440.0 Hz'}
                     </p>
+                    {(keyAnalysis || meterAnalysis) && (
+                      <p className="font-mono text-[var(--text-muted)] tabular-nums">
+                        {[
+                          keyAnalysis ? `Tonalidad: ${Math.round(keyAnalysis.confidence * 100)}%` : null,
+                          meterAnalysis ? `Compás: ${Math.round(meterAnalysis.confidence * 100)}%` : null
+                        ].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] space-y-1">
@@ -1951,7 +2152,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                       <span>Notas de estimación</span>
                     </span>
                     <p className="text-[var(--text-muted)] leading-relaxed">
-                      El análisis combina detección local en tu navegador (beats, downbeats, cromagrama y matriz de autosimilitud) y análisis completo bajo demanda. En temas con rubato libre, ajusta el compás en la pestaña Ritmo.
+                      El análisis combina detección local en tu navegador (beats, downbeats, cromagrama y matriz de autosimilitud) y refinamiento opcional con IA. En temas con rubato libre, ajusta el compás o la tonalidad tocando directamente su tarjeta.
                     </p>
                   </div>
                 </div>
