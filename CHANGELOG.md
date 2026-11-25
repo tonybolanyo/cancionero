@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.0] - 2026-11-25
+
+### 🎉 Features
+
+- migrate to persistent IndexedDB storage ([8fac6e5](../../commit/8fac6e5)) - Tony G. Bolaño
+- add audio upload support and Gemini integration ([ca5bec5](../../commit/ca5bec5)) - Tony G. Bolaño
+
+### ♻️ Code Refactoring
+
+- unify keyboard shortcut handling for modals ([397b4bc](../../commit/397b4bc)) - Tony G. Bolaño
+
+### 🔄 Other Changes
+
+- feat ([ebb7b21](../../commit/ebb7b21)) - catalog): add "Mapas de papel" and improve YAML escaping (Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.68.0] - 2026-11-25
 
 ### 🎉 Features
