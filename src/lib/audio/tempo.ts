@@ -121,3 +121,7 @@ export async function decodeAudioBuffer(file: File | Blob): Promise<{
     );
   }
 }
+
+export { getAudioDurationSeconds } from './duration';
+
+

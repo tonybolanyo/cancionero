@@ -12,9 +12,8 @@ import {
 import { decodeAudioBuffer } from '../lib/audio/tempo';
 import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { segmentsToSyncedLyricLines } from '../lib/lyrics/transcription';
-import { fileToBase64Payload } from '../lib/audio/fileEncoding';
+import { requestServerLyricsTranscription } from '../lib/audio/serverAudioClient';
 import { getStoredAuthorToken } from '../utils/authConfig';
-import { resolveAppUrl } from '../utils/appUrl';
 
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
@@ -223,35 +222,23 @@ export class LyricsTranscriptionService {
       throw new Error('Operación no permitida: Se requiere iniciar sesión como autor para transcribir con el backend.');
     }
 
-    const base64 = await fileToBase64Payload(file);
     const mimeType =
       file.type ||
       (file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : file.name.toLowerCase().endsWith('.mp3') ? 'audio/mpeg' : 'audio/mpeg');
 
-    const response = await fetch(resolveAppUrl('api/transcribe-lyrics'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        audioBase64: base64,
-        mimeType,
-        filename: file.name
-      })
-    });
+    const { ok, status, data } = await requestServerLyricsTranscription(file, mimeType, token);
 
-    if (!response.ok) {
-      throw new Error(`Backend de transcripción no disponible (${response.status}).`);
+    if (!ok || !data) {
+      throw new Error(`Backend de transcripción no disponible (${status}).`);
     }
 
-    const data = (await response.json()) as BackendTranscriptionResponse;
-    if (!data.success || !data.transcription) {
-      throw new Error(data.error || 'El backend no devolvió una transcripción válida.');
+    const typedData = data as BackendTranscriptionResponse;
+    if (!typedData.success || !typedData.transcription) {
+      throw new Error(typedData.error || 'El backend no devolvió una transcripción válida.');
     }
 
-    const text = (data.transcription.text || '').trim();
-    const segments = sanitizeSegments(data.transcription.segments || []);
+    const text = (typedData.transcription.text || '').trim();
+    const segments = sanitizeSegments(typedData.transcription.segments || []);
     const normalizedSegments =
       segments.length > 0
         ? segments

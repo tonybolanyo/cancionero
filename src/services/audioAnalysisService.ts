@@ -1,7 +1,6 @@
 import { AudioAnalysisResult, analyzeAudioWithWebAudio } from '../utils/webAudioAnalyzer';
-import { fileToBase64Payload } from '../lib/audio/fileEncoding';
+import { requestServerAudioAnalysis } from '../lib/audio/serverAudioClient';
 import { getStoredAuthorToken } from '../utils/authConfig';
-import { resolveAppUrl } from '../utils/appUrl';
 
 export interface AnalysisProgressCallback {
   (stage: 'reading' | 'ai_analysis' | 'dsp_analysis' | 'complete', message: string): void;
@@ -29,17 +28,18 @@ export class AudioAnalysisService {
       'audio/x-m4a',
       'audio/aac',
       'audio/ogg',
-      'audio/flac'
+      'audio/flac',
+      'audio/webm'
     ];
     const lowerName = file.name.toLowerCase();
-    const validExts = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+    const validExts = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.webm'];
     const isSupportedAudio =
       validTypes.includes(file.type.toLowerCase()) ||
       file.type.toLowerCase().startsWith('audio/') ||
       validExts.some(ext => lowerName.endsWith(ext));
 
     if (!isSupportedAudio) {
-      throw new Error('Formato no soportado. Por favor sube un archivo de audio (.mp3, .wav, .m4a, .aac o .ogg)');
+      throw new Error('Formato no soportado. Por favor sube un archivo de audio (.mp3, .wav, .m4a, .aac, .ogg o .flac)');
     }
 
     const resolveMimeType = () => {
@@ -49,6 +49,7 @@ export class AudioAnalysisService {
       if (lowerName.endsWith('.aac')) return 'audio/aac';
       if (lowerName.endsWith('.ogg')) return 'audio/ogg';
       if (lowerName.endsWith('.flac')) return 'audio/flac';
+      if (lowerName.endsWith('.webm')) return 'audio/webm';
       return 'audio/mp3';
     };
 
@@ -63,55 +64,42 @@ export class AudioAnalysisService {
         try {
           onProgress?.('ai_analysis', 'Consultando modelo de Inteligencia Artificial (tempo, escala, acordes)...');
 
-          const cleanBase64 = await fileToBase64Payload(file);
+          const mimeType = resolveMimeType();
+          const { ok, data, durationSeconds } = await requestServerAudioAnalysis(file, mimeType, token);
 
-          const response = await fetch(resolveAppUrl('api/analyze-audio'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              audioBase64: cleanBase64,
-              mimeType: resolveMimeType(),
-              filename: file.name
-            })
-          });
+          if (ok && data) {
+            if (data.success && data.analysis) {
+              const a = data.analysis;
+              onProgress?.('complete', 'Análisis completado con éxito mediante IA.');
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.analysis) {
-            const a = data.analysis;
-            onProgress?.('complete', 'Análisis completado con éxito mediante IA.');
-
-            return {
-              tempo: Number(a.tempo) || 96,
-              key: a.key || 'Am',
-              scale: a.scale || 'Menor',
-              timeSignature: a.timeSignature || '4/4',
-              tuning: a.tuning || 'Estándar (EADGBE)',
-              durationSeconds: Math.round(file.size / 16000),
-              chordProgression: a.chordProgression || 'Am - F - C - G',
-              chords: Array.isArray(a.chords)
-                ? a.chords.map((c: any) => ({
-                    timestamp: c.timestamp || '0:00',
-                    chord: c.chord || 'Am',
-                    section: c.section
-                  }))
-                : [],
-              musicalNotes: a.musicalNotes || 'Análisis armónico generado por IA.',
-              suggestedLyricsChords: a.suggestedLyricsChords,
-              source: 'gemini_ai'
-            };
-          } else if (data.creditsDepleted) {
-            console.info('Créditos de prepago agotados en AI Studio. Usando motor local de DSP.');
+              return {
+                tempo: Number(a.tempo) || 96,
+                key: a.key || 'Am',
+                scale: a.scale || 'Menor',
+                timeSignature: a.timeSignature || '4/4',
+                tuning: a.tuning || 'Estándar (EADGBE)',
+                durationSeconds: durationSeconds > 0 ? durationSeconds : (Number(a.durationSeconds) || 0),
+                chordProgression: a.chordProgression || 'Am - F - C - G',
+                chords: Array.isArray(a.chords)
+                  ? a.chords.map((c: any) => ({
+                      timestamp: c.timestamp || '0:00',
+                      chord: c.chord || 'Am',
+                      section: c.section
+                    }))
+                  : [],
+                musicalNotes: a.musicalNotes || 'Análisis armónico generado por IA.',
+                suggestedLyricsChords: a.suggestedLyricsChords,
+                source: 'gemini_ai'
+              };
+            } else if (data.creditsDepleted) {
+              console.info('Créditos de prepago agotados en AI Studio. Usando motor local de DSP.');
+            }
           }
+        } catch (err) {
+          console.warn('Server-side AI analysis not available or depleted, using client Web Audio DSP:', err);
         }
-      } catch (err) {
-        console.warn('Server-side AI analysis not available or depleted, using client Web Audio DSP:', err);
       }
     }
-  }
 
   // 2. Default & reliable path: Local Client-Side Web Audio API + web-audio-beat-detector
     onProgress?.('dsp_analysis', 'Procesando señal con motor local Web Audio DSP...');

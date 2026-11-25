@@ -1,9 +1,24 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import multer from 'multer';
 import { GoogleGenAI, Type } from '@google/genai';
+import {
+  ALLOWED_AUDIO_EXTENSIONS,
+  ALLOWED_AUDIO_MIMES,
+  MAX_AUDIO_UPLOAD_BYTES,
+  normalizeAudioMimeType,
+  prepareGeminiAudioPart,
+  resolveGeminiAudioModel,
+  resolveGeminiTranscribeModel,
+  type AudioPartSource,
+  type PreparedGeminiAudioPart
+} from './src/lib/server/geminiAudio';
 
 dotenv.config();
 
@@ -171,18 +186,96 @@ function sanitizeFileName(filename: unknown): string {
     .slice(0, 100);
 }
 
-const ALLOWED_AUDIO_MIMES = new Set([
-  'audio/mp3',
-  'audio/mpeg',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/ogg',
-  'audio/flac',
-  'audio/m4a',
-  'audio/aac',
-  'audio/webm',
-  'audio/x-m4a'
-]);
+const AUDIO_UPLOAD_TMP_DIR = path.join(os.tmpdir(), 'cancionero-audio-uploads');
+fs.mkdirSync(AUDIO_UPLOAD_TMP_DIR, { recursive: true });
+
+const audioUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, AUDIO_UPLOAD_TMP_DIR);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      const safeExt = ALLOWED_AUDIO_EXTENSIONS.has(ext) ? ext : '.audio';
+      cb(null, `${crypto.randomUUID()}${safeExt}`);
+    }
+  }),
+  limits: {
+    fileSize: MAX_AUDIO_UPLOAD_BYTES,
+    files: 1
+  },
+  fileFilter: (_req, file, cb) => {
+    const baseMime = (file.mimetype || '').split(';')[0].toLowerCase().trim();
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const isAllowed =
+      ALLOWED_AUDIO_MIMES.has(baseMime) ||
+      baseMime.startsWith('audio/') ||
+      ALLOWED_AUDIO_EXTENSIONS.has(ext);
+    if (!isAllowed) {
+      return cb(new Error('Formato de audio no soportado.'));
+    }
+    cb(null, true);
+  }
+});
+
+function handleAudioUpload(req: Request, res: Response, next: NextFunction) {
+  if (!req.is('multipart/form-data')) {
+    return next();
+  }
+
+  audioUpload.single('audio')(req, res, (err: any) => {
+    if (!err) {
+      return next();
+    }
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          success: false,
+          error: `El archivo de audio supera el límite máximo permitido (${Math.round(MAX_AUDIO_UPLOAD_BYTES / (1024 * 1024))} MB).`
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: `Error procesando el archivo subido: ${err.message}`
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: err?.message || 'Archivo de audio inválido.'
+    });
+  });
+}
+
+function extractAudioSourceFromRequest(req: Request, defaultMime: string): AudioPartSource | null {
+  if (req.file) {
+    const cleanFilename = sanitizeFileName(req.body?.filename || req.file.originalname || 'audio');
+    const validMime = normalizeAudioMimeType(req.body?.mimeType || req.file.mimetype, cleanFilename, defaultMime);
+    return {
+      filePath: req.file.path,
+      sizeBytes: req.file.size,
+      mimeType: validMime,
+      filename: cleanFilename
+    };
+  }
+
+  const { audioBase64, mimeType, filename } = req.body || {};
+  if (audioBase64 && typeof audioBase64 === 'string') {
+    const cleanData = audioBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanData, 'base64');
+    if (buffer.length > 0) {
+      const cleanFilename = sanitizeFileName(filename);
+      const validMime = normalizeAudioMimeType(mimeType, cleanFilename, defaultMime);
+      return {
+        buffer,
+        sizeBytes: buffer.length,
+        mimeType: validMime,
+        filename: cleanFilename
+      };
+    }
+  }
+
+  return null;
+}
 
 async function startServer() {
   const app = express();
@@ -199,9 +292,9 @@ async function startServer() {
     next();
   });
 
-  // Body parsing with safe size limit for audio upload
-  app.use(express.json({ limit: '60mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '60mb' }));
+  // Safe JSON/urlencoded limits (audio files are streamed via multipart/form-data)
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
   const rawBase = process.env.VITE_BASE_URL || process.env.BASE_PATH || '/cancionero/';
   const normalizedBase = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
@@ -212,18 +305,15 @@ async function startServer() {
   apiRouter.use(apiRateLimiter);
 
   // API Endpoint: Audio Musical Analysis via Gemini AI (Protected: Author Only)
-  apiRouter.post('/analyze-audio', requireAuthorAuth, async (req, res) => {
+  apiRouter.post('/analyze-audio', requireAuthorAuth, handleAudioUpload, async (req, res) => {
+    const tempFilePath = req.file?.path;
+    let preparedAudio: PreparedGeminiAudioPart | null = null;
+
     try {
-      const { audioBase64, mimeType, filename } = req.body;
-      if (!audioBase64 || typeof audioBase64 !== 'string') {
+      const audioSource = extractAudioSourceFromRequest(req, 'audio/mpeg');
+      if (!audioSource) {
         return res.status(400).json({ success: false, error: 'No se recibieron datos de audio válidos.' });
       }
-
-      const cleanFilename = sanitizeFileName(filename);
-      const requestedMime = typeof mimeType === 'string' ? mimeType.toLowerCase().trim() : 'audio/mp3';
-      const validMime = requestedMime.includes('wav')
-        ? 'audio/wav'
-        : (ALLOWED_AUDIO_MIMES.has(requestedMime) ? requestedMime : 'audio/mp3');
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -243,22 +333,17 @@ async function startServer() {
         }
       });
 
-      // Format clean base64 data
-      const cleanData = audioBase64.replace(/^data:[^;]+;base64,/, '');
+      const model = resolveGeminiAudioModel();
+      preparedAudio = await prepareGeminiAudioPart(ai, audioSource);
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model,
         contents: {
           parts: [
-            {
-              inlineData: {
-                mimeType: validMime,
-                data: cleanData
-              }
-            },
+            preparedAudio.part,
             {
               text: `Actúa como un productor musical, guitarrista y transcriptor experto de canciones acústicas y de autor.
-Analiza con precisión este archivo de audio (${cleanFilename || 'canción en mp3/wav'}).
+Analiza con precisión este archivo de audio (${audioSource.filename || 'canción en mp3/wav'}).
 Detecta de forma rigurosa:
 1. tempo: entero en BPM (pulsaciones por minuto, ej. 85, 96, 110, 128).
 2. key: tonalidad principal en notación estándar anglosajona (ej. 'Am', 'G', 'C', 'Em', 'D', 'Dm', 'F#m', 'E').
@@ -307,6 +392,8 @@ Detecta de forma rigurosa:
       return res.json({
         success: true,
         source: 'gemini_ai',
+        model,
+        transport: preparedAudio.transport,
         analysis: parsed
       });
     } catch (err: any) {
@@ -331,22 +418,24 @@ Detecta de forma rigurosa:
         success: false,
         error: err.message || 'Error procesando el análisis con el modelo IA. Usa el motor local Web Audio.'
       });
+    } finally {
+      await preparedAudio?.cleanup();
+      if (tempFilePath) {
+        await fs.promises.unlink(tempFilePath).catch(() => {});
+      }
     }
   });
 
   // API Endpoint: Lyrics transcription (Protected: Author Only)
-  apiRouter.post('/transcribe-lyrics', requireAuthorAuth, async (req, res) => {
+  apiRouter.post('/transcribe-lyrics', requireAuthorAuth, handleAudioUpload, async (req, res) => {
+    const tempFilePath = req.file?.path;
+    let preparedAudio: PreparedGeminiAudioPart | null = null;
+
     try {
-      const { audioBase64, mimeType, filename } = req.body;
-      if (!audioBase64 || typeof audioBase64 !== 'string') {
+      const audioSource = extractAudioSourceFromRequest(req, 'audio/mpeg');
+      if (!audioSource) {
         return res.status(400).json({ success: false, error: 'No se recibieron datos de audio válidos.' });
       }
-
-      const cleanFilename = sanitizeFileName(filename);
-      const requestedMime = typeof mimeType === 'string' ? mimeType.toLowerCase().trim() : 'audio/mpeg';
-      const validMime = requestedMime.includes('wav')
-        ? 'audio/wav'
-        : (ALLOWED_AUDIO_MIMES.has(requestedMime) ? requestedMime : 'audio/mpeg');
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -366,20 +455,16 @@ Detecta de forma rigurosa:
         }
       });
 
-      const cleanData = audioBase64.replace(/^data:[^;]+;base64,/, '');
+      const model = resolveGeminiTranscribeModel();
+      preparedAudio = await prepareGeminiAudioPart(ai, audioSource);
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model,
         contents: {
           parts: [
+            preparedAudio.part,
             {
-              inlineData: {
-                mimeType: validMime,
-                data: cleanData
-              }
-            },
-            {
-              text: `Transcribe la letra cantada del audio (${cleanFilename || 'canción'}) en idioma original.
+              text: `Transcribe la letra cantada del audio (${audioSource.filename || 'canción'}) en idioma original.
 Devuelve SOLO JSON con esta estructura:
 {
   "text": "transcripción completa",
@@ -433,6 +518,8 @@ Reglas:
       return res.json({
         success: true,
         source: 'gemini_ai',
+        model,
+        transport: preparedAudio.transport,
         transcription: {
           text: String(parsed.text || '').trim(),
           segments
@@ -444,6 +531,11 @@ Reglas:
         success: false,
         error: err.message || 'Error procesando la transcripción con el modelo IA.'
       });
+    } finally {
+      await preparedAudio?.cleanup();
+      if (tempFilePath) {
+        await fs.promises.unlink(tempFilePath).catch(() => {});
+      }
     }
   });
 
@@ -451,7 +543,8 @@ Reglas:
   apiRouter.get('/health', (req, res) => {
     res.json({
       status: 'ok',
-      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY)
+      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      audioModel: resolveGeminiAudioModel()
     });
   });
 
