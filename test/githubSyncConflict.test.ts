@@ -1,0 +1,302 @@
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { Song } from '../src/types/song';
+import { songToMarkdown } from '../src/utils/markdownParser';
+
+const storageMap = new Map<string, string>();
+const mockLocalStorage = {
+  getItem: (key: string) => storageMap.get(key) ?? null,
+  setItem: (key: string, value: string) => { storageMap.set(key, String(value)); },
+  removeItem: (key: string) => { storageMap.delete(key); },
+  clear: () => { storageMap.clear(); },
+  key: (index: number) => Array.from(storageMap.keys())[index] ?? null,
+  get length() { return storageMap.size; }
+};
+
+if (typeof globalThis.localStorage === 'undefined') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mockLocalStorage,
+    writable: true,
+    configurable: true
+  });
+}
+
+import { GitHubSyncService } from '../src/services/githubSyncService';
+import { StorageService } from '../src/services/storageService';
+
+const originalFetch = global.fetch;
+const originalWindow = (globalThis as any).window;
+
+const encodeUtf8Base64 = (value: string): string =>
+  Buffer.from(value, 'utf8').toString('base64');
+
+const makeSong = (overrides: Partial<Song> = {}): Song => ({
+  id: 'cancion-sync',
+  title: 'Canción Sync',
+  status: 'published',
+  year: 2025,
+  genre: 'Cantautor',
+  key: 'C',
+  lyrics: '## Estrofa\n[C] Letra inicial',
+  createdAt: '2025-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides
+});
+
+describe('CAL-03: GitHubSyncService conflict merge & sync resilience', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    if (typeof (globalThis as any).window === 'undefined') {
+      (globalThis as any).window = { btoa: globalThis.btoa };
+    }
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    (globalThis as any).window = originalWindow;
+  });
+
+  it('merges remote GitHub API catalog with local conflicts: keeps newer local draft, accepts newer remote edit with backup, and preserves local-only song', async () => {
+    const baseLocalWins = makeSong({
+      id: 'tema-local-gana',
+      title: 'Título base A',
+      lyrics: '[C] Base A',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    });
+    const localDraftNewer = makeSong({
+      id: 'tema-local-gana',
+      title: 'Borrador local más reciente',
+      lyrics: '[C] Letra editada hoy',
+      updatedAt: '2026-05-01T12:00:00.000Z'
+    });
+
+    const baseRemoteWins = makeSong({
+      id: 'tema-remoto-gana',
+      title: 'Título base B',
+      lyrics: '[Am] Base B',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    });
+    const localEditedOlder = makeSong({
+      id: 'tema-remoto-gana',
+      title: 'Edición local antigua',
+      lyrics: '[Am] Cambio local viejo',
+      updatedAt: '2026-02-01T00:00:00.000Z'
+    });
+
+    const localOnly = makeSong({
+      id: 'borrador-sin-subir',
+      title: 'Idea Nueva Sin Push',
+      status: 'draft',
+      updatedAt: '2026-05-02T00:00:00.000Z'
+    });
+
+    StorageService.saveSongs([localDraftNewer, localEditedOlder, localOnly]);
+    localStorage.setItem(
+      'tony_cancionero_git_snapshot_v1',
+      JSON.stringify({
+        [baseLocalWins.id]: songToMarkdown(baseLocalWins),
+        [baseRemoteWins.id]: songToMarkdown(baseRemoteWins)
+      })
+    );
+
+    const remoteCatalog: Song[] = [
+      makeSong({
+        id: 'tema-local-gana',
+        title: 'Versión remota vieja',
+        lyrics: '[C] Remota vieja',
+        updatedAt: '2026-03-01T00:00:00.000Z'
+      }),
+      makeSong({
+        id: 'tema-remoto-gana',
+        title: 'Versión remota ganadora (con ñ y acentós)',
+        lyrics: '[Am] Letra remota más nueva',
+        updatedAt: '2026-06-01T00:00:00.000Z'
+      }),
+      makeSong({
+        id: 'tema-nuevo-remoto',
+        title: 'Canción Nueva en GitHub',
+        lyrics: '[G] Añadida desde otro dispositivo',
+        updatedAt: '2026-06-02T00:00:00.000Z'
+      })
+    ];
+
+    global.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ etag: 'W/"etag-v2"' }),
+      json: async () => ({
+        sha: 'remote-sha-999',
+        content: encodeUtf8Base64(JSON.stringify(remoteCatalog))
+      })
+    })) as unknown as typeof fetch;
+
+    const result = await GitHubSyncService.syncCatalogFromRemote('ghp_valid_token', {
+      owner: 'tonygb',
+      repo: 'cancionero',
+      branch: 'main'
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.source, 'remote');
+    assert.equal(result.notModified, false);
+    assert.equal(result.etag, 'W/"etag-v2"');
+    assert.equal(GitHubSyncService.getCatalogETag(), 'W/"etag-v2"');
+
+    const byId = new Map((result.songs || []).map(s => [s.id, s]));
+    assert.equal(byId.get('tema-local-gana')?.title, 'Borrador local más reciente');
+    assert.equal(byId.get('tema-remoto-gana')?.title, 'Versión remota ganadora (con ñ y acentós)');
+    assert.equal(byId.get('tema-nuevo-remoto')?.title, 'Canción Nueva en GitHub');
+    assert.equal(byId.get('borrador-sin-subir')?.title, 'Idea Nueva Sin Push');
+
+    // A pre_sync backup should have been captured before overwriting localEditedOlder
+    const backups = StorageService.getBackupPoints();
+    assert.equal(backups.length, 1);
+    assert.equal(backups[0].reason, 'pre_sync');
+  });
+
+  it('honors ETag 304 Not Modified and bypasses If-None-Match when forceReload is true', async () => {
+    const localSong = makeSong({ id: 'tema-304', title: 'Tema Cacheado' });
+    StorageService.saveSongs([localSong]);
+    StorageService.saveSnapshot([localSong]);
+    GitHubSyncService.saveCatalogETag('"etag-cached"');
+
+    const capturedHeaders: Array<Record<string, string>> = [];
+
+    global.fetch = (async (_url: any, init: any) => {
+      capturedHeaders.push(init?.headers || {});
+      if (init?.headers?.['If-None-Match'] === '"etag-cached"') {
+        return {
+          ok: false,
+          status: 304,
+          headers: new Headers({ etag: '"etag-cached"' })
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ etag: '"etag-fresh"' }),
+        json: async () => ({
+          sha: 'sha-fresh',
+          content: encodeUtf8Base64(JSON.stringify([localSong]))
+        })
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    const cachedRes = await GitHubSyncService.syncCatalogFromRemote('ghp_token', {
+      owner: 'tonygb',
+      repo: 'cancionero',
+      branch: 'main'
+    });
+
+    assert.equal(cachedRes.success, true);
+    assert.equal(cachedRes.notModified, true);
+    assert.equal(capturedHeaders[0]['If-None-Match'], '"etag-cached"');
+
+    const forcedRes = await GitHubSyncService.syncCatalogFromRemote(
+      'ghp_token',
+      { owner: 'tonygb', repo: 'cancionero', branch: 'main' },
+      { forceReload: true }
+    );
+
+    assert.equal(forcedRes.success, true);
+    assert.equal(forcedRes.notModified, false);
+    assert.equal(capturedHeaders[1]['If-None-Match'], undefined);
+    assert.equal(GitHubSyncService.getCatalogETag(), '"etag-fresh"');
+  });
+
+  it('falls back cleanly from GitHub API -> CDN -> static catalog -> local offline state', async () => {
+    const localSong = makeSong({ id: 'local-only-song', title: 'Local Offline' });
+    StorageService.saveSongs([localSong]);
+    StorageService.saveSnapshot([localSong]);
+
+    // 1. CDN fallback succeeds when API fails
+    global.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('raw.githubusercontent.com')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ etag: '"cdn-etag"' }),
+          json: async () => [makeSong({ id: 'cdn-song', title: 'Desde CDN' })]
+        } as unknown as Response;
+      }
+      return { ok: false, status: 500, headers: new Headers() } as Response;
+    }) as typeof fetch;
+
+    const cdnRes = await GitHubSyncService.syncCatalogFromRemote('ghp_token', {
+      owner: 'tonygb',
+      repo: 'cancionero',
+      branch: 'main'
+    });
+
+    assert.equal(cdnRes.success, true);
+    assert.equal(cdnRes.source, 'remote');
+    assert.ok(cdnRes.songs?.some(s => s.id === 'cdn-song'));
+
+    // 2. All remote sources unreachable -> falls back gracefully to local songs without losing local drafts
+    localStorage.clear();
+    StorageService.saveSongs([localSong]);
+
+    global.fetch = (async () => {
+      throw new Error('Network offline');
+    }) as typeof fetch;
+
+    const offlineRes = await GitHubSyncService.syncCatalogFromRemote(null, {
+      owner: 'tonygb',
+      repo: 'cancionero',
+      branch: 'main'
+    });
+
+    assert.equal(offlineRes.success, true);
+    assert.equal(offlineRes.source, 'local');
+    assert.ok(offlineRes.songs?.some(s => s.id === 'local-only-song'));
+  });
+
+  it('handles pushSongFile authentication, conflict/permission errors, and SHA-backed PUT requests', async () => {
+    const song = makeSong({ id: 'tema-push', title: 'Tema Español Ñ' });
+
+    const noTokenRes = await GitHubSyncService.pushSongFile(song, 'test', '');
+    assert.equal(noTokenRes.success, false);
+
+    // 403 Forbidden -> requiresPermissions: true
+    global.fetch = (async (_url: any, init?: any) => {
+      if (!init?.method || init.method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ sha: 'old-sha-123' }) } as Response;
+      }
+      return { ok: false, status: 403, statusText: 'Forbidden', json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    const forbiddenRes = await GitHubSyncService.pushSongFile(song, 'feat: test', 'bad_token');
+    assert.equal(forbiddenRes.success, false);
+    assert.equal(forbiddenRes.requiresPermissions, true);
+
+    // Successful PUT sends existing file SHA and UTF-8 base64 content
+    let putPayload: any = null;
+    global.fetch = (async (_url: any, init?: any) => {
+      if (!init?.method || init.method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ sha: 'existing-sha-456' }) } as Response;
+      }
+      putPayload = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          commit: { sha: 'abcdef123456', html_url: 'https://github.com/tonygb/cancionero/commit/abcdef123456' }
+        })
+      } as Response;
+    }) as typeof fetch;
+
+    const okRes = await GitHubSyncService.pushSongFile(song, 'feat: actualizar tema', 'good_token', {
+      owner: 'tonygb',
+      repo: 'cancionero',
+      branch: 'main'
+    });
+
+    assert.equal(okRes.success, true);
+    assert.equal(okRes.commitSha, 'abcdef1');
+    assert.equal(putPayload.sha, 'existing-sha-456');
+    assert.equal(putPayload.branch, 'main');
+    const decodedMarkdown = Buffer.from(putPayload.content, 'base64').toString('utf8');
+    assert.ok(decodedMarkdown.includes('Tema Español Ñ'));
+  });
+});

@@ -239,7 +239,7 @@ export function songToMarkdown(song: Song): string {
   const safeUpdatedAt = song?.updatedAt || new Date().toISOString();
   const safeLyrics = (song?.lyrics || '').trim();
 
-  const frontmatter = [
+  const frontmatterLines = [
     '---',
     `id: "${safeId}"`,
     `title: "${safeTitle}"`,
@@ -263,19 +263,19 @@ export function songToMarkdown(song: Song): string {
     song?.driveFileName ? `driveFileName: "${song.driveFileName.replace(/"/g, '\\"')}"` : null,
     typeof song?.isPrivateDemo === 'boolean' ? `isPrivateDemo: ${song.isPrivateDemo}` : null,
     song?.coverImage ? `coverImage: "${song.coverImage}"` : null,
-    song?.notes ? `notes: "${song.notes.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
-    song?.lrc ? `lrc: "${song.lrc.replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song?.notes ? `notes: "${song.notes.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
+    song?.lrc ? `lrc: "${song.lrc.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
     song?.audioAnalysis ? `audioAnalysis: "${JSON.stringify(song.audioAnalysis).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : null,
     song?.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${String(t).replace(/"/g, '')}"`).join(', ')}]` : null,
     `createdAt: "${safeCreatedAt}"`,
     `updatedAt: "${safeUpdatedAt}"`,
     song?.gitHash ? `gitHash: "${song.gitHash}"` : null,
-    '---',
-    '',
-    safeLyrics
-  ].filter(Boolean).join('\n');
+    '---'
+  ].filter(Boolean);
 
-  return frontmatter;
+  return safeLyrics
+    ? `${frontmatterLines.join('\n')}\n${safeLyrics}`
+    : `${frontmatterLines.join('\n')}\n`;
 }
 
 /**
@@ -316,7 +316,7 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
-      meta[key] = value.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      meta[key] = value.replace(/\\([\\n"])/g, (_, ch) => (ch === 'n' ? '\n' : ch));
     }
   }
 
