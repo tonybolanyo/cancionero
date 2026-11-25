@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Album } from '../types/album';
 import { Song } from '../types/song';
 import { StorageService } from '../services/storageService';
@@ -16,6 +16,22 @@ export function useAlbumsManager({
   onShowToast
 }: UseAlbumsManagerOptions) {
   const [albums, setAlbums] = useState<Album[]>(() => StorageService.getAlbums());
+
+  useEffect(() => {
+    let isMounted = true;
+    StorageService.init()
+      .then(() => {
+        if (isMounted) {
+          setAlbums(StorageService.getAlbums());
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to hydrate albums from IndexedDB:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSaveAlbum = useCallback((
     album: Album,

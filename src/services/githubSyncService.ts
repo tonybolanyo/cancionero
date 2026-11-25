@@ -191,6 +191,7 @@ export class GitHubSyncService {
     customConfig?: RemoteConfig,
     options?: { forceReload?: boolean }
   ): Promise<CatalogSyncResult> {
+    await StorageService.init();
     const config = customConfig || this.getRemoteConfig();
     const cleanToken = token?.trim();
     const targetRepo = `${config.owner}/${config.repo}`;

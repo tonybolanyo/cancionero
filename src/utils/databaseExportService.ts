@@ -1,6 +1,8 @@
 import JSZip from 'jszip';
 import { Song } from '../types/song';
 import { songToMarkdown } from './markdownParser';
+import { StorageService } from '../services/storageService';
+import { IndexedDbStore } from '../services/indexedDbStore';
 
 export interface ExportProgress {
   message: string;
@@ -94,12 +96,14 @@ export async function exportDatabaseWithAudioZip(
   songs: Song[],
   onProgress?: (progress: ExportProgress) => void
 ): Promise<ExportResult> {
+  await StorageService.init().catch(() => {});
+
   const zip = new JSZip();
   const currentDate = new Date().toISOString().slice(0, 10);
   const timestamp = new Date().toLocaleString('es-ES');
 
   onProgress?.({
-    message: 'Preparando base de datos songs.json...',
+    message: 'Preparando base de datos songs.json desde IndexedDB...',
     percent: 10,
     currentStep: 'database'
   });
@@ -110,6 +114,28 @@ export async function exportDatabaseWithAudioZip(
 
   // 2. Mirror as catalog.json for backwards compatibility
   zip.file('catalog.json', songsJsonString);
+
+  // 2b. Export albums.json & IndexedDB metadata if available
+  try {
+    const albums = StorageService.getAlbums();
+    zip.file('albums.json', JSON.stringify(albums, null, 2));
+    zip.file(
+      'db-metadata.json',
+      JSON.stringify(
+        {
+          storageBackend: IndexedDbStore.isAvailable() ? 'indexeddb' : 'fallback',
+          exportedAt: new Date().toISOString(),
+          totalSongs: songs.length,
+          totalAlbums: albums.length,
+          backupPointsCount: StorageService.getBackupPoints().length
+        },
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.warn('Could not include albums/metadata in ZIP export:', err);
+  }
 
   // 3. songs/ folder with individual .md files
   const songsFolder = zip.folder('songs');
@@ -290,6 +316,17 @@ Generado automáticamente desde la plataforma de Cancionero de Autor.
     audioFilesRemoteOnly: audioRemoteOnlyCount,
     sizeBytes: blob.size
   };
+}
+
+/**
+ * Hydrates IndexedDB storage and exports the full database ZIP directly from persisted state.
+ */
+export async function exportDatabaseFromIndexedDB(
+  onProgress?: (progress: ExportProgress) => void
+): Promise<ExportResult> {
+  await StorageService.init();
+  const songs = StorageService.getSongs();
+  return exportDatabaseWithAudioZip(songs, onProgress);
 }
 
 /**

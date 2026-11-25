@@ -4,22 +4,31 @@ import { INITIAL_SONGS } from '../data/initialSongs';
 import { INITIAL_ALBUMS } from '../data/initialAlbums';
 import { songToMarkdown, markdownToSong, isValidPlayableAudioUrl } from '../utils/markdownParser';
 import { isStoredSessionAuthorized, AUTHORIZED_GITHUB_USER } from '../utils/authConfig';
+import { IndexedDbStore, KV_KEYS, MigrationBundle } from './indexedDbStore';
+import {
+  MAX_BACKUP_POINTS,
+  SongBackupPoint,
+  StoredBackupEntry,
+  encodeBackupArchive,
+  decodeBackupArchive
+} from '../utils/backupCompression';
 
-const STORAGE_KEY_SONGS = 'tony_cancionero_songs_v1';
-const STORAGE_KEY_ALBUMS = 'tony_cancionero_albums_v1';
-const STORAGE_KEY_COMMITS = 'tony_cancionero_git_commits_v1';
-const STORAGE_KEY_LAST_COMMITTED_SNAPSHOT = 'tony_cancionero_git_snapshot_v1';
-const STORAGE_KEY_BACKUPS = 'tony_cancionero_backup_points_v1';
+export const STORAGE_KEY_SONGS = 'tony_cancionero_songs_v1';
+export const STORAGE_KEY_ALBUMS = 'tony_cancionero_albums_v1';
+export const STORAGE_KEY_COMMITS = 'tony_cancionero_git_commits_v1';
+export const STORAGE_KEY_LAST_COMMITTED_SNAPSHOT = 'tony_cancionero_git_snapshot_v1';
+export const STORAGE_KEY_BACKUPS = 'tony_cancionero_backup_points_v1';
 
-export interface SongBackupPoint {
-  id: string;
-  timestamp: string;
-  name: string;
-  reason: 'pre_import_json' | 'pre_import_md' | 'pre_sync' | 'pre_reset' | 'manual';
-  songCount: number;
-  songsJson: string;
-  songsSummary: Array<{ id: string; title: string; key: string; status: string }>;
-}
+const LEGACY_DATA_KEYS = [
+  STORAGE_KEY_SONGS,
+  STORAGE_KEY_ALBUMS,
+  STORAGE_KEY_COMMITS,
+  STORAGE_KEY_LAST_COMMITTED_SNAPSHOT,
+  STORAGE_KEY_BACKUPS
+] as const;
+
+export type { SongBackupPoint };
+export { MAX_BACKUP_POINTS };
 
 export interface SongVersionRecord {
   commit: GitCommit;
@@ -92,7 +101,303 @@ const createInitialCommits = (): GitCommit[] => {
   ];
 };
 
+function safeReadLocalStorageJson<T>(key: string): T | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    console.warn(`Failed to parse localStorage key "${key}":`, err);
+    return null;
+  }
+}
+
+function safeWriteLocalStorageJson(key: string, value: unknown): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn(`Failed to write localStorage key "${key}":`, err);
+  }
+}
+
+function safeRemoveLocalStorage(key: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function sanitizeSongsList(songs: Song[]): Song[] {
+  return (songs || []).map(s => {
+    if (s.audioUrl && (s.audioUrl.startsWith('blob:') || !isValidPlayableAudioUrl(s.audioUrl))) {
+      return { ...s, audioUrl: undefined };
+    }
+    return s;
+  });
+}
+
 export class StorageService {
+  private static cache: {
+    songs: Song[] | null;
+    albums: Album[] | null;
+    commits: GitCommit[] | null;
+    snapshot: Record<string, string> | null;
+    backups: SongBackupPoint[] | null;
+  } = {
+    songs: null,
+    albums: null,
+    commits: null,
+    snapshot: null,
+    backups: null
+  };
+
+  private static isHydrated = false;
+  private static initPromise: Promise<void> | null = null;
+  private static writeQueue: Promise<void> = Promise.resolve();
+  private static markdownCache = new WeakMap<Song, string>();
+  private static reconciliationCount = 0;
+
+  private static getSongMarkdownCached(song: Song): string {
+    const cached = this.markdownCache.get(song);
+    if (cached !== undefined) return cached;
+    const md = songToMarkdown(song);
+    this.markdownCache.set(song, md);
+    return md;
+  }
+
+  private static enqueueDbWrite(task: () => Promise<void>): void {
+    if (!IndexedDbStore.isAvailable()) return;
+    this.writeQueue = this.writeQueue
+      .then(() => task())
+      .catch(err => {
+        console.warn('IndexedDB persistence write failed:', err);
+      });
+  }
+
+  /**
+   * Returns whether IndexedDB/storage hydration has completed.
+   */
+  static isReady(): boolean {
+    return this.isHydrated;
+  }
+
+  /**
+   * Returns how many times reconcileWithCatalog() has executed (useful for performance diagnostics & tests).
+   */
+  static getReconciliationCount(): number {
+    return this.reconciliationCount;
+  }
+
+  /**
+   * Waits for all queued asynchronous IndexedDB writes to finish.
+   */
+  static async flush(): Promise<void> {
+    await this.writeQueue;
+  }
+
+  /**
+   * Resets in-memory caches and optionally clears IndexedDB/localStorage (primarily for unit tests).
+   */
+  static async resetForTesting(clearPersistence: boolean = true): Promise<void> {
+    await this.writeQueue;
+    this.cache = {
+      songs: null,
+      albums: null,
+      commits: null,
+      snapshot: null,
+      backups: null
+    };
+    this.isHydrated = false;
+    this.initPromise = null;
+    this.reconciliationCount = 0;
+    this.markdownCache = new WeakMap<Song, string>();
+
+    if (clearPersistence) {
+      if (IndexedDbStore.isAvailable()) {
+        await IndexedDbStore.clearAll();
+      }
+      for (const key of LEGACY_DATA_KEYS) {
+        safeRemoveLocalStorage(key);
+      }
+    }
+  }
+
+  /**
+   * Initializes IndexedDB persistence, runs one-time transparent migration from legacy
+   * localStorage keys, hydrates the in-memory cache, and reconciles with bundled
+   * INITIAL_SONGS once at startup.
+   */
+  static init(): Promise<void> {
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = this.performInit().catch(err => {
+      console.warn('StorageService.init() encountered an error, falling back gracefully:', err);
+      this.isHydrated = true;
+    });
+
+    return this.initPromise;
+  }
+
+  private static async performInit(): Promise<void> {
+    if (!IndexedDbStore.isAvailable()) {
+      // Headless environment without IndexedDB (e.g., Node test runner with mocked localStorage)
+      this.isHydrated = true;
+      return;
+    }
+
+    await IndexedDbStore.open();
+
+    // 1. Check existing IndexedDB state & migration flag
+    const [
+      migrationMeta,
+      existingDbSongs,
+      existingDbAlbums,
+      existingDbCommits,
+      existingDbSnapshot,
+      existingDbBackups
+    ] = await Promise.all([
+      IndexedDbStore.getKV<{ completed: boolean; migratedAt: string; migratedKeys: string[] }>(KV_KEYS.MIGRATION_V1),
+      IndexedDbStore.getAllSongs(),
+      IndexedDbStore.getAllAlbums(),
+      IndexedDbStore.getKV<GitCommit[]>(KV_KEYS.COMMITS),
+      IndexedDbStore.getKV<Record<string, string>>(KV_KEYS.SNAPSHOT),
+      IndexedDbStore.getKV<Array<StoredBackupEntry | SongBackupPoint>>(KV_KEYS.BACKUPS)
+    ]);
+
+    let dbSongs = existingDbSongs;
+    let dbAlbums = existingDbAlbums;
+    let dbCommits = existingDbCommits;
+    let dbSnapshot = existingDbSnapshot;
+    let dbBackups = existingDbBackups;
+
+    // 2. Transparent one-time migration from legacy localStorage keys
+    const legacySongs = safeReadLocalStorageJson<Song[]>(STORAGE_KEY_SONGS);
+    const legacyAlbums = safeReadLocalStorageJson<Album[]>(STORAGE_KEY_ALBUMS);
+    const legacyCommits = safeReadLocalStorageJson<GitCommit[]>(STORAGE_KEY_COMMITS);
+    const legacySnapshot = safeReadLocalStorageJson<Record<string, string>>(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT);
+    const legacyBackups = safeReadLocalStorageJson<Array<StoredBackupEntry | SongBackupPoint>>(STORAGE_KEY_BACKUPS);
+
+    const hasLegacyKeys =
+      legacySongs !== null ||
+      legacyAlbums !== null ||
+      legacyCommits !== null ||
+      legacySnapshot !== null ||
+      legacyBackups !== null;
+
+    if (hasLegacyKeys || !migrationMeta?.completed) {
+      const bundle: MigrationBundle = {};
+      const migratedKeys: string[] = [];
+
+      if (Array.isArray(legacySongs) && legacySongs.length > 0 && dbSongs.length === 0) {
+        const sanitized = sanitizeSongsList(legacySongs);
+        bundle.songs = sanitized;
+        dbSongs = sanitized;
+        migratedKeys.push(STORAGE_KEY_SONGS);
+      }
+
+      if (Array.isArray(legacyAlbums) && legacyAlbums.length > 0 && dbAlbums.length === 0) {
+        bundle.albums = legacyAlbums;
+        dbAlbums = legacyAlbums;
+        migratedKeys.push(STORAGE_KEY_ALBUMS);
+      }
+
+      if (Array.isArray(legacyCommits) && legacyCommits.length > 0 && !dbCommits) {
+        bundle.commits = legacyCommits;
+        dbCommits = legacyCommits;
+        migratedKeys.push(STORAGE_KEY_COMMITS);
+      }
+
+      if (legacySnapshot && typeof legacySnapshot === 'object' && !Array.isArray(legacySnapshot) && !dbSnapshot) {
+        bundle.snapshot = legacySnapshot;
+        dbSnapshot = legacySnapshot;
+        migratedKeys.push(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT);
+      }
+
+      if (Array.isArray(legacyBackups) && legacyBackups.length > 0 && !dbBackups) {
+        const decoded = decodeBackupArchive(legacyBackups).slice(0, MAX_BACKUP_POINTS);
+        const compressedArchive = encodeBackupArchive(decoded);
+        bundle.backups = compressedArchive;
+        dbBackups = compressedArchive;
+        migratedKeys.push(STORAGE_KEY_BACKUPS);
+      }
+
+      bundle.migrationMeta = {
+        completed: true,
+        migratedAt: new Date().toISOString(),
+        migratedKeys
+      };
+
+      await IndexedDbStore.batchMigrate(bundle);
+
+      // Remove heavy legacy keys from localStorage now that IndexedDB has safely committed them
+      for (const key of LEGACY_DATA_KEYS) {
+        safeRemoveLocalStorage(key);
+      }
+    }
+
+    // 3. Hydrate in-memory cache (snapshot, commits, backups, albums BEFORE songs reconciliation)
+    this.cache.snapshot = dbSnapshot && typeof dbSnapshot === 'object' ? dbSnapshot : {};
+
+    if (Array.isArray(dbCommits) && dbCommits.length > 0) {
+      this.cache.commits = dbCommits;
+    } else {
+      const initialCommits = createInitialCommits();
+      this.cache.commits = initialCommits;
+      await IndexedDbStore.setKV(KV_KEYS.COMMITS, initialCommits);
+    }
+
+    if (Array.isArray(dbBackups) && dbBackups.length > 0) {
+      this.cache.backups = decodeBackupArchive(dbBackups).slice(0, MAX_BACKUP_POINTS);
+    } else {
+      this.cache.backups = [];
+    }
+
+    if (Array.isArray(dbAlbums) && dbAlbums.length > 0) {
+      this.cache.albums = dbAlbums;
+    } else {
+      const initialAlbums = [...INITIAL_ALBUMS];
+      this.cache.albums = initialAlbums;
+      await IndexedDbStore.replaceAllAlbums(initialAlbums);
+    }
+
+    // 4. Hydrate songs and run reconcileWithCatalog() ONCE at startup
+    if (Array.isArray(dbSongs) && dbSongs.length > 0) {
+      const sanitizedSongs = sanitizeSongsList(dbSongs);
+      this.cache.songs = sanitizedSongs;
+      const { songs: reconciled } = this.reconcileWithCatalog(
+        sanitizedSongs,
+        INITIAL_SONGS,
+        'repositorio empaquetado (INITIAL_SONGS)',
+        { pruneDeleted: false }
+      );
+      this.cache.songs = reconciled;
+    } else {
+      const initialSongs = sanitizeSongsList(INITIAL_SONGS);
+      this.cache.songs = initialSongs;
+      await IndexedDbStore.replaceAllSongs(initialSongs);
+      const initialSnapshot = this.buildSnapshotRecord(initialSongs);
+      this.cache.snapshot = initialSnapshot;
+      await IndexedDbStore.setKV(KV_KEYS.SNAPSHOT, initialSnapshot);
+    }
+
+    this.isHydrated = true;
+    await this.writeQueue;
+  }
+
+  private static buildSnapshotRecord(songs: Song[]): Record<string, string> {
+    const snapshot: Record<string, string> = {};
+    songs.forEach(s => {
+      snapshot[s.id] = this.getSongMarkdownCached(s);
+    });
+    return snapshot;
+  }
+
   /**
    * Merge two song catalogs preferring the most recent updatedAt value for each song.
    * Kept for backwards compatibility and delegates to reconcileWithCatalog.
@@ -103,14 +408,17 @@ export class StorageService {
 
   /**
    * Reconciles local stored songs with an incoming catalog of songs (from bundled .md files or remote catalog.json).
-   * Ensures new songs in the repository appear automatically, updated songs are merged, and local uncommitted
-   * drafts by an author are preserved without requiring manual actions or clearing localStorage.
+   * Executed ONLY on startup hydration or after a remote sync.
    */
   static reconcileWithCatalog(
     localSongs: Song[],
     incomingSongs: Song[],
-    sourceName: string = 'remoto/empaquetado'
+    sourceName: string = 'remoto/empaquetado',
+    options?: { pruneDeleted?: boolean }
   ): { songs: Song[]; hasChanges: boolean } {
+    this.reconciliationCount += 1;
+    const pruneDeleted = options?.pruneDeleted ?? true;
+
     if (!Array.isArray(incomingSongs) || incomingSongs.length === 0) {
       return { songs: localSongs, hasChanges: false };
     }
@@ -118,6 +426,9 @@ export class StorageService {
     const snapshot = this.getSnapshot();
     const localMap = new Map<string, Song>();
     (localSongs || []).forEach(s => localMap.set(s.id, s));
+
+    const bundledMap = new Map<string, Song>();
+    INITIAL_SONGS.forEach(s => bundledMap.set(s.id, s));
 
     const nextSnapshot: Record<string, string> = { ...snapshot };
     let hasChanges = false;
@@ -139,7 +450,7 @@ export class StorageService {
       const localSong = localMap.get(incomingSong.id);
 
       // Ensure lyrics are never erased if incoming catalog only has metadata (e.g., from stripped JSON)
-      const bundledSong = INITIAL_SONGS.find(s => s.id === incomingSong.id);
+      const bundledSong = bundledMap.get(incomingSong.id);
       const effectiveLyrics = (incomingSong.lyrics && incomingSong.lyrics.trim().length > 0)
         ? incomingSong.lyrics
         : (localSong?.lyrics && localSong.lyrics.trim().length > 0)
@@ -156,22 +467,19 @@ export class StorageService {
       if (!localSong) {
         // New song from repository! Add it seamlessly.
         reconciledSongs.push(resolvedIncoming);
-        nextSnapshot[resolvedIncoming.id] = songToMarkdown(resolvedIncoming);
+        nextSnapshot[resolvedIncoming.id] = this.getSongMarkdownCached(resolvedIncoming);
         hasChanges = true;
         continue;
       }
 
       const committedMarkdown = snapshot[localSong.id];
-      const localMarkdown = songToMarkdown(localSong);
-      const incomingMarkdown = songToMarkdown(resolvedIncoming);
+      const localMarkdown = this.getSongMarkdownCached(localSong);
+      const incomingMarkdown = this.getSongMarkdownCached(resolvedIncoming);
 
       // Check if user has uncommitted changes locally
       const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
 
       if (!isLocallyModified) {
-        // Local song has NO uncommitted edits (either a visitor or an author whose work was committed).
-        // If incoming song is different in any way (lyrics, chords, key, tempo, tags, status, updatedAt),
-        // adopt the incoming repository version.
         const isDifferent = localMarkdown.trim() !== incomingMarkdown.trim() ||
           localSong.status !== resolvedIncoming.status ||
           localSong.genre !== resolvedIncoming.genre ||
@@ -184,7 +492,6 @@ export class StorageService {
           nextSnapshot[resolvedIncoming.id] = incomingMarkdown;
           hasChanges = true;
         } else {
-          // If tags or lyrics were missing in local, adopt from incoming
           let updatedItem = localSong;
           let itemChanged = false;
           if ((!localSong.tags || localSong.tags.length === 0) && resolvedIncoming.tags && resolvedIncoming.tags.length > 0) {
@@ -208,8 +515,6 @@ export class StorageService {
         const incomingTs = Date.parse(resolvedIncoming.updatedAt || '0');
 
         if (Number.isFinite(incomingTs) && Number.isFinite(localTs) && incomingTs > localTs) {
-          // The incoming version from the repo is strictly newer than when the local draft was touched.
-          // Backup local state first so user work is never lost:
           try {
             this.createBackupPoint(
               `Backup automático antes de actualizar "${localSong.title}" desde ${sourceName}`,
@@ -223,7 +528,6 @@ export class StorageService {
           nextSnapshot[resolvedIncoming.id] = incomingMarkdown;
           hasChanges = true;
         } else {
-          // Keep the local uncommitted draft intact so author work is preserved
           reconciledSongs.push(localSong);
         }
       }
@@ -233,7 +537,6 @@ export class StorageService {
     for (const localSong of (localSongs || [])) {
       if (handledIds.has(localSong.id)) continue;
 
-      // Purge obsolete mock songs that do not belong to the repository
       if (legacyMockIds.has(localSong.id)) {
         delete nextSnapshot[localSong.id];
         hasChanges = true;
@@ -241,22 +544,19 @@ export class StorageService {
       }
 
       const committedMarkdown = snapshot[localSong.id];
-      const localMarkdown = songToMarkdown(localSong);
+      const localMarkdown = this.getSongMarkdownCached(localSong);
       const isLocallyCreated = committedMarkdown === undefined;
       const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
 
-      if (isLocallyCreated || isLocallyModified) {
-        // Author created or modified this song locally, keep it!
+      if (isLocallyCreated || isLocallyModified || !pruneDeleted) {
         reconciledSongs.push(localSong);
       } else {
-        // This song was previously committed but has been deleted from the repository.
-        // Since local user made no edits to it, remove it cleanly.
         delete nextSnapshot[localSong.id];
         hasChanges = true;
       }
     }
 
-    // 3. Sort reconciled songs consistently (published first, then drafts, then private; then year/recency)
+    // 3. Sort reconciled songs consistently
     reconciledSongs.sort((a, b) => {
       const statusOrder: Record<string, number> = { published: 1, draft: 2, private: 3 };
       const orderDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
@@ -269,50 +569,35 @@ export class StorageService {
 
     if (hasChanges) {
       this.saveSongs(reconciledSongs);
-      try {
-        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(nextSnapshot));
-      } catch (err) {
-        console.warn('Failed to update snapshot during catalog reconciliation', err);
-      }
+      this.saveRawSnapshot(nextSnapshot);
     }
 
     return { songs: reconciledSongs, hasChanges };
   }
 
   /**
-   * Load all songs from local storage, seamlessly reconciling with bundled repository songs.
-   * Any newly pushed songs or updates in the repository are automatically incorporated
-   * for every visitor on any device without requiring manual cache clearing.
+   * Load all songs from the hydrated in-memory IndexedDB cache (O(1) read, no per-read reconciliation).
+   * Falls back cleanly in environments without IndexedDB.
    */
   static getSongs(): Song[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_SONGS);
-      if (stored) {
-        let localSongs: Song[] = JSON.parse(stored);
-        if (Array.isArray(localSongs) && localSongs.length > 0) {
-          // Sanitize any stale/orphaned blob URLs from past browsing sessions
-          localSongs = localSongs.map(s => {
-            if (s.audioUrl && !isValidPlayableAudioUrl(s.audioUrl)) {
-              return { ...s, audioUrl: undefined };
-            }
-            return s;
-          });
-
-          const { songs: reconciled } = this.reconcileWithCatalog(
-            localSongs,
-            INITIAL_SONGS,
-            'repositorio empaquetado (INITIAL_SONGS)'
-          );
-          return reconciled;
-        }
+    if (IndexedDbStore.isAvailable()) {
+      if (this.cache.songs !== null) {
+        return this.cache.songs;
       }
-    } catch (e) {
-      console.warn('Failed to parse songs from storage', e);
+      // Pre-hydration read: return bundled songs read-only without overwriting IndexedDB
+      return sanitizeSongsList(INITIAL_SONGS);
     }
-    // Seed initial
-    this.saveSongs(INITIAL_SONGS);
-    this.saveSnapshot(INITIAL_SONGS);
-    return INITIAL_SONGS;
+
+    // Headless fallback (no IndexedDB, e.g., Node test runner with localStorage mock)
+    const stored = safeReadLocalStorageJson<Song[]>(STORAGE_KEY_SONGS);
+    if (Array.isArray(stored) && stored.length > 0) {
+      return sanitizeSongsList(stored);
+    }
+
+    const seeded = sanitizeSongsList(INITIAL_SONGS);
+    this.saveSongs(seeded);
+    this.saveSnapshot(seeded);
+    return seeded;
   }
 
   /**
@@ -323,20 +608,16 @@ export class StorageService {
   }
 
   /**
-   * Save songs collection to local storage
+   * Save full songs collection to cache + IndexedDB (or fallback storage)
    */
   static saveSongs(songs: Song[]): void {
-    try {
-      // Never persist session blob URLs into persistent localStorage
-      const sanitized = songs.map(s => {
-        if (s.audioUrl && (s.audioUrl.startsWith('blob:') || !isValidPlayableAudioUrl(s.audioUrl))) {
-          return { ...s, audioUrl: undefined };
-        }
-        return s;
-      });
-      localStorage.setItem(STORAGE_KEY_SONGS, JSON.stringify(sanitized));
-    } catch (e) {
-      console.error('Failed to save songs', e);
+    const sanitized = sanitizeSongsList(songs);
+    this.cache.songs = sanitized;
+
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.replaceAllSongs(sanitized));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_SONGS, sanitized);
     }
   }
 
@@ -359,26 +640,32 @@ export class StorageService {
   }
 
   /**
-   * Save or update a single song
+   * Save or update a single song (writes only the modified song record in IndexedDB)
    */
   static upsertSong(song: Song): Song[] {
     this.assertAuthorAuthorized('crear o modificar canciones');
     const songs = this.getSongs();
     const existingIndex = songs.findIndex(s => s.id === song.id);
-    const updatedSong: Song = {
+    const [sanitizedSong] = sanitizeSongsList([{
       ...song,
       updatedAt: new Date().toISOString()
-    };
+    }]);
 
     let updatedList: Song[];
     if (existingIndex >= 0) {
       updatedList = [...songs];
-      updatedList[existingIndex] = updatedSong;
+      updatedList[existingIndex] = sanitizedSong;
     } else {
-      updatedList = [updatedSong, ...songs];
+      updatedList = [sanitizedSong, ...songs];
     }
 
-    this.saveSongs(updatedList);
+    this.cache.songs = updatedList;
+    if (IndexedDbStore.isAvailable()) {
+      const orderIds = updatedList.map(s => s.id);
+      this.enqueueDbWrite(() => IndexedDbStore.putSong(sanitizedSong, orderIds));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_SONGS, updatedList);
+    }
     return updatedList;
   }
 
@@ -390,17 +677,21 @@ export class StorageService {
     const songs = this.getSongs();
     const targetSong = songs.find(s => s.id === id);
     const filtered = songs.filter(s => s.id !== id);
-    this.saveSongs(filtered);
+
+    this.cache.songs = filtered;
+    if (IndexedDbStore.isAvailable()) {
+      const orderIds = filtered.map(s => s.id);
+      this.enqueueDbWrite(() => IndexedDbStore.deleteSong(id, orderIds));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_SONGS, filtered);
+    }
 
     // Clean up snapshot entry for this song
     const snapshot = this.getSnapshot();
     if (snapshot[id]) {
-      delete snapshot[id];
-      try {
-        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(snapshot));
-      } catch (err) {
-        console.warn('Failed to update snapshot on delete', err);
-      }
+      const nextSnapshot = { ...snapshot };
+      delete nextSnapshot[id];
+      this.saveRawSnapshot(nextSnapshot);
     }
 
     if (autoCommit && targetSong) {
@@ -420,7 +711,6 @@ export class StorageService {
 
   /**
    * Rename a song file (id) from songs/oldId.md to songs/newId.md
-   * updates the songs collection, snapshots, and optionally records a Git commit
    */
   static renameSongFile(
     oldId: string,
@@ -444,10 +734,11 @@ export class StorageService {
     }
 
     if (cleanNewId === oldId) {
+      const songs = this.getSongs();
       return {
         success: true,
-        songs: this.getSongs(),
-        renamedSong: this.getSongs().find(s => s.id === oldId)
+        songs,
+        renamedSong: songs.find(s => s.id === oldId)
       };
     }
 
@@ -483,13 +774,10 @@ export class StorageService {
     // Update snapshot: move snapshot[oldId] to snapshot[cleanNewId]
     const snapshot = this.getSnapshot();
     if (snapshot[oldId]) {
-      snapshot[cleanNewId] = songToMarkdown(renamedSong);
-      delete snapshot[oldId];
-      try {
-        localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(snapshot));
-      } catch (err) {
-        console.warn('Failed to update snapshot on rename', err);
-      }
+      const nextSnapshot = { ...snapshot };
+      nextSnapshot[cleanNewId] = this.getSongMarkdownCached(renamedSong);
+      delete nextSnapshot[oldId];
+      this.saveRawSnapshot(nextSnapshot);
     }
 
     if (autoCommit) {
@@ -510,7 +798,14 @@ export class StorageService {
    */
   static getUnpushedCommitsCount(): number {
     const commits = this.getCommits();
-    const lastPushed = localStorage.getItem('tony_cancionero_last_push_v1');
+    let lastPushed: string | null = null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        lastPushed = localStorage.getItem('tony_cancionero_last_push_v1');
+      }
+    } catch {
+      lastPushed = null;
+    }
     if (!lastPushed) return commits.length;
     const lastPushedTime = new Date(lastPushed).getTime();
     return commits.filter(c => new Date(c.timestamp).getTime() > lastPushedTime).length;
@@ -520,13 +815,16 @@ export class StorageService {
    * Get Git commit history
    */
   static getCommits(): GitCommit[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_COMMITS);
-      if (stored) {
-        return JSON.parse(stored);
+    if (IndexedDbStore.isAvailable()) {
+      if (this.cache.commits !== null) {
+        return this.cache.commits;
       }
-    } catch (e) {
-      console.warn('Failed to parse git commits', e);
+      return createInitialCommits();
+    }
+
+    const stored = safeReadLocalStorageJson<GitCommit[]>(STORAGE_KEY_COMMITS);
+    if (Array.isArray(stored)) {
+      return stored;
     }
     const initial = createInitialCommits();
     this.saveCommits(initial);
@@ -534,10 +832,11 @@ export class StorageService {
   }
 
   static saveCommits(commits: GitCommit[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_COMMITS, JSON.stringify(commits));
-    } catch (e) {
-      console.error('Failed to save commits', e);
+    this.cache.commits = commits;
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.setKV(KV_KEYS.COMMITS, commits));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_COMMITS, commits);
     }
   }
 
@@ -545,23 +844,29 @@ export class StorageService {
    * Snapshot dictionary of committed markdown content by song ID
    */
   static getSnapshot(): Record<string, string> {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn('Failed to parse snapshot', e);
+    if (IndexedDbStore.isAvailable()) {
+      return this.cache.snapshot ?? {};
+    }
+
+    const stored = safeReadLocalStorageJson<Record<string, string>>(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT);
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+      return stored;
     }
     return {};
   }
 
+  static saveRawSnapshot(snapshot: Record<string, string>): void {
+    this.cache.snapshot = snapshot;
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.setKV(KV_KEYS.SNAPSHOT, snapshot));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, snapshot);
+    }
+  }
+
   static saveSnapshot(songs: Song[]): void {
-    const snapshot: Record<string, string> = {};
-    songs.forEach(s => {
-      snapshot[s.id] = songToMarkdown(s);
-    });
-    localStorage.setItem(STORAGE_KEY_LAST_COMMITTED_SNAPSHOT, JSON.stringify(snapshot));
+    const snapshot = this.buildSnapshotRecord(songs);
+    this.saveRawSnapshot(snapshot);
   }
 
   /**
@@ -578,20 +883,18 @@ export class StorageService {
     const currentMap = new Map<string, Song>();
     currentSongs.forEach(s => currentMap.set(s.id, s));
 
-    // Check current songs against snapshot
     currentSongs.forEach(song => {
       const committedMarkdown = snapshot[song.id];
       if (!committedMarkdown) {
         created.push(`songs/${song.id}.md`);
       } else {
-        const currentMarkdown = songToMarkdown(song);
+        const currentMarkdown = this.getSongMarkdownCached(song);
         if (currentMarkdown.trim() !== committedMarkdown.trim()) {
           modified.push(`songs/${song.id}.md`);
         }
       }
     });
 
-    // Check for deleted
     Object.keys(snapshot).forEach(songId => {
       if (!currentMap.has(songId)) {
         deleted.push(`songs/${songId}.md`);
@@ -608,9 +911,6 @@ export class StorageService {
     };
   }
 
-  /**
-   * Create a new Git commit recording current files state
-   */
   /**
    * Create a new Git commit recording current files state
    */
@@ -634,17 +934,13 @@ export class StorageService {
       snapshot: {}
     };
 
-    // Store markdown snapshot for rollback
     songs.forEach(s => {
-      newCommit.snapshot[s.id] = songToMarkdown(s);
+      newCommit.snapshot[s.id] = this.getSongMarkdownCached(s);
     });
 
-    // Update commits list
     const currentCommits = this.getCommits();
     const updatedCommits = [newCommit, ...currentCommits];
     this.saveCommits(updatedCommits);
-
-    // Save current state as baseline snapshot
     this.saveSnapshot(songs);
 
     return {
@@ -660,11 +956,10 @@ export class StorageService {
     const commits = this.getCommits();
     const currentSongs = this.getSongs();
     const currentSong = currentSongs.find(s => s.id === songId);
-    const currentMarkdown = currentSong ? songToMarkdown(currentSong) : '';
+    const currentMarkdown = currentSong ? this.getSongMarkdownCached(currentSong) : '';
 
     const records: SongVersionRecord[] = [];
 
-    // Filter commits that touched this song or have a snapshot for it
     commits.forEach(commit => {
       const hasChangedFile = commit.filesChanged?.some(f => f.includes(songId));
       const snapshotMarkdown = commit.snapshot?.[songId];
@@ -679,7 +974,6 @@ export class StorageService {
       }
     });
 
-    // Ensure there is at least one record (the current version)
     if (records.length === 0 && currentSong) {
       records.push({
         commit: {
@@ -714,7 +1008,6 @@ export class StorageService {
    */
   static resetToDefault(): Song[] {
     this.assertAuthorAuthorized('restablecer catálogo a demostración');
-    // Create automatic safety backup point before resetting
     this.createBackupPoint(
       'Backup automático previo a restablecer catálogo inicial de demostración',
       'pre_reset'
@@ -737,7 +1030,6 @@ export class StorageService {
         throw new Error('El archivo JSON debe contener un arreglo de canciones.');
       }
 
-      // Automatic backup point before mass JSON import
       const backup = this.createBackupPoint(
         `Backup automático previo a importar archivo JSON (${data.length} temas)`,
         'pre_import_json'
@@ -783,29 +1075,32 @@ export class StorageService {
   }
 
   /**
-   * Retrieve all saved backup points (restore points)
+   * Retrieve all saved backup points (decoded from compressed incremental archive, max 5)
    */
   static getBackupPoints(): SongBackupPoint[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_BACKUPS);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (err) {
-      console.warn('Error reading backup points from localStorage:', err);
+    if (IndexedDbStore.isAvailable()) {
+      return this.cache.backups ?? [];
+    }
+
+    const stored = safeReadLocalStorageJson<Array<StoredBackupEntry | SongBackupPoint>>(STORAGE_KEY_BACKUPS);
+    if (Array.isArray(stored)) {
+      return decodeBackupArchive(stored).slice(0, MAX_BACKUP_POINTS);
     }
     return [];
   }
 
   /**
-   * Save backup points list to localStorage (retains up to 20 most recent points)
+   * Save backup points as compressed incremental diffs (retains up to MAX_BACKUP_POINTS = 5 points)
    */
   static saveBackupPoints(backups: SongBackupPoint[]): void {
-    try {
-      const trimmed = backups.slice(0, 20);
-      localStorage.setItem(STORAGE_KEY_BACKUPS, JSON.stringify(trimmed));
-    } catch (err) {
-      console.warn('Error saving backup points to localStorage:', err);
+    const trimmed = (backups || []).slice(0, MAX_BACKUP_POINTS);
+    this.cache.backups = trimmed;
+    const encodedArchive = encodeBackupArchive(trimmed);
+
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.setKV(KV_KEYS.BACKUPS, encodedArchive));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_BACKUPS, encodedArchive);
     }
   }
 
@@ -817,17 +1112,9 @@ export class StorageService {
     reason: SongBackupPoint['reason'] = 'manual',
     songsToBackup?: Song[]
   ): SongBackupPoint {
-    let currentSongs = songsToBackup;
-    if (!currentSongs) {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY_SONGS);
-        currentSongs = stored ? JSON.parse(stored) : [];
-      } catch {
-        currentSongs = [];
-      }
-    }
-    const safeSongs = currentSongs || [];
-    const songsJson = JSON.stringify(safeSongs, null, 2);
+    const currentSongs = songsToBackup ?? this.getSongs();
+    const safeSongs = sanitizeSongsList(currentSongs || []);
+    const songsJson = JSON.stringify(safeSongs);
 
     const backupPoint: SongBackupPoint = {
       id: `backup-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -845,7 +1132,7 @@ export class StorageService {
     };
 
     const currentBackups = this.getBackupPoints();
-    const updated = [backupPoint, ...currentBackups];
+    const updated = [backupPoint, ...currentBackups].slice(0, MAX_BACKUP_POINTS);
     this.saveBackupPoints(updated);
 
     return backupPoint;
@@ -880,11 +1167,9 @@ export class StorageService {
         throw new Error('El contenido del backup no es un catálogo de canciones válido.');
       }
 
-      // Save restored songs
       this.saveSongs(parsedSongs);
       this.saveSnapshot(parsedSongs);
 
-      // Create a Git commit marking this restoration
       this.createGitCommit(
         `revert: revertir cancionero completo al punto de restauración '${target.name}' (${parsedSongs.length} temas)`
       );
@@ -918,45 +1203,43 @@ export class StorageService {
    */
   static clearAllBackups(): void {
     this.assertAuthorAuthorized('purgar copias de seguridad');
-    try {
-      localStorage.removeItem(STORAGE_KEY_BACKUPS);
-    } catch (e) {
-      console.warn('Error clearing backups', e);
+    this.cache.backups = [];
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.deleteKV(KV_KEYS.BACKUPS));
+    } else {
+      safeRemoveLocalStorage(STORAGE_KEY_BACKUPS);
     }
   }
 
   /**
-   * Get all albums from persistent localStorage with fallback to initial albums
+   * Get all albums from IndexedDB cache with fallback to initial albums
    */
   static getAlbums(): Album[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_ALBUMS);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
+    if (IndexedDbStore.isAvailable()) {
+      if (this.cache.albums !== null) {
+        return this.cache.albums;
       }
-    } catch (err) {
-      console.warn('Error loading albums from localStorage', err);
+      return [...INITIAL_ALBUMS];
     }
-    // Return cloned INITIAL_ALBUMS and seed localStorage
-    try {
-      localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(INITIAL_ALBUMS));
-    } catch {
-      // ignore
+
+    const stored = safeReadLocalStorageJson<Album[]>(STORAGE_KEY_ALBUMS);
+    if (Array.isArray(stored) && stored.length > 0) {
+      return stored;
     }
-    return [...INITIAL_ALBUMS];
+    const seeded = [...INITIAL_ALBUMS];
+    this.saveAlbums(seeded);
+    return seeded;
   }
 
   /**
-   * Save full albums list to persistent localStorage
+   * Save full albums list to IndexedDB (or fallback storage)
    */
   static saveAlbums(albums: Album[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(albums));
-    } catch (err) {
-      console.warn('Error saving albums to localStorage', err);
+    this.cache.albums = albums;
+    if (IndexedDbStore.isAvailable()) {
+      this.enqueueDbWrite(() => IndexedDbStore.replaceAllAlbums(albums));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_ALBUMS, albums);
     }
   }
 
@@ -991,7 +1274,13 @@ export class StorageService {
       updatedList = [updatedAlbum, ...albums];
     }
 
-    this.saveAlbums(updatedList);
+    this.cache.albums = updatedList;
+    if (IndexedDbStore.isAvailable()) {
+      const orderIds = updatedList.map(a => a.id);
+      this.enqueueDbWrite(() => IndexedDbStore.putAlbum(updatedAlbum, orderIds));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_ALBUMS, updatedList);
+    }
     return updatedList;
   }
 
@@ -1002,8 +1291,13 @@ export class StorageService {
     this.assertAuthorAuthorized('eliminar álbumes');
     const albums = this.getAlbums();
     const filtered = albums.filter(a => a.id !== id);
-    this.saveAlbums(filtered);
+    this.cache.albums = filtered;
+    if (IndexedDbStore.isAvailable()) {
+      const orderIds = filtered.map(a => a.id);
+      this.enqueueDbWrite(() => IndexedDbStore.deleteAlbum(id, orderIds));
+    } else {
+      safeWriteLocalStorageJson(STORAGE_KEY_ALBUMS, filtered);
+    }
     return filtered;
   }
 }
-

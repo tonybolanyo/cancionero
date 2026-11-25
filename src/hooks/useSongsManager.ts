@@ -20,6 +20,7 @@ export function useSongsManager({
   onOpenAuthModal
 }: UseSongsManagerOptions) {
   const [songs, setSongs] = useState<Song[]>(() => StorageService.getSongs());
+  const [isStorageReady, setIsStorageReady] = useState<boolean>(() => StorageService.isReady());
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
   const [gitToast, setGitToast] = useState<ToastData | null>(null);
 
@@ -32,7 +33,7 @@ export function useSongsManager({
     checkGitStatus();
   }, [checkGitStatus]);
 
-  // Background catalog synchronization from remote
+  // Hydrate IndexedDB storage at boot and synchronize catalog from remote
   useEffect(() => {
     let isMounted = true;
     let isSyncing = false;
@@ -41,6 +42,9 @@ export function useSongsManager({
       if (isSyncing) return;
       isSyncing = true;
       try {
+        await StorageService.init();
+        if (!isMounted) return;
+
         const result = await GitHubSyncService.syncCatalogFromRemote(
           token,
           GitHubSyncService.getRemoteConfig(userLogin)
@@ -59,7 +63,20 @@ export function useSongsManager({
       }
     };
 
-    void syncCatalog();
+    const initAndSync = async () => {
+      try {
+        await StorageService.init();
+        if (!isMounted) return;
+        setIsStorageReady(true);
+        setSongs(StorageService.getSongs());
+        checkGitStatus();
+      } catch (err) {
+        console.warn('Storage init error:', err);
+      }
+      await syncCatalog();
+    };
+
+    void initAndSync();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -185,6 +202,7 @@ export function useSongsManager({
   return {
     songs,
     setSongs,
+    isStorageReady,
     hasUncommittedChanges,
     checkGitStatus,
     gitToast,

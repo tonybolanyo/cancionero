@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   GitBranch,
@@ -60,6 +60,21 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   );
   const [manualBackupName, setManualBackupName] = useState('');
   const [selectedBackup, setSelectedBackup] = useState<SongBackupPoint | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    StorageService.init()
+      .then(() => {
+        if (active) {
+          setBackupPoints(StorageService.getBackupPoints());
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
 
   const [autoCommitGlobal, setAutoCommitGlobal] = useState<boolean>(() =>
     GitHubSyncService.isAutoCommitEnabled()
