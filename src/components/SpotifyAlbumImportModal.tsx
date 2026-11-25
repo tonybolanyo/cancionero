@@ -171,16 +171,16 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
         StorageService.upsertSong(song);
       }
 
-      // Optionally push to GitHub if authenticated
+      // Optionally push to GitHub atomically if authenticated
       if (token && isAuthor) {
         try {
-          for (const song of newSongs) {
-            await GitHubSyncService.pushSongFile(
-              song,
-              `feat(songs): add "${song.title}" from album "${albumData.title}"`,
-              token
-            );
-          }
+          await GitHubSyncService.pushFullCatalog(
+            StorageService.getSongs(),
+            `feat(songs): import ${newSongs.length} song(s) from album "${albumData.title}"`,
+            token,
+            undefined,
+            { changedFiles: newSongs.map(s => `songs/${s.id}.md`) }
+          );
         } catch (gitErr) {
           console.warn('Could not push to GitHub:', gitErr);
         }

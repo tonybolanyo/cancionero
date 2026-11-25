@@ -117,6 +117,7 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     }
 
     const currentMsg = commitMessage.trim();
+    const priorUnpushedFiles = StorageService.getUnpushedChangedFiles(lastPushTime);
 
     // Automatic backup before push if autoPushAfterCommit is enabled
     if (autoPushAfterCommit) {
@@ -133,14 +134,20 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     if (autoPushAfterCommit) {
       setIsPushing(true);
       try {
+        const filesToSync = Array.from(
+          new Set([...(commit.filesChanged || []), ...priorUnpushedFiles])
+        );
         const pushResult = await GitHubSyncService.pushFullCatalog(
           songs,
           `feat(sync): [${commit.hash}] ${currentMsg}`,
           token,
-          remoteConfig
+          remoteConfig,
+          { changedFiles: filesToSync }
         );
         setNotification({
-          message: `Commit [${commit.hash}] registrado y Push a GitHub completado: ${pushResult.message}`,
+          message: pushResult.success
+            ? `Commit [${commit.hash}] registrado y Push atómico a GitHub completado: ${pushResult.message}`
+            : `Commit [${commit.hash}] guardado localmente, pero el Push a GitHub falló: ${pushResult.message}`,
           type: pushResult.success ? 'success' : 'error'
         });
       } catch (err: any) {
@@ -171,11 +178,25 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     setIsPushing(true);
     setNotification(null);
     try {
+      const currentStatus = StorageService.getGitStatus();
+      const unpushedFiles = StorageService.getUnpushedChangedFiles(lastPushTime);
+      const filesToSync = Array.from(
+        new Set([
+          ...currentStatus.modified,
+          ...currentStatus.created,
+          ...currentStatus.deleted,
+          ...unpushedFiles
+        ])
+      );
       const pushResult = await GitHubSyncService.pushFullCatalog(
         songs,
-        `sync: sincronización manual del cancionero (${songs.length} temas)`,
+        `sync: sincronización atómica del cancionero (${songs.length} temas)`,
         token,
-        remoteConfig
+        remoteConfig,
+        {
+          changedFiles: filesToSync,
+          deletedPaths: currentStatus.deleted
+        }
       );
       setNotification({
         message: pushResult.message,
@@ -198,7 +219,7 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
 
     try {
       const result = await GitHubSyncService.syncCatalogFromRemote(token, remoteConfig, { forceReload });
-      if (result.songs) {
+      if (result.songs && !result.notModified) {
         onSongsUpdated(result.songs);
       }
       setNotification({
@@ -720,6 +741,11 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                       <span className="font-mono">ETag: {GitHubSyncService.getCatalogETag()?.replace(/"/g, '').substring(0, 12)}...</span>
                     </div>
                   )}
+                  {GitHubSyncService.getRemoteSha() && (
+                    <div className="hidden sm:inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] opacity-80" title={`SHA remoto de catalog.json: ${GitHubSyncService.getRemoteSha()}`}>
+                      <span className="font-mono">SHA: {GitHubSyncService.getRemoteSha()?.substring(0, 7)}</span>
+                    </div>
+                  )}
                 </div>
                 {lastPushTime && (
                   <div>
@@ -785,7 +811,7 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
                       </a>
                     </div>
                     <p className="text-[11px] text-[var(--text-muted)]">
-                      Archivos sincronizados: <code className="font-mono text-[var(--text-primary)]">songs/*.md</code> (una por canción) y el índice <code className="font-mono text-[var(--text-primary)]">catalog.json</code>.
+                      Commits atómicos (Git Data API): <code className="font-mono text-[var(--text-primary)]">songs/*.md</code>, <code className="font-mono text-[var(--text-primary)]">catalog.json</code> y <code className="font-mono text-[var(--text-primary)]">albums.json</code> en una única transacción.
                     </p>
                   </div>
                 </div>

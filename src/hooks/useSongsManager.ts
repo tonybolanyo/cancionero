@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { songToMarkdown } from '../utils/markdownParser';
 import { ToastData } from '../components/GitNotificationToast';
+
+const VISIBILITY_SYNC_COOLDOWN_MS = 5000;
 
 export interface UseSongsManagerOptions {
   token: string | null;
@@ -23,6 +25,8 @@ export function useSongsManager({
   const [isStorageReady, setIsStorageReady] = useState<boolean>(() => StorageService.isReady());
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState<boolean>(false);
   const [gitToast, setGitToast] = useState<ToastData | null>(null);
+  const syncInFlightRef = useRef<boolean>(false);
+  const lastVisibilitySyncAtRef = useRef<number>(0);
 
   const checkGitStatus = useCallback(() => {
     const status = StorageService.getGitStatus();
@@ -36,11 +40,21 @@ export function useSongsManager({
   // Hydrate IndexedDB storage at boot and synchronize catalog from remote
   useEffect(() => {
     let isMounted = true;
-    let isSyncing = false;
 
-    const syncCatalog = async () => {
-      if (isSyncing) return;
-      isSyncing = true;
+    const syncCatalog = async (reason: 'boot' | 'visibility' = 'boot') => {
+      if (syncInFlightRef.current || GitHubSyncService.isSyncInProgress()) {
+        return;
+      }
+
+      if (reason === 'visibility') {
+        const now = Date.now();
+        if (now - lastVisibilitySyncAtRef.current < VISIBILITY_SYNC_COOLDOWN_MS) {
+          return;
+        }
+        lastVisibilitySyncAtRef.current = now;
+      }
+
+      syncInFlightRef.current = true;
       try {
         await StorageService.init();
         if (!isMounted) return;
@@ -54,12 +68,28 @@ export function useSongsManager({
           return;
         }
 
-        setSongs(result.songs);
+        if (!result.notModified) {
+          setSongs(result.songs);
+        }
         checkGitStatus();
+
+        if (
+          isAuthor &&
+          !result.notModified &&
+          result.preservedLocalIds &&
+          result.preservedLocalIds.length > 0
+        ) {
+          setGitToast({
+            id: `toast-conflict-${Date.now()}`,
+            type: 'info',
+            title: 'Cambios Locales Protegidos',
+            message: `Se conservaron ${result.preservedLocalIds.length} canción(es) con ediciones locales más recientes frente al remoto.`
+          });
+        }
       } catch (err) {
         console.warn('Auto sync catalog error:', err);
       } finally {
-        isSyncing = false;
+        syncInFlightRef.current = false;
       }
     };
 
@@ -73,14 +103,14 @@ export function useSongsManager({
       } catch (err) {
         console.warn('Storage init error:', err);
       }
-      await syncCatalog();
+      await syncCatalog('boot');
     };
 
     void initAndSync();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void syncCatalog();
+        void syncCatalog('visibility');
       }
     };
 
@@ -89,7 +119,7 @@ export function useSongsManager({
       isMounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [token, userLogin, checkGitStatus]);
+  }, [token, userLogin, isAuthor, checkGitStatus]);
 
   const handleSongsUpdated = useCallback((updatedSongs: Song[]) => {
     setSongs(updatedSongs);

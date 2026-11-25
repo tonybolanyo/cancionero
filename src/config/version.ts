@@ -1,12 +1,12 @@
 // Auto-generated version file - DO NOT EDIT
-// Generated at 2026-11-25T19:07:18.071Z
+// Generated at 2026-11-25T20:26:43.928Z
 // Managed by release-please with conventional commits analysis
 
 export const APP_VERSION = '0.0.1';
 export const BUILD_NUMBER = 0;
 export const COMMIT_HASH = 'unknown';
 export const BUILD_BRANCH = 'unknown';
-export const BUILD_TIMESTAMP = '2026-11-25T19:07:18.071Z';
+export const BUILD_TIMESTAMP = '2026-11-25T20:26:43.928Z';
 
 /**
  * Version string including build metadata

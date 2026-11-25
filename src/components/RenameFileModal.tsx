@@ -88,22 +88,19 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
 
       let pushRes: PushResult | undefined;
 
-      // If user chose to push to remote GitHub repository
+      // If user chose to push to remote GitHub repository (single atomic commit: new .md + delete old .md + catalog.json + albums.json)
       if (autoCommit && autoPush) {
         const commitMsg = `refactor(files): renombrar 'songs/${song.id}.md' a 'songs/${clean}.md'`;
 
-        // 1. Push the new file to GitHub
         pushRes = await GitHubSyncService.pushSongFile(
           result.renamedSong,
           commitMsg,
-          token
-        );
-
-        // 2. Delete the old file path on GitHub
-        await GitHubSyncService.deleteRemoteFile(
-          `songs/${song.id}.md`,
-          `chore(files): eliminar ruta anterior tras renombrar a 'songs/${clean}.md'`,
-          token
+          token,
+          undefined,
+          {
+            songs: result.songs,
+            deletePaths: [`songs/${song.id}.md`]
+          }
         );
       }
 

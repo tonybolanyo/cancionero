@@ -415,7 +415,7 @@ export class StorageService {
     incomingSongs: Song[],
     sourceName: string = 'remoto/empaquetado',
     options?: { pruneDeleted?: boolean }
-  ): { songs: Song[]; hasChanges: boolean } {
+  ): { songs: Song[]; hasChanges: boolean; preservedConflictIds?: string[] } {
     this.reconciliationCount += 1;
     const pruneDeleted = options?.pruneDeleted ?? true;
 
@@ -432,6 +432,7 @@ export class StorageService {
 
     const nextSnapshot: Record<string, string> = { ...snapshot };
     let hasChanges = false;
+    const preservedConflictIds: string[] = [];
 
     const handledIds = new Set<string>();
     const reconciledSongs: Song[] = [];
@@ -476,8 +477,12 @@ export class StorageService {
       const localMarkdown = this.getSongMarkdownCached(localSong);
       const incomingMarkdown = this.getSongMarkdownCached(resolvedIncoming);
 
-      // Check if user has uncommitted changes locally
-      const isLocallyModified = committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim();
+      // Check if user has uncommitted changes locally (modified vs snapshot OR locally created without snapshot)
+      const isLocallyCreatedConflict =
+        committedMarkdown === undefined && localMarkdown.trim() !== incomingMarkdown.trim();
+      const isLocallyModified =
+        (committedMarkdown !== undefined && localMarkdown.trim() !== committedMarkdown.trim()) ||
+        isLocallyCreatedConflict;
 
       if (!isLocallyModified) {
         const isDifferent = localMarkdown.trim() !== incomingMarkdown.trim() ||
@@ -511,6 +516,16 @@ export class StorageService {
         }
       } else {
         // Local song has uncommitted edits on this device.
+        // If remote matches the last committed base snapshot, remote has NOT changed — never overwrite local edits.
+        const remoteUnchangedSinceSnapshot =
+          committedMarkdown !== undefined && incomingMarkdown.trim() === committedMarkdown.trim();
+
+        if (remoteUnchangedSinceSnapshot) {
+          reconciledSongs.push(localSong);
+          preservedConflictIds.push(localSong.id);
+          continue;
+        }
+
         const localTs = Date.parse(localSong.updatedAt || '0');
         const incomingTs = Date.parse(resolvedIncoming.updatedAt || '0');
 
@@ -529,6 +544,7 @@ export class StorageService {
           hasChanges = true;
         } else {
           reconciledSongs.push(localSong);
+          preservedConflictIds.push(localSong.id);
         }
       }
     }
@@ -572,7 +588,11 @@ export class StorageService {
       this.saveRawSnapshot(nextSnapshot);
     }
 
-    return { songs: reconciledSongs, hasChanges };
+    return {
+      songs: reconciledSongs,
+      hasChanges,
+      ...(preservedConflictIds.length > 0 ? { preservedConflictIds } : {})
+    };
   }
 
   /**
@@ -809,6 +829,42 @@ export class StorageService {
     if (!lastPushed) return commits.length;
     const lastPushedTime = new Date(lastPushed).getTime();
     return commits.filter(c => new Date(c.timestamp).getTime() > lastPushedTime).length;
+  }
+
+  /**
+   * Collect all songs/*.md paths modified/created/deleted in unpushed local commits
+   */
+  static getUnpushedChangedFiles(lastPushTime?: string | null): string[] {
+    const commits = this.getCommits();
+    let lastPushed = lastPushTime;
+    if (lastPushed === undefined) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          lastPushed = localStorage.getItem('tony_cancionero_last_push_v1');
+        }
+      } catch {
+        lastPushed = null;
+      }
+    }
+    const seedHashes = new Set(['a108f92', 'b319e41', 'c4e819b', 'e1d93aa', 'init123']);
+    const lastPushedMs = lastPushed ? Date.parse(lastPushed) : NaN;
+
+    const files = new Set<string>();
+    for (const commit of commits) {
+      if (!lastPushed && seedHashes.has(commit.hash)) {
+        continue;
+      }
+      const commitMs = Date.parse(commit.timestamp || '');
+      if (lastPushed && Number.isFinite(lastPushedMs) && Number.isFinite(commitMs) && commitMs <= lastPushedMs) {
+        continue;
+      }
+      (commit.filesChanged || []).forEach(f => {
+        if (f.startsWith('songs/') && f.endsWith('.md')) {
+          files.add(f);
+        }
+      });
+    }
+    return Array.from(files);
   }
 
   /**

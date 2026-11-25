@@ -50,22 +50,16 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
 
       let pushResult: PushResult | undefined;
 
-      // 2. If remote sync requested and token is present, delete from GitHub
+      // 2. If remote sync requested and token is present, delete from GitHub atomically with catalog.json & albums.json
       if (autoCommit && autoPush && token?.trim()) {
         const commitMsg = defaultCommitMessage;
 
-        // Delete remote markdown file
-        await GitHubSyncService.deleteRemoteFile(
-          `songs/${song.id}.md`,
-          commitMsg,
-          token
-        );
-
-        // Update remote catalog.json
         pushResult = await GitHubSyncService.pushFullCatalog(
           result.songs,
-          `chore(catalog): actualizar catálogo tras eliminar "${song.title}"`,
-          token
+          commitMsg,
+          token,
+          undefined,
+          { deletedPaths: [`songs/${song.id}.md`] }
         );
       }
 
