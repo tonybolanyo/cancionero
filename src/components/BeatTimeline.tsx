@@ -917,12 +917,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
           )}
         </div>
 
-        {/* Right Controls: Zoom + Capas Popover + Recalculate */}
+        {/* Right Controls: Zoom + Capas Popover / Mobile Bottom Sheet + Recalculate */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={cycleZoom}
-            className={`min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+            className={`min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
               zoomLevel > 1
                 ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)]'
                 : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -933,12 +933,12 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             <span>{zoomLevel}x</span>
           </button>
 
-          {/* Unified Layers Popover */}
+          {/* Unified Layers Popover (Desktop) + Bottom Sheet (Mobile) */}
           <div className="relative" ref={layersMenuRef}>
             <button
               type="button"
               onClick={() => setShowLayersMenu(prev => !prev)}
-              className="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+              className="min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
               title="Mostrar u ocultar pistas en la línea de tiempo"
             >
               <Layers className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
@@ -947,53 +947,132 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
             </button>
 
             {showLayersMenu && (
-              <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1.5 z-30 text-xs">
-                {sections && sections.length > 0 && (
+              <>
+                {/* Desktop Popover */}
+                <div className="hidden sm:block absolute right-0 mt-1.5 w-52 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1.5 z-30 text-xs">
+                  {sections && sections.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSections(v => !v)}
+                      className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                    >
+                      <span>Estructura ({sections.length})</span>
+                      {showSections && <Check className="w-3.5 h-3.5 text-sky-500" />}
+                    </button>
+                  )}
+                  {chords && chords.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowChords(v => !v)}
+                      className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                    >
+                      <span>Acordes ({chords.length})</span>
+                      {showChords && <Check className="w-3.5 h-3.5 text-purple-500" />}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setShowSections(v => !v)}
+                    onClick={() => setShowBeats(v => !v)}
                     className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
                   >
-                    <span>Estructura ({sections.length})</span>
-                    {showSections && <Check className="w-3.5 h-3.5 text-sky-500" />}
+                    <span>Rejilla de pulsos</span>
+                    {showBeats && <Check className="w-3.5 h-3.5 text-emerald-500" />}
                   </button>
-                )}
-                {chords && chords.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setShowChords(v => !v)}
+                    onClick={() => setShowOnsets(v => !v)}
                     className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
                   >
-                    <span>Acordes ({chords.length})</span>
-                    {showChords && <Check className="w-3.5 h-3.5 text-purple-500" />}
+                    <span>Ataques (Onsets)</span>
+                    {showOnsets && <Check className="w-3.5 h-3.5 text-cyan-500" />}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowBeats(v => !v)}
-                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                  <div className="my-1 border-t border-[var(--border-subtle)]" />
+                  <button
+                    type="button"
+                    onClick={() => setIsTallWaveform(v => !v)}
+                    className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <span>Onda expandida</span>
+                    {isTallWaveform && <Check className="w-3.5 h-3.5 text-[var(--accent-primary)]" />}
+                  </button>
+                </div>
+
+                {/* Mobile Bottom Sheet */}
+                <div
+                  className="sm:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setShowLayersMenu(false)}
                 >
-                  <span>Rejilla de pulsos</span>
-                  {showBeats && <Check className="w-3.5 h-3.5 text-emerald-500" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowOnsets(v => !v)}
-                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
-                >
-                  <span>Ataques (Onsets)</span>
-                  {showOnsets && <Check className="w-3.5 h-3.5 text-cyan-500" />}
-                </button>
-                <div className="my-1 border-t border-[var(--border-subtle)]" />
-                <button
-                  type="button"
-                  onClick={() => setIsTallWaveform(v => !v)}
-                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-surface-subtle)] flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
-                >
-                  <span>Onda expandida</span>
-                  {isTallWaveform && <Check className="w-3.5 h-3.5 text-[var(--accent-primary)]" />}
-                </button>
-              </div>
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Capas de la línea de tiempo"
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full rounded-t-3xl bg-[var(--bg-modal)] border-t border-[var(--border-medium)] shadow-2xl px-4 pt-2.5 pb-6 space-y-2"
+                  >
+                    <div className="w-10 h-1.5 rounded-full bg-[var(--border-strong)] mx-auto mb-2" />
+                    <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border-subtle)]">
+                      <span className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                        Capas visibles
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowLayersMenu(false)}
+                        className="min-h-[36px] px-2.5 text-xs font-semibold text-[var(--accent-primary)] cursor-pointer"
+                      >
+                        Listo
+                      </button>
+                    </div>
+
+                    <div className="divide-y divide-[var(--border-subtle)] text-sm">
+                      {sections && sections.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSections(v => !v)}
+                          className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                        >
+                          <span>Estructura ({sections.length})</span>
+                          {showSections && <Check className="w-4 h-4 text-sky-500" />}
+                        </button>
+                      )}
+                      {chords && chords.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowChords(v => !v)}
+                          className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                        >
+                          <span>Acordes ({chords.length})</span>
+                          {showChords && <Check className="w-4 h-4 text-purple-500" />}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowBeats(v => !v)}
+                        className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                      >
+                        <span>Rejilla de pulsos</span>
+                        {showBeats && <Check className="w-4 h-4 text-emerald-500" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowOnsets(v => !v)}
+                        className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                      >
+                        <span>Ataques (Onsets)</span>
+                        {showOnsets && <Check className="w-4 h-4 text-cyan-500" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsTallWaveform(v => !v)}
+                        className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                      >
+                        <span>Onda expandida</span>
+                        {isTallWaveform && <Check className="w-4 h-4 text-[var(--accent-primary)]" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -1002,7 +1081,7 @@ export const BeatTimeline: React.FC<BeatTimelineProps> = ({
               type="button"
               onClick={onRecalculate}
               disabled={isLoading}
-              className="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1 whitespace-nowrap"
+              className="min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1 whitespace-nowrap"
               title="Recalcular pulsos y acordes"
             >
               <RotateCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />

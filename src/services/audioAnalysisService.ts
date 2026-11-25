@@ -18,15 +18,38 @@ export class AudioAnalysisService {
     onProgress?: AnalysisProgressCallback,
     options?: { useServerAi?: boolean; authToken?: string }
   ): Promise<AudioAnalysisResult> {
-    const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/x-wav'];
-    const isMp3OrWav =
+    const validTypes = [
+      'audio/mp3',
+      'audio/mpeg',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/mp4',
+      'audio/m4a',
+      'audio/x-m4a',
+      'audio/aac',
+      'audio/ogg',
+      'audio/flac'
+    ];
+    const lowerName = file.name.toLowerCase();
+    const validExts = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+    const isSupportedAudio =
       validTypes.includes(file.type.toLowerCase()) ||
-      file.name.toLowerCase().endsWith('.mp3') ||
-      file.name.toLowerCase().endsWith('.wav');
+      file.type.toLowerCase().startsWith('audio/') ||
+      validExts.some(ext => lowerName.endsWith(ext));
 
-    if (!isMp3OrWav) {
-      throw new Error('Formato no soportado. Por favor sube un archivo de audio en formato .mp3 o .wav');
+    if (!isSupportedAudio) {
+      throw new Error('Formato no soportado. Por favor sube un archivo de audio (.mp3, .wav, .m4a, .aac o .ogg)');
     }
+
+    const resolveMimeType = () => {
+      if (file.type) return file.type;
+      if (lowerName.endsWith('.wav')) return 'audio/wav';
+      if (lowerName.endsWith('.m4a')) return 'audio/mp4';
+      if (lowerName.endsWith('.aac')) return 'audio/aac';
+      if (lowerName.endsWith('.ogg')) return 'audio/ogg';
+      if (lowerName.endsWith('.flac')) return 'audio/flac';
+      return 'audio/mp3';
+    };
 
     onProgress?.('reading', 'Leyendo archivo de audio...');
 
@@ -49,7 +72,7 @@ export class AudioAnalysisService {
             },
             body: JSON.stringify({
               audioBase64: cleanBase64,
-              mimeType: file.type || (file.name.endsWith('.wav') ? 'audio/wav' : 'audio/mp3'),
+              mimeType: resolveMimeType(),
               filename: file.name
             })
           });

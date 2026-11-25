@@ -126,10 +126,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [showChromaChart, setShowChromaChart] = useState<boolean>(false);
   const [isTimelineVisible, setIsTimelineVisible] = useState<boolean>(true);
+  const [followActiveChord, setFollowActiveChord] = useState<boolean>(true);
   const [activeKpiEditor, setActiveKpiEditor] = useState<'key' | 'meter' | null>(null);
   const [manualKeyOverride, setManualKeyOverride] = useState<string | null>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const chordButtonRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
   // Dedicated Tempo (web-audio-beat-detector) states
   const [tempoAnalysis, setTempoAnalysis] = useState<TempoAnalysis | null>(null);
@@ -507,6 +509,63 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
     return [];
   }, [structureAnalysis?.sections, analysisResult?.sections, savedAudioAnalysis?.sections]);
 
+  const groupedChordSections = useMemo(() => {
+    if (effectiveChords.length === 0) return [];
+    if (effectiveSections.length === 0) {
+      return [
+        {
+          id: 'all-chords',
+          label: null as string | null,
+          startTime: effectiveChords[0].startTime,
+          endTime: effectiveChords[effectiveChords.length - 1].endTime,
+          items: effectiveChords.map((chord, idx) => ({ chord, globalIdx: idx }))
+        }
+      ];
+    }
+
+    const groups = effectiveSections.map(sec => ({
+      id: sec.id,
+      label: sec.label as string | null,
+      startTime: sec.startTime,
+      endTime: sec.endTime,
+      items: [] as Array<{ chord: ChordSegment; globalIdx: number }>
+    }));
+
+    const leadingItems: Array<{ chord: ChordSegment; globalIdx: number }> = [];
+
+    effectiveChords.forEach((chord, idx) => {
+      const mid = (chord.startTime + chord.endTime) / 2;
+      if (mid < effectiveSections[0].startTime) {
+        leadingItems.push({ chord, globalIdx: idx });
+        return;
+      }
+      let targetIdx = effectiveSections.findIndex(
+        (sec, sIdx) =>
+          mid >= sec.startTime &&
+          (sIdx === effectiveSections.length - 1 ? true : mid < sec.endTime)
+      );
+      if (targetIdx === -1) {
+        targetIdx = groups.length - 1;
+      }
+      groups[targetIdx].items.push({ chord, globalIdx: idx });
+    });
+
+    const nonEmpty = groups.filter(g => g.items.length > 0);
+    if (leadingItems.length > 0) {
+      return [
+        {
+          id: 'leading-chords',
+          label: 'Inicio' as string | null,
+          startTime: leadingItems[0].chord.startTime,
+          endTime: effectiveSections[0].startTime,
+          items: leadingItems
+        },
+        ...nonEmpty
+      ];
+    }
+    return nonEmpty;
+  }, [effectiveChords, effectiveSections]);
+
   const handleExportChordsJSON = () => {
     if (effectiveChords.length === 0) return;
     const baseName = file?.name ? file.name.replace(/\.[^/.]+$/, '') : 'chords';
@@ -594,13 +653,12 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
       playerRef.current.seek(0);
     }
 
-    const validExtensions = ['.mp3', '.wav'];
-    const hasValidExt = validExtensions.some(ext =>
-      selectedFile.name.toLowerCase().endsWith(ext)
-    );
+    const validExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+    const lowerName = selectedFile.name.toLowerCase();
+    const hasValidExt = validExtensions.some(ext => lowerName.endsWith(ext));
 
-    if (!hasValidExt && !selectedFile.type.includes('audio')) {
-      setError('Por favor selecciona un archivo con extensión .mp3 o .wav');
+    if (!hasValidExt && !selectedFile.type.startsWith('audio/')) {
+      setError('Por favor selecciona un archivo de audio (.mp3, .wav, .m4a, .aac o .ogg)');
       return;
     }
 
@@ -871,6 +929,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
   const hasPlayableAudio = Boolean(file || isValidPlayableAudioUrl(audioUrl));
   const showMobileMiniPlayer = hasPlayableAudio && !isTunerOpen && (!file || !isTimelineVisible);
 
+  useEffect(() => {
+    if (!isPlaying || !followActiveChord || activeTab !== 'chords' || activeChordIndex < 0) return;
+    const activeBtn = chordButtonRefs.current.get(activeChordIndex);
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [activeChordIndex, isPlaying, followActiveChord, activeTab]);
+
   return (
     <div className={`space-y-4 text-xs transition-colors duration-200 ${showMobileMiniPlayer ? 'pb-20 sm:pb-0' : ''}`}>
       {/* Compact Header (hidden when embedded in SongEditorPage to avoid duplicate titles) */}
@@ -1051,7 +1117,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                 handleFileSelected(e.target.files[0]);
               }
             }}
-            accept=".mp3,.wav,audio/mp3,audio/wav,audio/mpeg"
+            accept=".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*"
             className="hidden"
           />
 
@@ -1188,7 +1254,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               </div>
               <div>
                 <p className="font-semibold text-xs sm:text-sm text-[var(--text-primary)]">
-                  Arrastra o pulsa para subir tu maqueta (.mp3 o .wav)
+                  Arrastra o pulsa para subir tu maqueta (.mp3, .wav, .m4a)
                 </p>
                 <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                   Detección rápida al instante (tempo, tono, acordes y estructura)
@@ -1307,7 +1373,7 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowExportMenu(prev => !prev)}
-                    className="min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                    className="min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
                   >
                     <Download className="w-3.5 h-3.5 text-emerald-500" />
                     <span>Exportar</span>
@@ -1315,32 +1381,91 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   </button>
 
                   {showExportMenu && (
-                    <div className="absolute right-0 mt-1.5 w-40 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1 z-30">
-                      <button
-                        type="button"
-                        onClick={() => handleExportChordsMIDI()}
-                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                    <>
+                      {/* Desktop Popover */}
+                      <div className="hidden sm:block absolute right-0 mt-1.5 w-44 rounded-xl bg-[var(--bg-modal)] border border-[var(--border-medium)] shadow-lg py-1 z-30">
+                        <button
+                          type="button"
+                          onClick={() => handleExportChordsMIDI()}
+                          className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                        >
+                          <span>Archivo MIDI</span>
+                          <span className="font-mono text-[10px] text-emerald-500">.mid</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportChordsCSV}
+                          className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                        >
+                          <span>Tabla CSV</span>
+                          <span className="font-mono text-[10px] text-[var(--text-muted)]">.csv</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportChordsJSON}
+                          className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
+                        >
+                          <span>Datos JSON</span>
+                          <span className="font-mono text-[10px] text-[var(--text-muted)]">.json</span>
+                        </button>
+                      </div>
+
+                      {/* Mobile Bottom Sheet */}
+                      <div
+                        className="sm:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => setShowExportMenu(false)}
                       >
-                        <span>Archivo MIDI</span>
-                        <span className="font-mono text-[10px] text-emerald-500">.mid</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportChordsCSV}
-                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
-                      >
-                        <span>Tabla CSV</span>
-                        <span className="font-mono text-[10px] text-[var(--text-muted)]">.csv</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportChordsJSON}
-                        className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] flex items-center justify-between cursor-pointer"
-                      >
-                        <span>Datos JSON</span>
-                        <span className="font-mono text-[10px] text-[var(--text-muted)]">.json</span>
-                      </button>
-                    </div>
+                        <div
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label="Exportar acordes"
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full rounded-t-3xl bg-[var(--bg-modal)] border-t border-[var(--border-medium)] shadow-2xl px-4 pt-2.5 pb-6 space-y-2"
+                        >
+                          <div className="w-10 h-1.5 rounded-full bg-[var(--border-strong)] mx-auto mb-2" />
+                          <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border-subtle)]">
+                            <span className="font-serif font-bold text-sm text-[var(--text-primary)]">
+                              Exportar acordes
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowExportMenu(false)}
+                              className="min-h-[36px] px-2.5 text-xs font-semibold text-[var(--text-secondary)] cursor-pointer"
+                            >
+                              Cerrar
+                            </button>
+                          </div>
+
+                          <div className="divide-y divide-[var(--border-subtle)] text-sm">
+                            <button
+                              type="button"
+                              onClick={() => handleExportChordsMIDI()}
+                              className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                            >
+                              <span>Archivo MIDI</span>
+                              <span className="font-mono text-xs text-emerald-500 font-semibold">.mid</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleExportChordsCSV}
+                              className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                            >
+                              <span>Tabla CSV</span>
+                              <span className="font-mono text-xs text-[var(--text-muted)]">.csv</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleExportChordsJSON}
+                              className="w-full min-h-[48px] px-1 flex items-center justify-between text-[var(--text-primary)] cursor-pointer"
+                            >
+                              <span>Datos JSON</span>
+                              <span className="font-mono text-xs text-[var(--text-muted)]">.json</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1739,14 +1864,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               role="tab"
               aria-selected={activeTab === 'chords'}
               onClick={() => setActiveTab('chords')}
-              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'chords'
                   ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <Music className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-              <span className="truncate">Acordes y Secciones</span>
+              <span>Acordes</span>
             </button>
 
             <button
@@ -1754,14 +1879,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               role="tab"
               aria-selected={activeTab === 'rhythm'}
               onClick={() => setActiveTab('rhythm')}
-              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'rhythm'
                   ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="truncate">Ritmo y Compás</span>
+              <span>Ritmo</span>
             </button>
 
             <button
@@ -1769,14 +1894,14 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
               role="tab"
               aria-selected={activeTab === 'advanced'}
               onClick={() => setActiveTab('advanced')}
-              className={`min-h-[42px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'advanced'
                   ? 'bg-[var(--bg-modal)] text-[var(--text-primary)] shadow-xs border border-[var(--border-subtle)]'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
-              <span className="truncate">Avanzado</span>
+              <span>Ajustes</span>
             </button>
           </div>
 
@@ -1836,45 +1961,92 @@ export const AudioAnalyzerSection: React.FC<AudioAnalyzerSectionProps> = ({
                   </div>
                 )}
 
-                {/* Unified Chords Sequence */}
+                {/* Unified Chords Sequence (grouped by section, no inner scroll trap) */}
                 {effectiveChords.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="font-semibold text-xs text-[var(--text-primary)]">
                         Secuencia de acordes ({effectiveChords.length})
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setFollowActiveChord(prev => !prev)}
+                          aria-pressed={followActiveChord}
+                          className={`min-h-[40px] sm:min-h-[28px] px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                            followActiveChord
+                              ? 'bg-purple-600/15 border-purple-500/40 text-purple-700 dark:text-purple-300'
+                              : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          }`}
+                          title="Desplazar automáticamente al acorde que suena"
+                        >
+                          {followActiveChord ? 'Seguir: Sí' : 'Seguir: No'}
+                        </button>
                         <button
                           type="button"
                           onClick={handleToggleAccidentalPreference}
-                          className="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap"
+                          className="min-h-[40px] sm:min-h-[28px] px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] cursor-pointer whitespace-nowrap"
                         >
                           {accidentalPreference === 'flats' ? '♭ Bemoles' : '♯ Sostenidos'}
                         </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-1.5 max-h-60 overflow-y-auto pr-1">
-                      {effectiveChords.map((chordSeg, idx) => {
-                        const isActive = currentTime >= chordSeg.startTime && currentTime < chordSeg.endTime;
-                        const displayedChord = respellChord(chordSeg.chord, accidentalPreference);
+                    <div className="space-y-3">
+                      {groupedChordSections.map(group => {
+                        const isSectionActive =
+                          group.label !== null &&
+                          currentTime >= group.startTime &&
+                          currentTime < group.endTime;
+
                         return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => handleSeek(chordSeg.startTime)}
-                            className={`min-h-[44px] sm:min-h-[38px] px-2 py-1.5 rounded-lg font-mono transition-colors cursor-pointer flex flex-col items-center justify-center border ${
-                              isActive
-                                ? 'bg-purple-600 text-white border-purple-500'
-                                : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-purple-400/60'
-                            }`}
-                            title={`Saltar a ${displayedChord} (${chordSeg.startTime.toFixed(1)}s)`}
-                          >
-                            <strong className="text-xs sm:text-sm leading-tight">{displayedChord}</strong>
-                            <span className="text-[10px] opacity-70 tabular-nums">
-                              {formatClock(chordSeg.startTime)}
-                            </span>
-                          </button>
+                          <div key={group.id} className="space-y-1.5">
+                            {group.label && (
+                              <button
+                                type="button"
+                                onClick={() => handleSeek(group.startTime)}
+                                className={`inline-flex items-center gap-2 text-[11px] font-semibold cursor-pointer transition-colors ${
+                                  isSectionActive
+                                    ? 'text-teal-600 dark:text-teal-300'
+                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                }`}
+                              >
+                                <span>{group.label}</span>
+                                <span className="font-mono tabular-nums opacity-75">
+                                  {formatClock(group.startTime)}
+                                </span>
+                              </button>
+                            )}
+
+                            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-1.5">
+                              {group.items.map(({ chord: chordSeg, globalIdx }) => {
+                                const isActive = activeChordIndex === globalIdx;
+                                const displayedChord = respellChord(chordSeg.chord, accidentalPreference);
+                                return (
+                                  <button
+                                    key={globalIdx}
+                                    ref={(el) => {
+                                      if (el) chordButtonRefs.current.set(globalIdx, el);
+                                      else chordButtonRefs.current.delete(globalIdx);
+                                    }}
+                                    type="button"
+                                    onClick={() => handleSeek(chordSeg.startTime)}
+                                    className={`min-h-[44px] sm:min-h-[38px] px-2 py-1.5 rounded-lg font-mono transition-colors cursor-pointer flex flex-col items-center justify-center border ${
+                                      isActive
+                                        ? 'bg-purple-600 text-white border-purple-500'
+                                        : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-purple-400/60'
+                                    }`}
+                                    title={`Saltar a ${displayedChord} (${chordSeg.startTime.toFixed(1)}s)`}
+                                  >
+                                    <strong className="text-xs sm:text-sm leading-tight">{displayedChord}</strong>
+                                    <span className="text-[10px] opacity-70 tabular-nums">
+                                      {formatClock(chordSeg.startTime)}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
