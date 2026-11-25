@@ -16,7 +16,12 @@ import { useSongsManager } from './hooks/useSongsManager';
 import { useAlbumsManager } from './hooks/useAlbumsManager';
 import { useSongCatalog } from './hooks/useSongCatalog';
 import { useAppModals } from './hooks/useAppModals';
-import { useKeyboardShortcuts, GLOBAL_SHORTCUTS } from './hooks/useKeyboardShortcuts';
+import {
+  KeyboardShortcutsProvider,
+  useKeyboardShortcuts,
+  GLOBAL_SHORTCUTS,
+  SHORTCUT_PRIORITY
+} from './hooks/useKeyboardShortcuts';
 
 // Architectural Components
 import { AppLayout } from './components/layout/AppLayout';
@@ -155,6 +160,8 @@ function CancioneroApp() {
 
     register('close-modal', {
       ...GLOBAL_SHORTCUTS.closeModal,
+      priority: SHORTCUT_PRIORITY.MODAL,
+      when: () => modals.hasOpenModal,
       callback: modals.closeAllModals,
       description: GLOBAL_SHORTCUTS.closeModal.description,
     });
@@ -167,6 +174,19 @@ function CancioneroApp() {
       unregister('close-modal');
     };
   }, [isAuthor, register, unregister, toggleTheme, navigate, modals]);
+
+  // Sync active global modal marker for page-level Escape/Spacebar coordination
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.body) return;
+    if (modals.hasOpenModal) {
+      document.body.dataset.modalOpen = 'true';
+    } else {
+      delete document.body.dataset.modalOpen;
+    }
+    return () => {
+      delete document.body.dataset.modalOpen;
+    };
+  }, [modals.hasOpenModal]);
 
   // Quick Start Handlers
   const handleStartWithLyrics = useCallback(() => {
@@ -433,7 +453,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <NavigationProvider>
-          <CancioneroApp />
+          <KeyboardShortcutsProvider>
+            <CancioneroApp />
+          </KeyboardShortcutsProvider>
         </NavigationProvider>
       </AuthProvider>
     </ThemeProvider>

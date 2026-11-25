@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -64,6 +64,12 @@ import { SongChordsBar, HarmonicNotationView } from '../components/ChordDiagramC
 import { MetronomeWidget } from '../components/MetronomeWidget';
 import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
 import { StageModeOverlay } from '../components/StageModeOverlay';
+import {
+  useKeyboardShortcuts,
+  SHORTCUT_PRIORITY,
+  isEditableTarget,
+  hasActiveModalDialog
+} from '../hooks/useKeyboardShortcuts';
 
 interface SongDetailPageProps {
   song: Song;
@@ -89,6 +95,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   onViewHistory
 }) => {
   const { navigate, goBack } = useAppNavigation();
+  const { register, unregister } = useKeyboardShortcuts();
 
   const [semitones, setSemitones] = useState<number>(0);
   const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharps');
@@ -360,25 +367,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     }
   };
 
-  // Keyboard navigation & spacebar to play audio
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isStageModeOpen || isTunerOpen || isVisualizerOpen) return;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
-        return;
-      }
-      if (e.key === 'Escape') {
-        goBack({ name: 'catalog' });
-      } else if (e.key === ' ' && (resolvedAudioUrl || song.audioUrl)) {
-        e.preventDefault();
-        togglePlayAudio();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [song.audioUrl, resolvedAudioUrl, isPlayingAudio, useDspPlayer, isStageModeOpen, isTunerOpen, isVisualizerOpen, goBack]);
-
-  const togglePlayAudio = () => {
+  const togglePlayAudio = useCallback(() => {
     if (useDspPlayer && dspPlayerRef.current) {
       if (dspPlayerRef.current.isPlaying) {
         dspPlayerRef.current.pause();
@@ -398,7 +387,44 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         console.warn('Could not play audio', err);
       });
     }
-  };
+  }, [useDspPlayer, isPlayingAudio]);
+
+  const handleEscapeGoBack = useCallback(() => {
+    if (isStageModeOpen || isTunerOpen || isVisualizerOpen || hasActiveModalDialog()) {
+      return false;
+    }
+    goBack({ name: 'catalog' });
+    return true;
+  }, [isStageModeOpen, isTunerOpen, isVisualizerOpen, goBack]);
+
+  // Register Escape at navigation priority (yields to active modals and overlays)
+  useEffect(() => {
+    register('song-detail-go-back', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.NAVIGATION,
+      description: 'Volver al catálogo',
+      when: () => !isStageModeOpen && !isTunerOpen && !isVisualizerOpen && !hasActiveModalDialog(),
+      callback: handleEscapeGoBack,
+    });
+    return () => unregister('song-detail-go-back');
+  }, [register, unregister, isStageModeOpen, isTunerOpen, isVisualizerOpen, handleEscapeGoBack]);
+
+  // Spacebar to toggle audio playback (with memoized handler and explicit dependencies)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (isStageModeOpen || isTunerOpen || isVisualizerOpen || hasActiveModalDialog()) return;
+      if (isEditableTarget(e.target)) {
+        return;
+      }
+      if (e.key === ' ' && (resolvedAudioUrl || song.audioUrl)) {
+        e.preventDefault();
+        togglePlayAudio();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [song.audioUrl, resolvedAudioUrl, togglePlayAudio, isStageModeOpen, isTunerOpen, isVisualizerOpen]);
 
   const handleTimeUpdate = () => {
     if (useDspPlayer) return;

@@ -33,6 +33,7 @@ import { parseLrc, cleanRawText, CHORD_BRACKET_REGEX, stripChordsFromText } from
 import { SyncedLyricLine } from '../types/lyrics';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { getDiatonicChordsForKey } from '../utils/songwriterHelper';
+import { useKeyboardShortcuts, SHORTCUT_PRIORITY } from '../hooks/useKeyboardShortcuts';
 
 export function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 KB';
@@ -174,11 +175,7 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   onSelectOtherSong
 }) => {
   const { isAuthor } = useAuth();
-
-  // If not author, prevent rendering video generator
-  if (!isAuthor) {
-    return null;
-  }
+  const { register, unregister } = useKeyboardShortcuts();
 
   // Configuration States
   const [resolution, setResolution] = useState<VideoResolution>('1080p');
@@ -323,6 +320,8 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   // Resolve Audio Source
   useEffect(() => {
+    if (!isAuthor) return;
+
     let isCancelled = false;
     let driveObjUrl: string | null = null;
 
@@ -389,20 +388,27 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         URL.revokeObjectURL(driveObjUrl);
       }
     };
-  }, [song.audioUrl, song.driveFileId, customAudioFile]);
+  }, [song.audioUrl, song.driveFileId, customAudioFile, isAuthor]);
 
   // Load custom background image if specified
   useEffect(() => {
-    if (customBgUrl) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = customBgUrl;
-      img.onload = () => {
-        customImgElementRef.current = img;
-      };
-    } else {
+    if (!customBgUrl) {
       customImgElementRef.current = null;
+      return;
     }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = customBgUrl;
+    img.onload = () => {
+      customImgElementRef.current = img;
+    };
+
+    return () => {
+      if (customBgUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(customBgUrl);
+      }
+    };
   }, [customBgUrl]);
 
   // Initialize Particles
@@ -515,10 +521,11 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   // Connect audio element whenever it becomes available
   useEffect(() => {
+    if (!isAuthor) return;
     if (resolvedAudioUrl && audioRef.current) {
       setupAudioGraph();
     }
-  }, [resolvedAudioUrl, setupAudioGraph]);
+  }, [resolvedAudioUrl, setupAudioGraph, isAuthor]);
 
   const getChordFrequencies = useCallback((chordName: string): number[] => {
     const noteFreqs: Record<string, number> = {
@@ -1243,6 +1250,8 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   // Animation Loop
   useEffect(() => {
+    if (!isAuthor) return;
+
     let active = true;
     const loop = () => {
       if (!active) return;
@@ -1257,7 +1266,55 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [renderFrame]);
+  }, [renderFrame, isAuthor]);
+
+  // Revoke recorded video blob URL when replaced or unmounted
+  useEffect(() => {
+    return () => {
+      if (recordedVideoUrl && recordedVideoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recordedVideoUrl);
+      }
+    };
+  }, [recordedVideoUrl]);
+
+  // Clean up Web Audio and MediaRecorder resources on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
+      if (keepAliveSourceRef.current) {
+        try {
+          keepAliveSourceRef.current.stop();
+        } catch {}
+        keepAliveSourceRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        void audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
+  // Register Escape at modal priority
+  useEffect(() => {
+    if (!isAuthor) return;
+
+    register('video-visualizer-escape', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.MODAL + 1,
+      description: 'Cerrar visualizador de vídeo',
+      when: () => isAuthor,
+      callback: () => {
+        onClose();
+        return true;
+      },
+    });
+
+    return () => unregister('video-visualizer-escape');
+  }, [isAuthor, register, unregister, onClose]);
 
   // Audio Duration Listener
   const handleLoadedMetadata = () => {
@@ -1408,11 +1465,13 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
     const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
     const filename = `${cleanTitle}-visualizador-${resolution}.${ext}`;
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(recordedBlob);
+    const url = URL.createObjectURL(recordedBlob);
+    a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Save to Google Drive
@@ -1478,6 +1537,11 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   }
 
   const selectedResConfig = RESOLUTION_PRESETS[resolution];
+
+  // If not author, prevent rendering video generator (after all hooks to obey Rules of Hooks)
+  if (!isAuthor) {
+    return null;
+  }
 
   return (
     <div

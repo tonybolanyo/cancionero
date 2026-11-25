@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { resolveAppUrl } from '../utils/appUrl';
 import {
   ArrowLeft,
@@ -125,6 +125,11 @@ import { analyzePoeticMetrics } from '../lib/lyrics/poeticAnalysis';
 import { chordProToSong, downloadChordProFile } from '../lib/music/chordPro';
 import { TapTempoTracker } from '../lib/audio/metronome';
 import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
+import {
+  useKeyboardShortcuts,
+  SHORTCUT_PRIORITY,
+  hasActiveModalDialog
+} from '../hooks/useKeyboardShortcuts';
 
 interface SongEditorPageProps {
   song: Song | null;
@@ -158,6 +163,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   onDelete
 }) => {
   const { navigate, goBack } = useAppNavigation();
+  const { register, unregister } = useKeyboardShortcuts();
   const { token, user, isAuthor, isGoogleDriveConnected, googleUser, loginWithGoogle } = useAuth();
   
   // Editor mode: desktop studio vs raw markdown
@@ -264,6 +270,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const [activeProgressionStep, setActiveProgressionStep] = useState<{ id: string; index: number } | null>(null);
   const progressionHandleRef = useRef<ProgressionPlaybackHandle | null>(null);
   const chordProInputRef = useRef<HTMLInputElement | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
+  const processedInitialAudioRef = useRef<File | null>(null);
 
   // Initialize fields on load or change
   useEffect(() => {
@@ -334,9 +342,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
   // Check backend server configuration to determine available transcription engines
   useEffect(() => {
+    let cancelled = false;
     fetch(resolveAppUrl('api/health'))
       .then(res => res.json())
       .then(data => {
+        if (cancelled) return;
         const hasKey = Boolean(data?.hasGeminiKey);
         setHasServerApiKey(hasKey);
         if (hasKey) {
@@ -346,15 +356,20 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setHasServerApiKey(false);
         setTranscriptionEngine('local_whisper');
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handle initialAudioFile if passed
   useEffect(() => {
-    if (initialAudioFile) {
-      handleAudioFileChosen(initialAudioFile);
+    if (initialAudioFile && processedInitialAudioRef.current !== initialAudioFile) {
+      processedInitialAudioRef.current = initialAudioFile;
+      void handleAudioFileChosen(initialAudioFile);
       setActiveTab('audio-studio.dsp');
     }
   }, [initialAudioFile]);
@@ -370,37 +385,229 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Stop progression preview playback on unmount
+  // Stop progression preview playback and timers on unmount
   useEffect(() => {
     return () => {
       progressionHandleRef.current?.stop();
       progressionHandleRef.current = null;
+      if (feedbackTimeoutRef.current !== null) {
+        window.clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
     };
   }, []);
 
-  // Global Keyboard Shortcuts (Ctrl+S, Ctrl+B, etc.)
+  // Toast feedback helper (memoized with timer cleanup)
+  const showFeedback = useCallback((msg: string) => {
+    setFeedbackToast(msg);
+    if (feedbackTimeoutRef.current !== null) {
+      window.clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = window.setTimeout(() => {
+      setFeedbackToast(null);
+      feedbackTimeoutRef.current = null;
+    }, 3500);
+  }, []);
+
+  const handleToggleStandPreview = useCallback(() => {
+    const next = !showStandPreview;
+    setShowStandPreview(next);
+    showFeedback(next ? 'Vista de atril activada' : 'Vista de atril oculta');
+  }, [showStandPreview, showFeedback]);
+
+  // Save / Submit (memoized for keyboard shortcuts and form actions)
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setValidationError(null);
+
+    let songToSave: Song;
+
+    if (editorMode === 'markdown') {
+      try {
+        const parsed = markdownToSong(rawMarkdown, id || `cancion-${Date.now()}`);
+        if (!parsed.title.trim()) {
+          setValidationError('La canción debe tener un título válido en el frontmatter.');
+          return;
+        }
+        songToSave = {
+          ...parsed,
+          albumId: selectedAlbumId || undefined,
+          trackNumber: typeof trackNumber === 'number' ? trackNumber : undefined,
+          driveFileId: driveFileId || parsed.driveFileId || undefined,
+          driveFileName: driveFileName || parsed.driveFileName || undefined,
+          isPrivateDemo: isPrivateDemo ?? parsed.isPrivateDemo ?? true,
+          audioAnalysis: parsed.audioAnalysis || savedAudioAnalysis || undefined,
+          updatedAt: new Date().toISOString()
+        };
+      } catch (err: any) {
+        setValidationError(`Error en formato Markdown: ${err.message}`);
+        return;
+      }
+    } else {
+      if (!title.trim()) {
+        setValidationError('Por favor ingresa un título para la canción.');
+        setActiveTab('metadata.json');
+        return;
+      }
+
+      const songId = song?.id || id || `cancion-${Date.now()}`;
+      const chosenAlbum = albums.find(a => a.id === selectedAlbumId);
+
+      songToSave = {
+        id: songId,
+        title: title.trim(),
+        status,
+        albumId: selectedAlbumId || undefined,
+        albumTitle: chosenAlbum?.title || undefined,
+        trackNumber: typeof trackNumber === 'number' && !isNaN(trackNumber) ? trackNumber : undefined,
+        year: year || new Date().getFullYear(),
+        genre: genre.trim() || 'Canción de Autor',
+        key: key.trim() || 'Am',
+        tempo: tempo ? parseInt(tempo, 10) : undefined,
+        timeSignature: timeSignature.trim() || '4/4',
+        tuning: tuning.trim() || 'Estándar (EADGBE)',
+        duration: duration.trim() || undefined,
+        spotifyUrl: spotifyUrl.trim() || undefined,
+        appleMusicUrl: appleMusicUrl.trim() || undefined,
+        youtubeUrl: youtubeUrl.trim() || undefined,
+        soundcloudUrl: soundcloudUrl.trim() || undefined,
+        audioUrl: audioUrl.trim() || undefined,
+        driveFileId: driveFileId.trim() || undefined,
+        driveFileName: driveFileName.trim() || undefined,
+        isPrivateDemo: isPrivateDemo,
+        notes: notes.trim() || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        lyrics: lyrics.trim(),
+        lrc: lrc.trim() || undefined,
+        audioAnalysis: savedAudioAnalysis || undefined,
+        createdAt: song?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    let pushResult: PushResult | undefined = undefined;
+    if (pushToGitHub && token) {
+      setIsPushing(true);
+      try {
+        const config = GitHubSyncService.getRemoteConfig(user?.login);
+        pushResult = await GitHubSyncService.pushSongFile(
+          songToSave,
+          commitMessage || `feat: actualizar ${songToSave.title}`,
+          token,
+          config
+        );
+      } catch (err: any) {
+        console.warn('Push warning:', err);
+      } finally {
+        setIsPushing(false);
+      }
+    }
+
+    onSave(songToSave, pushResult);
+    navigate({ name: 'song-detail', songId: songToSave.id });
+  }, [
+    editorMode,
+    rawMarkdown,
+    id,
+    selectedAlbumId,
+    trackNumber,
+    driveFileId,
+    driveFileName,
+    isPrivateDemo,
+    savedAudioAnalysis,
+    title,
+    song,
+    albums,
+    status,
+    year,
+    genre,
+    key,
+    tempo,
+    timeSignature,
+    tuning,
+    duration,
+    spotifyUrl,
+    appleMusicUrl,
+    youtubeUrl,
+    soundcloudUrl,
+    audioUrl,
+    notes,
+    tags,
+    lyrics,
+    lrc,
+    pushToGitHub,
+    token,
+    user,
+    commitMessage,
+    onSave,
+    navigate
+  ]);
+
+  // Register Escape priorities for editor modal & dropdown overlay
   useEffect(() => {
+    if (!isAuthor) return;
+
+    register('song-editor-shortcuts-escape', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.MODAL,
+      allowInEditable: true,
+      description: 'Cerrar ayuda de atajos del editor',
+      when: () => isShortcutsModalOpen,
+      callback: () => {
+        setIsShortcutsModalOpen(false);
+        return true;
+      },
+    });
+
+    register('song-editor-menu-escape', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.OVERLAY,
+      allowInEditable: true,
+      description: 'Cerrar menú del editor',
+      when: () => openMenu !== null && !hasActiveModalDialog() && !isSyncAssistantOpen && !isMp3MetadataModalOpen && !isTunerOpen,
+      callback: () => {
+        setOpenMenu(null);
+        return true;
+      },
+    });
+
+    return () => {
+      unregister('song-editor-shortcuts-escape');
+      unregister('song-editor-menu-escape');
+    };
+  }, [
+    isAuthor,
+    register,
+    unregister,
+    isShortcutsModalOpen,
+    openMenu,
+    isSyncAssistantOpen,
+    isMp3MetadataModalOpen,
+    isTunerOpen
+  ]);
+
+  // Editor Keyboard Shortcuts (Ctrl+S, Ctrl+B) with explicit dependency array
+  useEffect(() => {
+    if (!isAuthor) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       // Save: Ctrl+S / Cmd+S
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSubmit();
+        void handleSubmit();
+        return;
       }
       // Toggle Split Atril: Ctrl+B / Cmd+B
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setShowStandPreview(prev => !prev);
-        showFeedback(showStandPreview ? 'Vista de atril oculta' : 'Vista de atril activada');
-      }
-      // Escape to close dropdown menus
-      if (e.key === 'Escape') {
-        setOpenMenu(null);
+        handleToggleStandPreview();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, [isAuthor, handleSubmit, handleToggleStandPreview]);
 
   // Dynamic Harmonic Palette & Contextual Next-Chord Suggestions
   const harmonicPalette = useMemo(() => {
@@ -450,11 +657,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     });
   }, [title, lyrics, key, tempo, audioUrl, driveFileId, spotifyUrl, youtubeUrl, soundcloudUrl, lrc, status]);
 
-  // Toast feedback helper
-  const showFeedback = (msg: string) => {
-    setFeedbackToast(msg);
-    setTimeout(() => setFeedbackToast(null), 3500);
-  };
+
 
   // Track cursor position in Textarea
   const updateCursorPosition = () => {
@@ -1033,97 +1236,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     showFeedback('Letra importada desde LRC sin marcas de tiempo');
   };
 
-  // Save / Submit
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setValidationError(null);
 
-    let songToSave: Song;
-
-    if (editorMode === 'markdown') {
-      try {
-        const parsed = markdownToSong(rawMarkdown, id || `cancion-${Date.now()}`);
-        if (!parsed.title.trim()) {
-          setValidationError('La canción debe tener un título válido en el frontmatter.');
-          return;
-        }
-        songToSave = {
-          ...parsed,
-          albumId: selectedAlbumId || undefined,
-          trackNumber: typeof trackNumber === 'number' ? trackNumber : undefined,
-          driveFileId: driveFileId || parsed.driveFileId || undefined,
-          driveFileName: driveFileName || parsed.driveFileName || undefined,
-          isPrivateDemo: isPrivateDemo ?? parsed.isPrivateDemo ?? true,
-          audioAnalysis: parsed.audioAnalysis || savedAudioAnalysis || undefined,
-          updatedAt: new Date().toISOString()
-        };
-      } catch (err: any) {
-        setValidationError(`Error en formato Markdown: ${err.message}`);
-        return;
-      }
-    } else {
-      if (!title.trim()) {
-        setValidationError('Por favor ingresa un título para la canción.');
-        setActiveTab('metadata.json');
-        return;
-      }
-
-      const songId = song?.id || id || `cancion-${Date.now()}`;
-      const chosenAlbum = albums.find(a => a.id === selectedAlbumId);
-
-      songToSave = {
-        id: songId,
-        title: title.trim(),
-        status,
-        albumId: selectedAlbumId || undefined,
-        albumTitle: chosenAlbum?.title || undefined,
-        trackNumber: typeof trackNumber === 'number' && !isNaN(trackNumber) ? trackNumber : undefined,
-        year: year || new Date().getFullYear(),
-        genre: genre.trim() || 'Canción de Autor',
-        key: key.trim() || 'Am',
-        tempo: tempo ? parseInt(tempo, 10) : undefined,
-        timeSignature: timeSignature.trim() || '4/4',
-        tuning: tuning.trim() || 'Estándar (EADGBE)',
-        duration: duration.trim() || undefined,
-        spotifyUrl: spotifyUrl.trim() || undefined,
-        appleMusicUrl: appleMusicUrl.trim() || undefined,
-        youtubeUrl: youtubeUrl.trim() || undefined,
-        soundcloudUrl: soundcloudUrl.trim() || undefined,
-        audioUrl: audioUrl.trim() || undefined,
-        driveFileId: driveFileId.trim() || undefined,
-        driveFileName: driveFileName.trim() || undefined,
-        isPrivateDemo: isPrivateDemo,
-        notes: notes.trim() || undefined,
-        tags: tags.length > 0 ? tags : undefined,
-        lyrics: lyrics.trim(),
-        lrc: lrc.trim() || undefined,
-        audioAnalysis: savedAudioAnalysis || undefined,
-        createdAt: song?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-    }
-
-    let pushResult: PushResult | undefined = undefined;
-    if (pushToGitHub && token) {
-      setIsPushing(true);
-      try {
-        const config = GitHubSyncService.getRemoteConfig(user?.login);
-        pushResult = await GitHubSyncService.pushSongFile(
-          songToSave,
-          commitMessage || `feat: actualizar ${songToSave.title}`,
-          token,
-          config
-        );
-      } catch (err: any) {
-        console.warn('Push warning:', err);
-      } finally {
-        setIsPushing(false);
-      }
-    }
-
-    onSave(songToSave, pushResult);
-    navigate({ name: 'song-detail', songId: songToSave.id });
-  };
 
   // Render stand-preview chords over text + optional poetic meter & rhyme analysis
   const renderLyricsStandPreview = () => {

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Volume2, X, CheckCircle2 } from 'lucide-react';
 import { detectPitchYIN, PitchDetectionResult } from '../lib/audio/tuning';
 import { GUITAR_TUNINGS } from '../lib/music/chordDiagrams';
 import { playReferenceNote, midiToFrequency } from '../lib/audio/chordSynth';
+import { useKeyboardShortcuts, SHORTCUT_PRIORITY } from '../hooks/useKeyboardShortcuts';
 
 interface ChromaticTunerModalProps {
   initialTuning?: string;
@@ -42,11 +43,13 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
   const rafRef = useRef<number | null>(null);
   const a4Ref = useRef<number>(referenceA4Hz);
 
+  const { register, unregister } = useKeyboardShortcuts();
+
   useEffect(() => {
     a4Ref.current = referenceA4Hz;
   }, [referenceA4Hz]);
 
-  const stopMicrophone = () => {
+  const stopMicrophone = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -62,13 +65,31 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
       audioCtxRef.current = null;
     }
     setIsListening(false);
-  };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    stopMicrophone();
+    onClose();
+  }, [stopMicrophone, onClose]);
+
+  useEffect(() => {
+    register('chromatic-tuner-escape', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.MODAL + 1,
+      description: 'Cerrar afinador cromático',
+      callback: () => {
+        handleClose();
+        return true;
+      },
+    });
+    return () => unregister('chromatic-tuner-escape');
+  }, [register, unregister, handleClose]);
 
   useEffect(() => {
     return () => {
       stopMicrophone();
     };
-  }, []);
+  }, [stopMicrophone]);
 
   const startMicrophone = async () => {
     setMicError(null);

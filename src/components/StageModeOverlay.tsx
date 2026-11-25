@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  useKeyboardShortcuts,
+  SHORTCUT_PRIORITY,
+  isEditableTarget
+} from '../hooks/useKeyboardShortcuts';
+import {
   X,
   ChevronLeft,
   ChevronRight,
@@ -78,6 +83,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const { register, unregister } = useKeyboardShortcuts();
 
   const activeItem = items[currentIndex];
   const song = activeItem?.song;
@@ -170,13 +176,25 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
     return () => window.clearInterval(id);
   }, [isAutoScrolling, scrollSpeedMultiplier, song]);
 
-  // Keyboard & Bluetooth pedal support (ArrowRight/PageDown, ArrowLeft/PageUp, Space, Escape)
+  // Register Escape at overlay priority (below active modals, above back navigation)
+  useEffect(() => {
+    register('stage-mode-escape', {
+      key: 'Escape',
+      priority: SHORTCUT_PRIORITY.OVERLAY,
+      description: 'Cerrar modo escenario',
+      callback: () => {
+        onClose();
+        return true;
+      },
+    });
+    return () => unregister('stage-mode-escape');
+  }, [register, unregister, onClose]);
+
+  // Keyboard & Bluetooth pedal support (ArrowRight/PageDown, ArrowLeft/PageUp, Space)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      if (e.defaultPrevented || isEditableTarget(e.target)) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault();
         setCurrentIndex(prev => Math.min(items.length - 1, prev + 1));
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -189,7 +207,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [items.length, onClose]);
+  }, [items.length]);
 
   const soundingKey = useMemo(
     () => (song ? transposeChord(song.key || 'Am', semitones, accidentalPreference) : 'Am'),

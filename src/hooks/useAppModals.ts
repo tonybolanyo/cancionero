@@ -62,14 +62,46 @@ export function useAppModals() {
     setVisualizerSong(null);
   }, []);
 
-  const closeAllModals = useCallback(() => {
-    if (isHistoryModalOpen) closeHistory();
-    if (isRenameModalOpen) closeRename();
-    if (isDeleteModalOpen) closeDelete();
-    if (isAuthModalOpen) closeAuthModal();
-    if (isKeyboardShortcutsOpen) closeKeyboardShortcuts();
-    if (isVisualizerModalOpen) closeVisualizer();
-    if (isQuickStartOpen) closeQuickStart();
+  const hasOpenModal =
+    isHistoryModalOpen ||
+    isRenameModalOpen ||
+    isDeleteModalOpen ||
+    isAuthModalOpen ||
+    isKeyboardShortcutsOpen ||
+    isVisualizerModalOpen ||
+    isQuickStartOpen;
+
+  const closeAllModals = useCallback((): boolean => {
+    let closedAny = false;
+    if (isHistoryModalOpen) {
+      closeHistory();
+      closedAny = true;
+    }
+    if (isRenameModalOpen) {
+      closeRename();
+      closedAny = true;
+    }
+    if (isDeleteModalOpen) {
+      closeDelete();
+      closedAny = true;
+    }
+    if (isAuthModalOpen) {
+      closeAuthModal();
+      closedAny = true;
+    }
+    if (isKeyboardShortcutsOpen) {
+      closeKeyboardShortcuts();
+      closedAny = true;
+    }
+    if (isVisualizerModalOpen) {
+      closeVisualizer();
+      closedAny = true;
+    }
+    if (isQuickStartOpen) {
+      closeQuickStart();
+      closedAny = true;
+    }
+    return closedAny;
   }, [
     isHistoryModalOpen,
     isRenameModalOpen,
@@ -135,6 +167,7 @@ export function useAppModals() {
     setGitToast,
 
     // Close all (for Escape shortcut)
+    hasOpenModal,
     closeAllModals
   };
 }

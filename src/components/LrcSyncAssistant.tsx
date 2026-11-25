@@ -224,6 +224,8 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
         e.preventDefault();
         onTogglePlay();
       } else if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
         onClose();
       }
     };

@@ -98,6 +98,8 @@ export const Mp3MetadataComparisonModal: React.FC<Mp3MetadataComparisonModalProp
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
         onClose();
       }
     };
