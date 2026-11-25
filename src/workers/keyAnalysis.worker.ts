@@ -23,6 +23,7 @@ import {
   smoothChordsWithViterbi
 } from '../lib/audio/chords';
 import { estimateDetuningCents } from '../lib/audio/tuning';
+import { resolveAppUrl } from '../utils/appUrl';
 
 export interface ChordSegment {
   startTime: number;
@@ -65,17 +66,14 @@ let initPromise: Promise<any> | null = null;
  * falling back to CDN only if local loading fails.
  */
 async function fetchWasmBinary(): Promise<ArrayBuffer> {
-  const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL)
-    ? import.meta.env.BASE_URL
-    : '/';
-  const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-
-  const candidates = [
-    `${cleanBase}essentia-wasm.web.wasm`,
-    './essentia-wasm.web.wasm',
-    '/essentia-wasm.web.wasm',
-    '/cancionero/essentia-wasm.web.wasm'
-  ];
+  const candidates = Array.from(
+    new Set([
+      resolveAppUrl('essentia-wasm.web.wasm'),
+      './essentia-wasm.web.wasm',
+      '/essentia-wasm.web.wasm',
+      '/cancionero/essentia-wasm.web.wasm'
+    ])
+  );
 
   for (const url of candidates) {
     try {

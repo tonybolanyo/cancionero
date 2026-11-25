@@ -14,6 +14,7 @@ import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { segmentsToSyncedLyricLines } from '../lib/lyrics/transcription';
 import { fileToBase64Payload } from '../lib/audio/fileEncoding';
 import { getStoredAuthorToken } from '../utils/authConfig';
+import { resolveAppUrl } from '../utils/appUrl';
 
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
@@ -227,7 +228,7 @@ export class LyricsTranscriptionService {
       file.type ||
       (file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : file.name.toLowerCase().endsWith('.mp3') ? 'audio/mpeg' : 'audio/mpeg');
 
-    const response = await fetch('/api/transcribe-lyrics', {
+    const response = await fetch(resolveAppUrl('api/transcribe-lyrics'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

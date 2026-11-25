@@ -22,37 +22,45 @@ export interface ChordDictionary {
   };
 }
 
+import { resolveAppUrl } from '../utils/appUrl';
+
 let chordDictionary: ChordDictionary | null = null;
+let loadingPromise: Promise<ChordDictionary> | null = null;
+
+export function resetChordDictionaryCache(): void {
+  chordDictionary = null;
+  loadingPromise = null;
+}
 
 export async function loadChordDictionary(): Promise<ChordDictionary> {
   if (chordDictionary) {
     return chordDictionary;
   }
 
-  try {
-    const response = await fetch('/data/chord-dictionary.json');
+  if (loadingPromise) {
+    return loadingPromise;
+  }
+
+  loadingPromise = (async () => {
+    const response = await fetch(resolveAppUrl('data/chord-dictionary.json'));
     if (!response.ok) {
-      throw new Error(`Failed to load chord dictionary: ${response.statusText}`);
+      throw new Error(
+        `No se pudo cargar el diccionario de acordes (${response.status}${response.statusText ? ` ${response.statusText}` : ''})`
+      );
     }
+
     const data: ChordDictionary = await response.json();
+    if (!data || typeof data !== 'object' || !data.chords || typeof data.chords !== 'object' || Array.isArray(data.chords)) {
+      throw new Error('El diccionario de acordes tiene un formato inválido.');
+    }
+
     chordDictionary = data;
     return data;
-  } catch (error) {
-    console.error('Error loading chord dictionary:', error);
-    // Return empty dictionary as fallback
-    const fallback: ChordDictionary = {
-      chords: {},
-      metadata: {
-        version: '1.0.0',
-        lastUpdated: new Date().toISOString(),
-        instrument: 'guitar',
-        tuning: 'standard',
-        description: 'Chord dictionary (fallback - empty)'
-      }
-    };
-    chordDictionary = fallback;
-    return fallback;
-  }
+  })().finally(() => {
+    loadingPromise = null;
+  });
+
+  return loadingPromise;
 }
 
 export function getChordPositions(chordName: string): ChordPosition[] {

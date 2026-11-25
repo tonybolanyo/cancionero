@@ -37,39 +37,45 @@ export interface ScaleDictionary {
   };
 }
 
+import { resolveAppUrl } from '../utils/appUrl';
+
 let scaleDictionary: ScaleDictionary | null = null;
+let loadingPromise: Promise<ScaleDictionary> | null = null;
+
+export function resetScaleDictionaryCache(): void {
+  scaleDictionary = null;
+  loadingPromise = null;
+}
 
 export async function loadScaleDictionary(): Promise<ScaleDictionary> {
   if (scaleDictionary) {
     return scaleDictionary;
   }
 
-  try {
-    const response = await fetch('/data/scale-dictionary.json');
+  if (loadingPromise) {
+    return loadingPromise;
+  }
+
+  loadingPromise = (async () => {
+    const response = await fetch(resolveAppUrl('data/scale-dictionary.json'));
     if (!response.ok) {
-      throw new Error(`Failed to load scale dictionary: ${response.statusText}`);
+      throw new Error(
+        `No se pudo cargar el diccionario de escalas (${response.status}${response.statusText ? ` ${response.statusText}` : ''})`
+      );
     }
+
     const data: ScaleDictionary = await response.json();
+    if (!data || typeof data !== 'object' || !data.scales || typeof data.scales !== 'object' || Array.isArray(data.scales)) {
+      throw new Error('El diccionario de escalas tiene un formato inválido.');
+    }
+
     scaleDictionary = data;
     return data;
-  } catch (error) {
-    console.error('Error loading scale dictionary:', error);
-    const fallback: ScaleDictionary = {
-      scales: {},
-      metadata: {
-        version: '1.0.0',
-        lastUpdated: new Date().toISOString(),
-        instrument: 'guitar',
-        tuning: 'standard',
-        strings: ['E', 'A', 'D', 'G', 'B', 'E'],
-        description: 'Scale dictionary (fallback - empty)',
-        fretsAvailable: 24,
-        categories: []
-      }
-    };
-    scaleDictionary = fallback;
-    return fallback;
-  }
+  })().finally(() => {
+    loadingPromise = null;
+  });
+
+  return loadingPromise;
 }
 
 export function getScaleEntry(scaleId: string): ScaleEntry | null {

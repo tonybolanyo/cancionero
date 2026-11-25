@@ -203,11 +203,16 @@ async function startServer() {
   app.use(express.json({ limit: '60mb' }));
   app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
-  // API Rate Limiting
-  app.use('/api', apiRateLimiter);
+  const rawBase = process.env.VITE_BASE_URL || process.env.BASE_PATH || '/cancionero/';
+  const normalizedBase = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
+  const basePath = normalizedBase.endsWith('/') ? normalizedBase : `${normalizedBase}/`;
+  const baseMount = basePath === '/' ? '/' : basePath.slice(0, -1);
+
+  const apiRouter = express.Router();
+  apiRouter.use(apiRateLimiter);
 
   // API Endpoint: Audio Musical Analysis via Gemini AI (Protected: Author Only)
-  app.post('/api/analyze-audio', requireAuthorAuth, async (req, res) => {
+  apiRouter.post('/analyze-audio', requireAuthorAuth, async (req, res) => {
     try {
       const { audioBase64, mimeType, filename } = req.body;
       if (!audioBase64 || typeof audioBase64 !== 'string') {
@@ -330,7 +335,7 @@ Detecta de forma rigurosa:
   });
 
   // API Endpoint: Lyrics transcription (Protected: Author Only)
-  app.post('/api/transcribe-lyrics', requireAuthorAuth, async (req, res) => {
+  apiRouter.post('/transcribe-lyrics', requireAuthorAuth, async (req, res) => {
     try {
       const { audioBase64, mimeType, filename } = req.body;
       if (!audioBase64 || typeof audioBase64 !== 'string') {
@@ -443,15 +448,28 @@ Reglas:
   });
 
   // Healthcheck endpoint
-  app.get('/api/health', (req, res) => {
+  apiRouter.get('/health', (req, res) => {
     res.json({
       status: 'ok',
       hasGeminiKey: Boolean(process.env.GEMINI_API_KEY)
     });
   });
 
+  // Return JSON 404 for unknown API endpoints
+  apiRouter.use((req, res) => {
+    res.status(404).json({ success: false, error: 'Endpoint de API no encontrado.' });
+  });
+
+  app.use('/api', apiRouter);
+  if (baseMount !== '/') {
+    app.use(`${baseMount}/api`, apiRouter);
+  }
+
   // Direct endpoint to serve fresh catalog.json with no-cache headers
-  app.get(['/catalog.json', '/cancionero/catalog.json'], (req, res) => {
+  const catalogRoutes = Array.from(
+    new Set(['/catalog.json', `${basePath}catalog.json`, '/cancionero/catalog.json'])
+  );
+  app.get(catalogRoutes, (req, res) => {
     const catalogPath = path.resolve(__dirname, 'catalog.json');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -468,9 +486,19 @@ Reglas:
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
+    const distPath = path.resolve(__dirname, 'dist');
+    if (baseMount !== '/') {
+      app.use(baseMount, express.static(distPath));
+    }
+    app.use(express.static(distPath));
+
+    // Avoid serving index.html with 200 OK for missing static assets/data files
+    const missingAssetPattern = /\/(assets|data)\/|\.wasm$|\.json$/i;
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      if (missingAssetPattern.test(req.path)) {
+        return res.status(404).type('text/plain').send('Not Found');
+      }
+      res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { resolveAppUrl } from '../utils/appUrl';
 import {
   ArrowLeft,
   Save,
@@ -333,7 +334,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 
   // Check backend server configuration to determine available transcription engines
   useEffect(() => {
-    fetch('/api/health')
+    fetch(resolveAppUrl('api/health'))
       .then(res => res.json())
       .then(data => {
         const hasKey = Boolean(data?.hasGeminiKey);

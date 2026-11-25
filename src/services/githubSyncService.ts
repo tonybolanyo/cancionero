@@ -2,6 +2,7 @@ import { Song } from '../types/song';
 import { StorageService } from './storageService';
 import { songToMarkdown } from '../utils/markdownParser';
 import { AUTHORIZED_GITHUB_USER } from '../utils/authConfig';
+import { resolveAppUrl } from '../utils/appUrl';
 
 export interface RemoteConfig {
   owner: string;
@@ -325,11 +326,13 @@ export class GitHubSyncService {
 
     // 3. Static deployment catalog (served from the same domain / GitHub Pages / local server with strict no-cache)
     if (!remoteSongs) {
-      const base = import.meta.env.BASE_URL || '/';
-      const candidateUrls = [
-        `${base.endsWith('/') ? base : base + '/'}catalog.json?_t=${Date.now()}`,
-        `/catalog.json?_t=${Date.now()}`
-      ];
+      const cacheBust = Date.now();
+      const candidateUrls = Array.from(
+        new Set([
+          resolveAppUrl(`catalog.json?_t=${cacheBust}`),
+          `/catalog.json?_t=${cacheBust}`
+        ])
+      );
       for (const url of candidateUrls) {
         try {
           const staticHeaders: Record<string, string> = {

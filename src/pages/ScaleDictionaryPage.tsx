@@ -23,27 +23,27 @@ export const ScaleDictionaryPage: React.FC = () => {
   const [expandedScales, setExpandedScales] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'explorer' | 'suggestions' | 'quiz'>('explorer');
 
-  useEffect(() => {
-    const initializeDictionary = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        await loadScaleDictionary();
-        const scales = getAllScales();
-        setAllScales(scales);
-        if (scales.length > 0) {
-          setSelectedScale(scales[0]);
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Error loading scale dictionary';
-        setError(message);
-      } finally {
-        setIsLoading(false);
+  const initializeDictionary = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await loadScaleDictionary();
+      const scales = getAllScales();
+      setAllScales(scales);
+      if (scales.length > 0) {
+        setSelectedScale(scales[0]);
       }
-    };
-
-    initializeDictionary();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar el diccionario de escalas';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    initializeDictionary();
+  }, [initializeDictionary]);
 
   const toggleScaleExpand = (scaleId: string) => {
     setExpandedScales(prev => ({
@@ -88,12 +88,21 @@ export const ScaleDictionaryPage: React.FC = () => {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-red-900 dark:text-red-200">Error</h3>
-              <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-red-900 dark:text-red-200">Error</h3>
+                <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={initializeDictionary}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors shrink-0"
+            >
+              Reintentar
+            </button>
           </div>
         )}
 

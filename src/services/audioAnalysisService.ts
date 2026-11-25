@@ -1,6 +1,7 @@
 import { AudioAnalysisResult, analyzeAudioWithWebAudio } from '../utils/webAudioAnalyzer';
 import { fileToBase64Payload } from '../lib/audio/fileEncoding';
 import { getStoredAuthorToken } from '../utils/authConfig';
+import { resolveAppUrl } from '../utils/appUrl';
 
 export interface AnalysisProgressCallback {
   (stage: 'reading' | 'ai_analysis' | 'dsp_analysis' | 'complete', message: string): void;
@@ -64,7 +65,7 @@ export class AudioAnalysisService {
 
           const cleanBase64 = await fileToBase64Payload(file);
 
-          const response = await fetch('/api/analyze-audio', {
+          const response = await fetch(resolveAppUrl('api/analyze-audio'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

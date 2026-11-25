@@ -33,6 +33,17 @@ export default defineConfig(() => {
             if (fs.existsSync(wasmSource) && !fs.existsSync(publicWasm)) {
               fs.copyFileSync(wasmSource, publicWasm);
             }
+            const publicDataDir = path.resolve(publicDir, 'data');
+            if (!fs.existsSync(publicDataDir)) {
+              fs.mkdirSync(publicDataDir, { recursive: true });
+            }
+            for (const dictFile of ['chord-dictionary.json', 'scale-dictionary.json']) {
+              const srcDict = path.resolve(__dirname, 'data', dictFile);
+              const dstDict = path.resolve(publicDataDir, dictFile);
+              if (fs.existsSync(srcDict)) {
+                fs.copyFileSync(srcDict, dstDict);
+              }
+            }
           } catch (err) {
             console.warn('Vite assets sync plugin notice:', err);
           }
