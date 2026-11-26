@@ -5,12 +5,14 @@ import { SkipLink } from '../SkipLink';
 import { SeoHelper } from '../SeoHelper';
 import { Song } from '../../types/song';
 import { NavTab } from '../../hooks/useSongCatalog';
+import { AppRoute } from '../../context/NavigationContext';
 
 export interface AppLayoutProps {
   children: React.ReactNode;
   activeSong?: Song | null;
   activeTab: NavTab;
   isAlbumsActive: boolean;
+  activeRouteName?: AppRoute['name'];
   hasUncommittedChanges: boolean;
   isAuthor: boolean;
   onOpenNewSong: () => void;
@@ -33,6 +35,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   activeSong,
   activeTab,
   isAlbumsActive,
+  activeRouteName,
   hasUncommittedChanges,
   isAuthor,
   onOpenNewSong,
@@ -72,6 +75,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onSelectAlbums={onSelectAlbums}
         activeTab={activeTab}
         isAlbumsActive={isAlbumsActive}
+        activeRouteName={activeRouteName}
         hasUncommittedChanges={hasUncommittedChanges}
         onOpenAbout={onOpenAbout}
         onOpenAuthModal={onOpenAuthModal}
@@ -83,7 +87,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       />
 
       {/* Main Page Content Router */}
-      <main className="flex-1">
+      <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}
       </main>
 

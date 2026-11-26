@@ -325,6 +325,7 @@ function CancioneroApp() {
       <AppLayout
         activeSong={activeDetailSong}
         activeTab={catalog.activeNavTab}
+        activeRouteName={currentRoute.name}
         isAlbumsActive={
           currentRoute.name === 'albums' ||
           currentRoute.name === 'album-detail' ||
