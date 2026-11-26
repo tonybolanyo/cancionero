@@ -1,4 +1,3 @@
-import LyricsTranscriptionWorker from '../workers/lyricsTranscription.worker?worker';
 import type {
   LyricsTranscriptionWorkerRequest,
   LyricsTranscriptionWorkerResponse
@@ -17,13 +16,15 @@ import { getStoredAuthorToken, isRuntimeAuthorVerified, isServerCookieAuthActive
 
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 
 export type TranscriptionProgressCallback = (message: string, status: string) => void;
+export type TranscriptionWorkerFactory = () => Worker;
 
 interface PendingRequest {
   resolve: (value: LyricsTranscriptionWorkerResponse) => void;
   reject: (reason: Error) => void;
-  timeoutId?: NodeJS.Timeout;
+  timeoutId?: ReturnType<typeof setTimeout>;
   onProgress?: TranscriptionProgressCallback;
 }
 
@@ -44,57 +45,190 @@ interface BackendTranscriptionResponse {
 
 export class LyricsTranscriptionService {
   private static worker: Worker | null = null;
-  private static workerListenerAttached = false;
+  private static workerCreationPromise: Promise<Worker> | null = null;
+  private static workerFactory: TranscriptionWorkerFactory | null = null;
+  private static workerEpoch = 0;
+  private static messageListener: ((event: MessageEvent<LyricsTranscriptionWorkerResponse>) => void) | null = null;
+  private static errorListener: ((event: ErrorEvent) => void) | null = null;
   private static pending = new Map<string, PendingRequest>();
+  private static idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
+  private static idleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private static ensureWorker(): Worker {
-    if (!this.worker) {
-      this.worker = new LyricsTranscriptionWorker();
-      this.workerListenerAttached = false;
+  static setIdleTimeoutMs(ms: number): void {
+    this.idleTimeoutMs = Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_IDLE_TIMEOUT_MS;
+  }
+
+  static getIdleTimeoutMs(): number {
+    return this.idleTimeoutMs;
+  }
+
+  static setWorkerFactoryForTesting(factory: TranscriptionWorkerFactory | null): void {
+    this.dispose();
+    this.workerFactory = factory;
+  }
+
+  static isWorkerActive(): boolean {
+    return this.worker !== null;
+  }
+
+  static hasPendingRequests(): boolean {
+    return this.pending.size > 0;
+  }
+
+  private static clearIdleTimer(): void {
+    if (this.idleTimer !== null) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private static scheduleIdleDispose(): void {
+    this.clearIdleTimer();
+    if (!this.worker || this.pending.size > 0 || this.idleTimeoutMs <= 0) {
+      return;
     }
 
-    if (!this.workerListenerAttached) {
-      this.worker.addEventListener('message', (event: MessageEvent<LyricsTranscriptionWorkerResponse>) => {
-        const data = event.data;
-        
-        if (data.type === 'progress') {
-          const pending = this.pending.get(data.id);
-          if (pending?.onProgress) {
-            pending.onProgress(data.message, data.status);
-          }
-          return;
-        }
-        
-        const pending = this.pending.get(data.id);
-        if (!pending) return;
-        
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.pending.size === 0) {
+        this.dispose();
+      }
+    }, this.idleTimeoutMs);
+
+    if (typeof (this.idleTimer as { unref?: () => void }).unref === 'function') {
+      (this.idleTimer as { unref: () => void }).unref();
+    }
+  }
+
+  /**
+   * Terminates the Whisper Web Worker immediately and releases WASM/WebGPU model memory.
+   */
+  static dispose(): void {
+    this.clearIdleTimer();
+    this.workerEpoch += 1;
+    this.workerCreationPromise = null;
+
+    if (this.pending.size > 0) {
+      const disposeError = new Error('El worker de transcripción fue cerrado antes de finalizar.');
+      for (const pending of this.pending.values()) {
         if (pending.timeoutId) {
           clearTimeout(pending.timeoutId);
         }
-        
-        this.pending.delete(data.id);
-        pending.resolve(data);
-      });
-
-      this.worker.addEventListener('error', (event: ErrorEvent) => {
-        const err = new Error(`Worker de transcripción falló: ${event.message}`);
-        for (const pending of this.pending.values()) {
-          pending.reject(err);
-        }
-        this.pending.clear();
-      });
-
-      this.workerListenerAttached = true;
+        pending.reject(disposeError);
+      }
+      this.pending.clear();
     }
 
-    return this.worker;
+    if (this.worker) {
+      if (this.messageListener) {
+        this.worker.removeEventListener('message', this.messageListener as EventListener);
+        this.messageListener = null;
+      }
+      if (this.errorListener) {
+        this.worker.removeEventListener('error', this.errorListener as EventListener);
+        this.errorListener = null;
+      }
+      try {
+        this.worker.terminate();
+      } catch {
+        // ignore terminate errors
+      }
+      this.worker = null;
+    }
   }
 
-  private static postWorkerRequest(request: LyricsTranscriptionWorkerRequest, onProgress?: TranscriptionProgressCallback, timeoutMs: number = 600000): Promise<LyricsTranscriptionWorkerResponse> {
-    const worker = this.ensureWorker();
+  private static attachWorkerListeners(worker: Worker): void {
+    this.messageListener = (event: MessageEvent<LyricsTranscriptionWorkerResponse>) => {
+      const data = event.data;
+
+      if (data.type === 'progress') {
+        const pending = this.pending.get(data.id);
+        if (pending?.onProgress) {
+          pending.onProgress(data.message, data.status);
+        }
+        return;
+      }
+
+      const pending = this.pending.get(data.id);
+      if (!pending) return;
+
+      if (pending.timeoutId) {
+        clearTimeout(pending.timeoutId);
+      }
+
+      this.pending.delete(data.id);
+      if (this.pending.size === 0) {
+        this.scheduleIdleDispose();
+      }
+      pending.resolve(data);
+    };
+
+    this.errorListener = (event: ErrorEvent) => {
+      const err = new Error(`Worker de transcripción falló: ${event.message || 'error desconocido'}`);
+      for (const pending of this.pending.values()) {
+        if (pending.timeoutId) {
+          clearTimeout(pending.timeoutId);
+        }
+        pending.reject(err);
+      }
+      this.pending.clear();
+      this.dispose();
+    };
+
+    worker.addEventListener('message', this.messageListener as EventListener);
+    worker.addEventListener('error', this.errorListener as EventListener);
+  }
+
+  private static async ensureWorker(): Promise<Worker> {
+    if (this.worker) {
+      return this.worker;
+    }
+
+    if (this.workerFactory) {
+      this.worker = this.workerFactory();
+      this.attachWorkerListeners(this.worker);
+      return this.worker;
+    }
+
+    if (typeof Worker === 'undefined') {
+      throw new Error('Los Web Workers no están disponibles en este entorno.');
+    }
+
+    const epoch = this.workerEpoch;
+    if (!this.workerCreationPromise) {
+      this.workerCreationPromise = import('../workers/lyricsTranscription.worker?worker')
+        .then(({ default: LyricsTranscriptionWorker }) => {
+          if (epoch !== this.workerEpoch) {
+            throw new Error('El worker de transcripción fue cancelado durante su inicialización.');
+          }
+          if (!this.worker) {
+            this.worker = new LyricsTranscriptionWorker();
+            this.attachWorkerListeners(this.worker);
+          }
+          return this.worker;
+        })
+        .finally(() => {
+          this.workerCreationPromise = null;
+        });
+    }
+
+    return this.workerCreationPromise;
+  }
+
+  private static async postWorkerRequest(
+    request: LyricsTranscriptionWorkerRequest,
+    onProgress?: TranscriptionProgressCallback,
+    timeoutMs: number = 600000
+  ): Promise<LyricsTranscriptionWorkerResponse> {
+    this.clearIdleTimer();
+    const worker = await this.ensureWorker();
+
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pending.delete(request.id);
+        if (this.pending.size === 0) {
+          this.scheduleIdleDispose();
+        }
         reject(new Error('La transcripción tardó demasiado (>10 minutos). Verifica tu archivo de audio y conexión.'));
       }, timeoutMs);
 
@@ -109,42 +243,74 @@ export class LyricsTranscriptionService {
       } catch (err) {
         clearTimeout(timeoutId);
         this.pending.delete(request.id);
+        if (this.pending.size === 0) {
+          this.scheduleIdleDispose();
+        }
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
 
   static async getLocalSupport(): Promise<LocalTranscriptionSupport> {
-    const requestId = `asr-cap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const response = await this.postWorkerRequest({
-      id: requestId,
-      type: 'capabilities'
-    });
+    const hasWorkerSupport = typeof Worker !== 'undefined' || Boolean(this.workerFactory);
+    const hasWasmRuntime = typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function';
 
-    if (response.type !== 'capabilities') {
+    if (!hasWorkerSupport) {
       return {
         hasWebGpu: false,
+        hasWasm: hasWasmRuntime,
         canRunLocal: false,
-        reason: 'No se pudo consultar capacidades locales del navegador.'
+        reason: 'Web Workers no disponibles en este entorno.'
       };
     }
 
-    if (!response.success) {
+    let hasWebGpu = Boolean((globalThis.navigator as { gpu?: unknown } | undefined)?.gpu);
+    let hasWasm = hasWasmRuntime;
+
+    if (this.worker || this.workerFactory) {
+      const requestId = `asr-cap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const response = await this.postWorkerRequest({
+        id: requestId,
+        type: 'capabilities'
+      });
+
+      if (response.type !== 'capabilities' || !response.success) {
+        return {
+          hasWebGpu: false,
+          hasWasm: false,
+          canRunLocal: false,
+          reason: response.type === 'error' ? response.error : 'No se pudo consultar capacidades locales del navegador.'
+        };
+      }
+
+      hasWebGpu = Boolean(response.capabilities?.hasWebGpu);
+      hasWasm = response.capabilities?.hasWasm ?? hasWasmRuntime;
+    }
+
+    if (hasWebGpu) {
       return {
-        hasWebGpu: false,
-        canRunLocal: false,
-        reason: 'Error al consultar capacidades.'
+        hasWebGpu: true,
+        hasWasm,
+        canRunLocal: true,
+        recommendedDevice: 'webgpu'
       };
     }
 
-    if (response.capabilities?.hasWebGpu) {
-      return { hasWebGpu: true, canRunLocal: true };
+    if (hasWasm) {
+      return {
+        hasWebGpu: false,
+        hasWasm: true,
+        canRunLocal: true,
+        recommendedDevice: 'wasm',
+        reason: 'WebGPU no disponible. Disponible mediante fallback WASM (más lento que GPU).'
+      };
     }
 
     return {
       hasWebGpu: false,
+      hasWasm: false,
       canRunLocal: false,
-      reason: 'WebGPU no disponible. El modo local solo se recomienda con aceleración GPU.'
+      reason: 'Ni WebGPU ni WebAssembly están disponibles en este navegador.'
     };
   }
 
@@ -170,19 +336,19 @@ export class LyricsTranscriptionService {
           language: options?.language,
           chunkLengthSeconds: options?.chunkLengthSeconds ?? 28,
           strideLengthSeconds: options?.strideLengthSeconds ?? 4,
-          allowWasmFallback: options?.allowWasmFallback ?? false
+          allowWasmFallback: options?.allowWasmFallback ?? true
         }
       }, onProgress);
+
+      if (response.type === 'error') {
+        throw new Error(response.error || 'Error en el worker de transcripción local.');
+      }
 
       if (response.type !== 'transcribe') {
         throw new Error('Respuesta inesperada del worker de transcripción.');
       }
 
-      if (!response.success) {
-        throw new Error('La transcripción local no devolvió resultado.');
-      }
-
-      if (!response.result) {
+      if (!response.success || !response.result) {
         throw new Error('La transcripción local no devolvió resultado.');
       }
 

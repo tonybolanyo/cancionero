@@ -394,6 +394,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
         window.clearTimeout(feedbackTimeoutRef.current);
         feedbackTimeoutRef.current = null;
       }
+      if (!LyricsTranscriptionService.hasPendingRequests()) {
+        LyricsTranscriptionService.dispose();
+      }
     };
   }, []);
 

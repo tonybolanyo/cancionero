@@ -1,3 +1,6 @@
+import { extractMonoChannelData } from './bufferUtils';
+import { computeWindowedChromagrams, WindowedChroma } from './chroma';
+
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 // Krumhansl-Schmuckler Key Profiles for Major and Minor keys
@@ -90,51 +93,93 @@ export function detectKeyFromChroma(chromaArray: number[]): { key: string; scale
 }
 
 /**
- * Detects Musical Key & Scale using a 12-bin Pitch Class Profile (Chroma)
+ * Averages a sequence of windowed chromagrams (weighted by RMS energy when available)
+ * into a normalized 12-bin pitch class profile.
+ */
+export function averageWindowedChroma(
+  windows: Pick<WindowedChroma, 'chroma' | 'rmsEnergy'>[]
+): number[] {
+  const avgChroma = new Array<number>(12).fill(0);
+  if (!Array.isArray(windows) || windows.length === 0) {
+    return avgChroma;
+  }
+
+  let totalWeight = 0;
+  for (const w of windows) {
+    if (!Array.isArray(w.chroma) || w.chroma.length !== 12) continue;
+    const hasRms = typeof w.rmsEnergy === 'number' && Number.isFinite(w.rmsEnergy);
+    const weight = hasRms ? Math.max(0, w.rmsEnergy!) : 1;
+    if (hasRms && weight <= 0) continue;
+
+    for (let i = 0; i < 12; i++) {
+      avgChroma[i] += (w.chroma[i] || 0) * weight;
+    }
+    totalWeight += weight;
+  }
+
+  if (totalWeight <= 0) {
+    return new Array<number>(12).fill(0);
+  }
+
+  let maxVal = 0;
+  for (let i = 0; i < 12; i++) {
+    avgChroma[i] /= totalWeight;
+    if (avgChroma[i] > maxVal) maxVal = avgChroma[i];
+  }
+
+  if (maxVal > 0) {
+    for (let i = 0; i < 12; i++) {
+      avgChroma[i] = Number((avgChroma[i] / maxVal).toFixed(4));
+    }
+  }
+
+  return avgChroma;
+}
+
+/**
+ * Detects Musical Key & Scale directly from pre-computed windowed chromagrams.
+ */
+export function detectKeyFromWindowedChroma(
+  windows: Pick<WindowedChroma, 'chroma' | 'rmsEnergy'>[]
+): { key: string; scale: string; harmonicChords: string[] } {
+  const avgChroma = averageWindowedChroma(windows);
+  return detectKeyFromChroma(avgChroma);
+}
+
+/**
+ * Detects Musical Key & Scale from an AudioBuffer using Goertzel windowed chromagrams
+ * and Krumhansl-Schmuckler tonal profile correlation.
  */
 export function detectKey(audioBuffer: AudioBuffer): { key: string; scale: string; harmonicChords: string[] } {
   const sampleRate = audioBuffer.sampleRate;
-  const data = audioBuffer.getChannelData(0);
+  const duration = audioBuffer.duration;
+
+  if (!audioBuffer || audioBuffer.length === 0 || sampleRate <= 0 || duration <= 0) {
+    return { key: 'Am', scale: 'Menor', harmonicChords: getDiatonicChords('Am', 'Menor') };
+  }
+
+  const mono = extractMonoChannelData(audioBuffer);
 
   // Analyze up to 45 seconds of audio around the body to capture harmonic center
-  const duration = audioBuffer.duration;
   const startSec = duration > 40 ? Math.min(10, duration * 0.2) : 0;
   const endSec = Math.min(duration, startSec + 45);
-
   const startSample = Math.floor(startSec * sampleRate);
   const endSample = Math.floor(endSec * sampleRate);
-  const sliceLength = endSample - startSample;
 
-  if (sliceLength <= 0) {
-    return { key: 'Am', scale: 'Menor', harmonicChords: ['Am', 'Dm', 'E7', 'F', 'G', 'C'] };
+  if (endSample - startSample <= 0) {
+    return { key: 'Am', scale: 'Menor', harmonicChords: getDiatonicChords('Am', 'Menor') };
   }
 
-  const chroma = new Float64Array(12);
-  const A4 = 440;
-  const step = Math.max(1, Math.floor(sampleRate / 4000));
+  const slice = startSample === 0 && endSample === mono.length
+    ? mono
+    : mono.subarray(startSample, endSample);
 
-  for (let i = startSample; i < endSample - 1024; i += 1024 * step) {
-    let crossings = 0;
-    let energySum = 0;
-    for (let j = 0; j < 1024; j++) {
-      const s1 = data[i + j];
-      const s2 = data[i + j + 1];
-      if ((s1 >= 0 && s2 < 0) || (s1 < 0 && s2 >= 0)) {
-        crossings++;
-      }
-      energySum += s1 * s1;
-    }
+  const windows = computeWindowedChromagrams(slice, sampleRate, {
+    windowDurationSec: 1.0,
+    hopDurationSec: 0.5,
+    dualBand: false,
+    tripleBand: false
+  });
 
-    if (energySum > 0.001) {
-      const approxFreq = (crossings * sampleRate) / (2 * 1024);
-      if (approxFreq >= 65 && approxFreq <= 1500) {
-        const semitonesFromA = 12 * (Math.log(approxFreq / A4) / Math.LN2);
-        const noteIndex = Math.round(9 + semitonesFromA) % 12;
-        const pitchClass = (noteIndex + 12) % 12;
-        chroma[pitchClass] += energySum;
-      }
-    }
-  }
-
-  return detectKeyFromChroma(Array.from(chroma));
+  return detectKeyFromWindowedChroma(windows);
 }

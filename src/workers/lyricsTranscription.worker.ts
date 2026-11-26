@@ -31,16 +31,23 @@ export interface LocalTranscriptionProgressUpdate {
   progress?: number;
 }
 
+export interface LocalDisposeWorkerRequest {
+  id: string;
+  type: 'dispose';
+}
+
 export type LyricsTranscriptionWorkerRequest =
   | LocalTranscriptionWorkerRequest
-  | LocalCapabilitiesWorkerRequest;
+  | LocalCapabilitiesWorkerRequest
+  | LocalDisposeWorkerRequest;
 
 export interface LyricsTranscriptionWorkerSuccess {
   id: string;
   success: true;
-  type: 'capabilities' | 'transcribe';
+  type: 'capabilities' | 'transcribe' | 'dispose';
   capabilities?: {
     hasWebGpu: boolean;
+    hasWasm: boolean;
   };
   result?: {
     text: string;
@@ -72,6 +79,10 @@ const pipelineCache = new Map<string, AutomaticSpeechRecognitionPipeline>();
 function hasWebGpuInWorker(): boolean {
   const navigatorLike = (self as unknown as { navigator?: { gpu?: unknown } }).navigator;
   return Boolean(navigatorLike?.gpu);
+}
+
+function hasWasmInWorker(): boolean {
+  return typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function';
 }
 
 async function loadTransformersRuntime(): Promise<{
@@ -199,8 +210,30 @@ self.onmessage = async (event: MessageEvent<LyricsTranscriptionWorkerRequest>) =
       success: true,
       type: 'capabilities',
       capabilities: {
-        hasWebGpu: hasWebGpuInWorker()
+        hasWebGpu: hasWebGpuInWorker(),
+        hasWasm: hasWasmInWorker()
       }
+    };
+    self.postMessage(response);
+    return;
+  }
+
+  if (request.type === 'dispose') {
+    for (const pipelineInstance of pipelineCache.values()) {
+      try {
+        const disposable = pipelineInstance as unknown as { dispose?: () => Promise<void> | void };
+        if (typeof disposable.dispose === 'function') {
+          await disposable.dispose();
+        }
+      } catch {
+        // ignore disposal errors
+      }
+    }
+    pipelineCache.clear();
+    const response: LyricsTranscriptionWorkerSuccess = {
+      id: request.id,
+      success: true,
+      type: 'dispose'
     };
     self.postMessage(response);
     return;

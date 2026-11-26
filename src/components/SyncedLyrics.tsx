@@ -117,6 +117,9 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
     void loadSupport();
     return () => {
       cancelled = true;
+      if (!LyricsTranscriptionService.hasPendingRequests()) {
+        LyricsTranscriptionService.dispose();
+      }
     };
   }, []);
 
@@ -568,7 +571,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
                   <div className="flex items-start gap-1.5 text-[11px] text-[var(--text-muted)]">
                     <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     <span>
-                      Modelo local Whisper ({localSupport?.hasWebGpu ? 'WebGPU disponible' : 'sin WebGPU'}). Sin WebGPU, se recomienda cargar LRC manual o usar backend con consentimiento.
+                      Modelo local Whisper ({localSupport?.hasWebGpu ? 'WebGPU disponible' : localSupport?.hasWasm ? 'WASM disponible (sin WebGPU)' : 'sin soporte local'}). {localSupport?.hasWebGpu ? 'Listo para acelerar en GPU.' : 'Sin WebGPU, puedes activar fallback WASM (más lento) o usar backend con consentimiento.'}
                     </span>
                   </div>
                   <label className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">

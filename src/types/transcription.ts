@@ -19,7 +19,9 @@ export interface LyricsTranscriptionResult {
 
 export interface LocalTranscriptionSupport {
   hasWebGpu: boolean;
+  hasWasm?: boolean;
   canRunLocal: boolean;
+  recommendedDevice?: LocalTranscriptionDevice;
   reason?: string;
 }
 
