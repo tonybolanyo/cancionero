@@ -21,18 +21,18 @@ import { GitExportTab, GitImportTab } from './gitSync/GitExportImportTab';
 import { GitRemoteConfigTab } from './gitSync/GitRemoteConfigTab';
 import { GitBackupsTab } from './gitSync/GitBackupsTab';
 
-interface GitSyncModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+export interface GitSyncWorkspaceProps {
   songs: Song[];
   onSongsUpdated: (songs: Song[]) => void;
+  onClose?: () => void;
+  mode?: 'modal' | 'page';
 }
 
-export const GitSyncModal: React.FC<GitSyncModalProps> = ({
-  isOpen,
-  onClose,
+export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
   songs,
-  onSongsUpdated
+  onSongsUpdated,
+  onClose,
+  mode = 'page'
 }) => {
   const { user, token } = useAuth();
   const defaultAuthor = user ? `${user.name} <${user.email || 'tony@tonygb.com'}>` : 'Tony <tony@tonygb.com>';
@@ -52,7 +52,6 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   const [selectedBackup, setSelectedBackup] = useState<SongBackupPoint | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
     let active = true;
     StorageService.init()
       .then(() => {
@@ -64,7 +63,7 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     return () => {
       active = false;
     };
-  }, [isOpen]);
+  }, []);
 
   const [autoCommitGlobal, setAutoCommitGlobal] = useState<boolean>(() =>
     GitHubSyncService.isAutoCommitEnabled()
@@ -96,8 +95,6 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   const commits: GitCommit[] = StorageService.getCommits();
   const unpushedCount = StorageService.getUnpushedCommitsCount();
   const lastPushTime = GitHubSyncService.getLastPushTime();
-
-  if (!isOpen) return null;
 
   const handleCreateCommit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -417,32 +414,52 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
     }
   };
 
+  const isModal = mode === 'modal';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden">
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
-              <GitBranch className="w-4 h-4" />
-            </div>
-            <div>
+    <div
+      className={
+        isModal
+          ? 'relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200'
+          : 'w-full flex flex-col rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden text-[var(--text-primary)] transition-colors duration-200'
+      }
+    >
+      {/* Header */}
+      <div
+        className={`flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] ${
+          isModal ? 'bg-[var(--bg-modal)]' : 'bg-[var(--bg-surface-subtle)]/60'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)]">
+            <GitBranch className="w-4 h-4" />
+          </div>
+          <div>
+            {isModal ? (
               <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
                 Sincronización Git & Archivos Locales
               </h3>
-              <p className="text-xs text-[var(--text-muted)]">
-                Almacenamiento sin base de datos: cada canción es un archivo Markdown (.md) versionado
-              </p>
-            </div>
+            ) : (
+              <h1 className="font-serif text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
+                Sincronización Git & Archivos Locales
+              </h1>
+            )}
+            <p className="text-xs text-[var(--text-muted)]">
+              Almacenamiento sin base de datos: cada canción es un archivo Markdown (.md) versionado
+            </p>
           </div>
+        </div>
 
+        {isModal && onClose && (
           <button
             onClick={onClose}
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
+            aria-label="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
+        )}
+      </div>
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 px-4 sm:px-6 pt-3 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)] overflow-x-auto">
@@ -620,7 +637,8 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
           />
         )}
 
-        {/* Footer */}
+      {/* Footer */}
+      {isModal && onClose && (
         <div className="p-4 sm:p-6 border-t border-[var(--border-subtle)] bg-[var(--bg-modal)] flex justify-end">
           <button
             onClick={onClose}
@@ -629,7 +647,38 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
             Cerrar
           </button>
         </div>
-      </div>
+      )}
+    </div>
+  );
+};
+
+interface GitSyncModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  songs: Song[];
+  onSongsUpdated: (songs: Song[]) => void;
+}
+
+export const GitSyncModal: React.FC<GitSyncModalProps> = ({
+  isOpen,
+  onClose,
+  songs,
+  onSongsUpdated
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden"
+    >
+      <GitSyncWorkspace
+        songs={songs}
+        onSongsUpdated={onSongsUpdated}
+        onClose={onClose}
+        mode="modal"
+      />
     </div>
   );
 };

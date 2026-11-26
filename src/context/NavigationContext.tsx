@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 export type AppRoute =
-  | { name: 'catalog' }
+  | { name: 'catalog'; section?: 'catalog' | 'dashboard' }
   | { name: 'albums' }
   | { name: 'album-detail'; albumId: string }
   | { name: 'album-new' }
@@ -35,6 +35,13 @@ export function parseHashToRoute(rawHash: string): AppRoute {
   const path = routePart.replace(/\/+$/, '');
 
   if (!path || path === 'catalogo' || path === 'canciones') {
+    if (queryPart) {
+      const params = new URLSearchParams(queryPart);
+      const section = params.get('section');
+      if (section === 'dashboard' || section === 'catalog') {
+        return { name: 'catalog', section };
+      }
+    }
     return { name: 'catalog' };
   }
 
@@ -113,6 +120,8 @@ export function parseHashToRoute(rawHash: string): AppRoute {
 export function routeToHash(route: AppRoute): string {
   switch (route.name) {
     case 'catalog':
+      if (route.section === 'dashboard') return '#/?section=dashboard';
+      if (route.section === 'catalog') return '#/?section=catalog';
       return '#/';
     case 'albums':
       return '#/albumes';
@@ -162,8 +171,10 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const nextRoute = parseHashToRoute(window.location.hash);
       setCurrentRoute(nextRoute);
       setNavigationHistoryCount(prev => prev + 1);
-      // Scroll to top on page navigation
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      // Scroll to top on page navigation unless targeting a specific catalog section
+      if (!(nextRoute.name === 'catalog' && nextRoute.section)) {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
     };
 
     window.addEventListener('hashchange', handleHashChange);

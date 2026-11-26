@@ -1,7 +1,7 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
-import { useSongCatalog } from '../hooks/useSongCatalog';
+import { useSongCatalog, CatalogScrollTarget } from '../hooks/useSongCatalog';
 import { HeroSection } from '../components/HeroSection';
 import { AlbumCard } from '../components/AlbumCard';
 import { SongFilters } from '../components/SongFilters';
@@ -19,6 +19,7 @@ export interface CatalogPageProps {
   albums: Album[];
   isAuthor: boolean;
   catalog: ReturnType<typeof useSongCatalog>;
+  routeSection?: CatalogScrollTarget;
   onSelectSong: (song: Song) => void;
   onEditSong: (song: Song) => void;
   onDownloadMd: (song: Song) => void;
@@ -41,6 +42,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   albums,
   isAuthor,
   catalog,
+  routeSection,
   onSelectSong,
   onEditSong,
   onDownloadMd,
@@ -64,6 +66,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     keyFilter,
     tagFilter,
     viewMode,
+    scrollRequest,
     setSearchQuery,
     setStatusFilter,
     setPlatformFilter,
@@ -72,12 +75,71 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     setActiveNavTab,
     handleViewModeChange,
     handleNavSelect,
+    clearScrollRequest,
     resetFilters,
     filteredSongs,
     availableKeys,
     availableTags,
     counts
   } = catalog;
+
+  const lastHandledScrollKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const target: CatalogScrollTarget | null =
+      scrollRequest?.target ??
+      (routeSection && (routeSection !== 'dashboard' || isAuthor) ? routeSection : null);
+
+    if (!target) return;
+    if (target === 'dashboard' && !isAuthor) {
+      clearScrollRequest();
+      return;
+    }
+
+    const scrollKey = scrollRequest
+      ? `req:${scrollRequest.nonce}:${scrollRequest.target}`
+      : `route:${routeSection}`;
+
+    if (lastHandledScrollKeyRef.current === scrollKey) return;
+
+    if (target === 'dashboard') {
+      setActiveNavTab('dashboard');
+    }
+
+    const targetId = target === 'dashboard' ? 'dashboard-section' : 'catalogo-section';
+
+    const scrollToTarget = (): boolean => {
+      const el = document.getElementById(targetId);
+      if (!el) return false;
+      lastHandledScrollKeyRef.current = scrollKey;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (scrollRequest) {
+        clearScrollRequest();
+      }
+      return true;
+    };
+
+    if (scrollToTarget()) return;
+
+    const observer = new MutationObserver(() => {
+      if (scrollToTarget()) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timeoutId = window.setTimeout(() => {
+      observer.disconnect();
+      if (scrollRequest) {
+        clearScrollRequest();
+      }
+    }, 5000);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timeoutId);
+    };
+  }, [scrollRequest, routeSection, isAuthor, clearScrollRequest, setActiveNavTab]);
 
   return (
     <>
@@ -303,7 +365,18 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
 
       {/* Recharts Data Visualization Dashboard Section (Exclusively for Author) */}
       {isAuthor && (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <section
+              id="dashboard-section"
+              className="max-w-[1920px] 3xl:max-w-[2560px] 4xl:max-w-[3200px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-12 border-t border-[var(--border-subtle)]"
+            >
+              <div className="h-40 flex items-center justify-center text-xs text-[var(--text-muted)] font-mono">
+                Cargando analítica musical...
+              </div>
+            </section>
+          }
+        >
           <SongDashboard
             songs={songs}
             isAuthor={isAuthor}

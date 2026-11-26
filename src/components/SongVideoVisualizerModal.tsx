@@ -47,6 +47,14 @@ export type {
   LyricFontStyle
 };
 
+export interface SongVideoVisualizerWorkspaceProps {
+  song: Song;
+  onClose?: () => void;
+  allSongs?: Song[];
+  onSelectOtherSong?: (song: Song) => void;
+  mode?: 'modal' | 'page';
+}
+
 interface SongVideoVisualizerModalProps {
   song: Song;
   onClose: () => void;
@@ -54,11 +62,12 @@ interface SongVideoVisualizerModalProps {
   onSelectOtherSong?: (song: Song) => void;
 }
 
-export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> = ({
+export const SongVideoVisualizerWorkspace: React.FC<SongVideoVisualizerWorkspaceProps> = ({
   song,
   onClose,
   allSongs = [],
-  onSelectOtherSong
+  onSelectOtherSong,
+  mode = 'page'
 }) => {
   const { isAuthor } = useAuth();
   const { register, unregister } = useKeyboardShortcuts();
@@ -90,15 +99,15 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
     onRecordingComplete: () => setActiveTab('export')
   });
 
-  // Register Escape at modal priority
+  // Register Escape only when rendered as a modal overlay
   useEffect(() => {
-    if (!isAuthor) return;
+    if (!isAuthor || mode !== 'modal' || !onClose) return;
 
     register('video-visualizer-escape', {
       key: 'Escape',
       priority: SHORTCUT_PRIORITY.MODAL + 1,
       description: 'Cerrar visualizador de vídeo',
-      when: () => isAuthor,
+      when: () => isAuthor && mode === 'modal',
       callback: () => {
         onClose();
         return true;
@@ -106,7 +115,7 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
     });
 
     return () => unregister('video-visualizer-escape');
-  }, [isAuthor, register, unregister, onClose]);
+  }, [isAuthor, mode, register, unregister, onClose]);
 
   const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,6 +127,7 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   };
 
   const selectedResConfig = RESOLUTION_PRESETS[resolution];
+  const isModal = mode === 'modal';
 
   // If not author, prevent rendering video generator (after all hooks to obey Rules of Hooks)
   if (!isAuthor) {
@@ -126,29 +136,29 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="video-visualizer-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+      className={
+        isModal
+          ? 'relative w-full max-w-6xl max-h-[96vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-[var(--text-primary)]'
+          : 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-sm flex flex-col overflow-hidden text-[var(--text-primary)]'
+      }
     >
-      <div className="relative w-full max-w-6xl max-h-[96vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-[var(--text-primary)]">
-        {/* Hidden Audio Element */}
-        {recorder.resolvedAudioUrl && (
-          <audio
-            ref={recorder.audioRef}
-            src={recorder.resolvedAudioUrl}
-            crossOrigin="anonymous"
-            playsInline
-            onTimeUpdate={recorder.handleTimeUpdate}
-            onLoadedMetadata={recorder.handleLoadedMetadata}
-            onEnded={recorder.handleAudioEnded}
-            onError={(e) => {
-              console.warn('Error en el elemento de audio de SongVideoVisualizerModal:', e);
-              recorder.setIsPlaying(false);
-              recorder.setAudioError('No se pudo cargar la pista de audio para el visualizador.');
-            }}
-          />
-        )}
+      {/* Hidden Audio Element */}
+      {recorder.resolvedAudioUrl && (
+        <audio
+          ref={recorder.audioRef}
+          src={recorder.resolvedAudioUrl}
+          crossOrigin="anonymous"
+          playsInline
+          onTimeUpdate={recorder.handleTimeUpdate}
+          onLoadedMetadata={recorder.handleLoadedMetadata}
+          onEnded={recorder.handleAudioEnded}
+          onError={(e) => {
+            console.warn('Error en el elemento de audio de SongVideoVisualizerModal:', e);
+            recorder.setIsPlaying(false);
+            recorder.setAudioError('No se pudo cargar la pista de audio para el visualizador.');
+          }}
+        />
+      )}
 
         {/* Modal Top Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]">
@@ -158,47 +168,56 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id="video-visualizer-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
-                  Generador de Vídeo para YouTube
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-                  {resolution} (16:9)
-                </span>
-              </div>
-              <p className="text-xs text-[var(--text-muted)]">
-                Visualización sincronizada de letra, espectro de audio y efectos · <strong>{song.title}</strong>
-              </p>
-            </div>
-          </div>
-
-          {/* Close & Navigation */}
-          <div className="flex items-center gap-2">
-            {allSongs.length > 1 && onSelectOtherSong && (
-              <select
-                value={song.id}
-                onChange={(e) => {
-                  const target = allSongs.find(s => s.id === e.target.value);
-                  if (target) onSelectOtherSong(target);
-                }}
-                className="text-xs px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] focus:outline-none cursor-pointer"
-              >
-                {allSongs.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
+            {isModal ? (
+              <h2 id="video-visualizer-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
+                Generador de Vídeo para YouTube
+              </h2>
+            ) : (
+              <h1 id="video-visualizer-title" className="font-serif text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
+                Generador de Vídeo para YouTube
+              </h1>
             )}
-
-            <button
-              onClick={onClose}
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-xl hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
-              title="Cerrar modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
+              {resolution} (16:9)
+            </span>
           </div>
+          <p className="text-xs text-[var(--text-muted)]">
+            Visualización sincronizada de letra, espectro de audio y efectos · <strong>{song.title}</strong>
+          </p>
         </div>
+      </div>
+
+      {/* Close & Navigation */}
+      <div className="flex items-center gap-2">
+        {allSongs.length > 1 && onSelectOtherSong && (
+          <select
+            value={song.id}
+            onChange={(e) => {
+              const target = allSongs.find(s => s.id === e.target.value);
+              if (target) onSelectOtherSong(target);
+            }}
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] focus:outline-none cursor-pointer"
+          >
+            {allSongs.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {isModal && onClose && (
+          <button
+            onClick={onClose}
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-xl hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+            title="Cerrar modal"
+            aria-label="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+    </div>
 
         {/* Tabs Bar */}
         <div className="flex items-center justify-between px-6 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs">
@@ -427,12 +446,14 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
-            >
-              Cerrar
-            </button>
+            {isModal && onClose && (
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            )}
             <button
               onClick={() => {
                 setActiveTab('preview');
@@ -453,7 +474,30 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
             </button>
           </div>
         </div>
-      </div>
+    </div>
+  );
+};
+
+export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> = ({
+  song,
+  onClose,
+  allSongs = [],
+  onSelectOtherSong
+}) => {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="video-visualizer-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+    >
+      <SongVideoVisualizerWorkspace
+        song={song}
+        onClose={onClose}
+        allSongs={allSongs}
+        onSelectOtherSong={onSelectOtherSong}
+        mode="modal"
+      />
     </div>
   );
 };

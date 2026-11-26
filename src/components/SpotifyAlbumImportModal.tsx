@@ -5,6 +5,14 @@ import { StorageService } from '../services/storageService';
 import { GitHubSyncService } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
 
+export interface SpotifyAlbumImportWorkspaceProps {
+  onImport: (songs: Song[]) => void;
+  existingSongs: Song[];
+  onClose?: () => void;
+  onComplete?: () => void;
+  mode?: 'modal' | 'page';
+}
+
 interface SpotifyAlbumImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,11 +44,12 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, '');
 }
 
-export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = ({
-  isOpen,
-  onClose,
+export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspaceProps> = ({
   onImport,
-  existingSongs
+  existingSongs,
+  onClose,
+  onComplete,
+  mode = 'page'
 }) => {
   const { token, isAuthenticated, isAuthor } = useAuth();
   const [spotifyUrl, setSpotifyUrl] = useState('');
@@ -199,7 +208,7 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
         setAlbumData(null);
         setSelectedSongs(new Set());
         setImportStatus('idle');
-        onClose();
+        (onComplete ?? onClose)?.();
       }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al importar las canciones');
@@ -207,52 +216,49 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
     }
   };
 
-  if (!isOpen) return null;
-
-  if (!isAuthor) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md">
-          <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
-            <AlertCircle size={24} />
-            <h2 className="text-lg font-semibold">Acceso restringido</h2>
-          </div>
-          <p className="text-gray-700 dark:text-gray-300 mb-6">
-            Solo los autores pueden importar canciones de discos de Spotify.
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const isModal = mode === 'modal';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl m-4">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-3">
-            <Music className="text-blue-500" size={24} />
+    <div
+      className={
+        isModal
+          ? 'bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl m-4 overflow-hidden'
+          : 'w-full max-w-3xl mx-auto rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden text-[var(--text-primary)]'
+      }
+    >
+      {/* Header */}
+      <div
+        className={`flex items-center justify-between p-6 border-b ${
+          isModal
+            ? 'border-gray-200 dark:border-gray-700'
+            : 'border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]/60'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <Music className="text-blue-500" size={24} />
+          {isModal ? (
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
               Importar Disco de Spotify
             </h2>
-          </div>
+          ) : (
+            <h1 className="font-serif text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
+              Importar Disco de Spotify
+            </h1>
+          )}
+        </div>
+        {isModal && onClose && (
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer"
             aria-label="Cerrar"
           >
             <X size={20} className="text-gray-600 dark:text-gray-400" />
           </button>
-        </div>
+        )}
+      </div>
 
-        {/* Content */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto">
+      {/* Content */}
+      <div className={isModal ? 'p-6 max-h-[70vh] overflow-y-auto' : 'p-6'}>
           {error && (
             <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-3">
@@ -440,28 +446,37 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-          <button
-            onClick={() => {
-              if (albumData) {
-                setAlbumData(null);
-                setSelectedSongs(new Set());
-              } else {
-                onClose();
-              }
-            }}
-            disabled={importStatus === 'processing'}
-            className="flex-1 px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-900 dark:text-white rounded-lg transition font-medium"
-          >
-            {albumData ? 'Atrás' : 'Cancelar'}
-          </button>
+      {/* Footer */}
+      {(albumData || (isModal && onClose)) && (
+        <div
+          className={`flex gap-3 p-6 border-t ${
+            isModal
+              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900'
+              : 'border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]/60'
+          }`}
+        >
+          {(albumData || onClose) && (
+            <button
+              onClick={() => {
+                if (albumData) {
+                  setAlbumData(null);
+                  setSelectedSongs(new Set());
+                } else {
+                  onClose?.();
+                }
+              }}
+              disabled={importStatus === 'processing'}
+              className="flex-1 px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-900 dark:text-white rounded-lg transition font-medium cursor-pointer"
+            >
+              {albumData ? 'Atrás' : 'Cancelar'}
+            </button>
+          )}
 
           {albumData && (
             <button
               onClick={handleImportSongs}
               disabled={selectedSongs.size === 0 || importStatus === 'processing'}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium flex items-center justify-center gap-2 cursor-pointer"
             >
               {importStatus === 'processing' ? (
                 <>
@@ -472,13 +487,61 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
                 <>
                   <Download size={18} />
                   Importar {selectedSongs.size} canción
-                  {selectedSongs.size !== 1 ? 's' : ''}
+                  {selectedSongs.size !== 1 ? 'es' : ''}
                 </>
               )}
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+};
+
+export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = ({
+  isOpen,
+  onClose,
+  onImport,
+  existingSongs
+}) => {
+  const { isAuthor } = useAuth();
+
+  if (!isOpen) return null;
+
+  if (!isAuthor) {
+    return (
+      <div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md">
+          <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
+            <AlertCircle size={24} />
+            <h2 className="text-lg font-semibold">Acceso restringido</h2>
+          </div>
+          <p className="text-gray-700 dark:text-gray-300 mb-6">
+            Solo los autores pueden importar canciones de discos de Spotify.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition"
+          >
+            Cerrar
+          </button>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto"
+    >
+      <SpotifyAlbumImportWorkspace
+        onImport={onImport}
+        existingSongs={existingSongs}
+        onClose={onClose}
+        mode="modal"
+      />
     </div>
   );
 };

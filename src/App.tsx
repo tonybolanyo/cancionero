@@ -56,8 +56,12 @@ function CancioneroApp() {
   const catalog = useSongCatalog({
     songs: songsManager.songs,
     isAuthor,
-    onNavigateToCatalog: () => {
-      if (currentRoute.name !== 'catalog') {
+    onNavigateToCatalog: (section) => {
+      if (section) {
+        if (currentRoute.name !== 'catalog' || currentRoute.section !== section) {
+          navigate({ name: 'catalog', section });
+        }
+      } else if (currentRoute.name !== 'catalog' || currentRoute.section) {
         navigate({ name: 'catalog' });
       }
     },
@@ -110,24 +114,6 @@ function CancioneroApp() {
       modals.openVisualizer(songToView);
     }
   }, [isAuthor, currentRoute, songsManager.songs, modals]);
-
-  // Auto-open visualizer when navigating to video-visualizer route
-  useEffect(() => {
-    if (currentRoute.name === 'video-visualizer') {
-      if (isVerifyingSession) {
-        return;
-      }
-      if (!isAuthor) {
-        modals.openAuthModal();
-        navigate({ name: 'catalog' });
-        return;
-      }
-      const targetSong = (currentRoute.songId ? songsManager.songs.find(s => s.id === currentRoute.songId) : null) || songsManager.songs[0] || null;
-      if (targetSong) {
-        modals.openVisualizer(targetSong);
-      }
-    }
-  }, [currentRoute, songsManager.songs, isAuthor, isVerifyingSession, modals, navigate]);
 
   // Global Keyboard Shortcuts registration
   useEffect(() => {
@@ -356,7 +342,13 @@ function CancioneroApp() {
         onOpenAuthModal={modals.openAuthModal}
         onOpenAudioAnalyzer={isAuthor ? () => navigate({ name: 'audio-analyzer' }) : undefined}
         onOpenSongbook={() => navigate({ name: 'songbook' })}
-        onOpenVideoVisualizer={isAuthor ? () => handleOpenVisualizer() : undefined}
+        onOpenVideoVisualizer={isAuthor ? () => {
+          if (currentRoute.name === 'song-detail' && currentRoute.songId) {
+            navigate({ name: 'video-visualizer', songId: currentRoute.songId });
+          } else {
+            navigate({ name: 'video-visualizer' });
+          }
+        } : undefined}
         onOpenChordDictionary={() => navigate({ name: 'chord-dictionary' })}
         onOpenScaleDictionary={() => navigate({ name: 'scale-dictionary' })}
       >

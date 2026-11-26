@@ -3,11 +3,17 @@ import { Song, SongStatus, SongViewMode } from '../types/song';
 
 export type PlatformFilter = 'all' | 'spotify' | 'youtube' | 'soundcloud' | 'audio';
 export type NavTab = 'all' | 'published' | 'drafts' | 'private' | 'dashboard';
+export type CatalogScrollTarget = 'catalog' | 'dashboard';
+
+export interface CatalogScrollRequest {
+  target: CatalogScrollTarget;
+  nonce: number;
+}
 
 export interface UseSongCatalogOptions {
   songs: Song[];
   isAuthor: boolean;
-  onNavigateToCatalog?: () => void;
+  onNavigateToCatalog?: (section?: CatalogScrollTarget) => void;
   onOpenAuthModal?: () => void;
 }
 
@@ -121,6 +127,7 @@ export function useSongCatalog({
   const [keyFilter, setKeyFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [activeNavTab, setActiveNavTab] = useState<NavTab>('all');
+  const [scrollRequest, setScrollRequest] = useState<CatalogScrollRequest | null>(null);
 
   const [viewMode, setViewMode] = useState<SongViewMode>(() => {
     try {
@@ -187,42 +194,75 @@ export function useSongCatalog({
     setActiveNavTab('all');
   }, []);
 
+  const requestScroll = useCallback((target: CatalogScrollTarget) => {
+    setScrollRequest((prev) => ({
+      target,
+      nonce: (prev?.nonce ?? 0) + 1
+    }));
+  }, []);
+
+  const clearScrollRequest = useCallback(() => {
+    setScrollRequest(null);
+  }, []);
+
   const handleNavSelect = useCallback(
     (tab: NavTab) => {
-      setActiveNavTab(tab);
-      onNavigateToCatalog?.();
-
       if (tab === 'dashboard') {
         if (!isAuthor) {
           onOpenAuthModal?.();
           return;
         }
-        const el = document.getElementById('dashboard-section');
-        el?.scrollIntoView({ behavior: 'smooth' });
+        setActiveNavTab('dashboard');
+        onNavigateToCatalog?.('dashboard');
+        requestScroll('dashboard');
         return;
       }
 
-      if (tab === 'all') setStatusFilter('all');
-      if (tab === 'published') setStatusFilter('published');
       if (tab === 'drafts') {
         if (!isAuthor) {
           onOpenAuthModal?.();
           return;
         }
+        setActiveNavTab('drafts');
         setStatusFilter('draft');
+        onNavigateToCatalog?.('catalog');
+        requestScroll('catalog');
+        return;
       }
+
       if (tab === 'private') {
         if (!isAuthor) {
           onOpenAuthModal?.();
           return;
         }
+        setActiveNavTab('private');
         setStatusFilter('private');
+        onNavigateToCatalog?.('catalog');
+        requestScroll('catalog');
+        return;
       }
 
-      const catEl = document.getElementById('catalogo-section');
-      catEl?.scrollIntoView({ behavior: 'smooth' });
+      if (tab === 'published') {
+        setActiveNavTab('published');
+        setStatusFilter('published');
+        onNavigateToCatalog?.('catalog');
+        requestScroll('catalog');
+        return;
+      }
+
+      // tab === 'all'
+      const wasOnCatalog =
+        typeof document !== 'undefined' && Boolean(document.getElementById('catalogo-section'));
+      setActiveNavTab('all');
+      setStatusFilter('all');
+      onNavigateToCatalog?.();
+      if (wasOnCatalog) {
+        requestScroll('catalog');
+      } else {
+        setScrollRequest(null);
+      }
     },
-    [isAuthor, onNavigateToCatalog, onOpenAuthModal]
+    [isAuthor, onNavigateToCatalog, onOpenAuthModal, requestScroll]
   );
 
   return {
@@ -234,6 +274,7 @@ export function useSongCatalog({
     tagFilter,
     activeNavTab,
     viewMode,
+    scrollRequest,
 
     // Setters / Handlers
     setSearchQuery,
@@ -244,6 +285,7 @@ export function useSongCatalog({
     setActiveNavTab,
     handleViewModeChange,
     handleNavSelect,
+    clearScrollRequest,
     resetFilters,
 
     // Computed / Memoized

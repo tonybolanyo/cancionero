@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { SpotifyAlbumImportModal } from '../components/SpotifyAlbumImportModal';
+import { SpotifyAlbumImportWorkspace } from '../components/SpotifyAlbumImportModal';
 import { useAppNavigation } from '../context/NavigationContext';
 import { useAuth } from '../context/AuthContext';
 import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
@@ -9,11 +9,13 @@ import { Song } from '../types/song';
 interface SpotifyImportPageProps {
   songs: Song[];
   onImport: (songs: Song[]) => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const SpotifyImportPage: React.FC<SpotifyImportPageProps> = ({
   songs,
-  onImport
+  onImport,
+  onOpenAuthModal
 }) => {
   const { goBack } = useAppNavigation();
   const { isAuthor } = useAuth();
@@ -23,6 +25,7 @@ export const SpotifyImportPage: React.FC<SpotifyImportPageProps> = ({
       <AuthorAccessGuard
         title="Importación de Álbumes Reservada al Autor"
         description="La importación y creación de canciones en el catálogo desde discos de Spotify está reservada exclusivamente para el autor propietario."
+        onOpenAuthModal={onOpenAuthModal}
       />
     );
   }
@@ -39,14 +42,12 @@ export const SpotifyImportPage: React.FC<SpotifyImportPageProps> = ({
         </button>
       </div>
 
-      <SpotifyAlbumImportModal
-        isOpen={true}
+      <SpotifyAlbumImportWorkspace
+        onImport={onImport}
+        onComplete={() => goBack({ name: 'catalog' })}
         onClose={() => goBack({ name: 'catalog' })}
-        onImport={(imported) => {
-          onImport(imported);
-          goBack({ name: 'catalog' });
-        }}
         existingSongs={songs}
+        mode="page"
       />
     </div>
   );

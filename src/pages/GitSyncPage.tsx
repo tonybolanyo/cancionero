@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { GitSyncModal } from '../components/GitSyncModal';
+import { GitSyncWorkspace } from '../components/GitSyncModal';
 import { useAppNavigation } from '../context/NavigationContext';
 import { useAuth } from '../context/AuthContext';
 import { AuthorAccessGuard } from '../components/AuthorAccessGuard';
@@ -9,11 +9,13 @@ import { Song } from '../types/song';
 interface GitSyncPageProps {
   songs: Song[];
   onSongsUpdated: (songs: Song[]) => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const GitSyncPage: React.FC<GitSyncPageProps> = ({
   songs,
-  onSongsUpdated
+  onSongsUpdated,
+  onOpenAuthModal
 }) => {
   const { goBack } = useAppNavigation();
   const { isAuthor } = useAuth();
@@ -23,6 +25,7 @@ export const GitSyncPage: React.FC<GitSyncPageProps> = ({
       <AuthorAccessGuard
         title="Sincronización Git Reservada al Autor"
         description="La gestión de commits, copias de seguridad, restauración y sincronización con el repositorio remoto de GitHub está reservada exclusivamente para el autor propietario."
+        onOpenAuthModal={onOpenAuthModal}
       />
     );
   }
@@ -39,11 +42,10 @@ export const GitSyncPage: React.FC<GitSyncPageProps> = ({
         </button>
       </div>
 
-      <GitSyncModal
-        isOpen={true}
-        onClose={() => goBack({ name: 'catalog' })}
+      <GitSyncWorkspace
         songs={songs}
         onSongsUpdated={onSongsUpdated}
+        mode="page"
       />
     </div>
   );

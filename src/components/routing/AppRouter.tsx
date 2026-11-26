@@ -41,6 +41,9 @@ const GitSyncPage = lazy(() =>
 const SpotifyImportPage = lazy(() =>
   import('../../pages/SpotifyImportPage').then((m) => ({ default: m.SpotifyImportPage }))
 );
+const VideoVisualizerPage = lazy(() =>
+  import('../../pages/VideoVisualizerPage').then((m) => ({ default: m.VideoVisualizerPage }))
+);
 const ChordDictionaryDemoPage = lazy(() =>
   import('../../pages/ChordDictionaryDemoPage').then((m) => ({ default: m.ChordDictionaryDemoPage }))
 );
@@ -258,32 +261,16 @@ export const AppRouter: React.FC<AppRouterProps> = ({
         );
 
       case 'video-visualizer':
-        return !isAuthor ? (
-          <AuthorAccessGuard
-            title="Generador de Vídeo Protegido"
-            description="La creación de vídeos para YouTube con letra sincronizada está reservada únicamente para el autor propietario."
+        return isAuthor ? (
+          <VideoVisualizerPage
+            songs={songs}
+            initialSongId={currentRoute.songId}
             onOpenAuthModal={onOpenAuthModal}
           />
         ) : (
-          <CatalogPage
-            songs={songs}
-            albums={albums}
-            isAuthor={isAuthor}
-            catalog={catalog}
-            onSelectSong={(s) => navigate({ name: 'song-detail', songId: s.id })}
-            onEditSong={onOpenEditSong}
-            onDownloadMd={onDownloadMd}
-            onViewHistory={onOpenHistory}
-            onRenameSong={onOpenRename}
-            onDeleteSong={onOpenDelete}
-            onOpenVisualizer={onOpenVisualizer}
-            onOpenNewSong={onOpenNewSong}
-            onOpenNewAlbum={() => navigate({ name: 'album-new' })}
-            onSelectAlbum={(alb) => navigate({ name: 'album-detail', albumId: alb.id })}
-            onEditAlbum={(alb) => navigate({ name: 'album-edit', albumId: alb.id })}
-            onExploreAlbums={() => navigate({ name: 'albums' })}
-            onOpenGitSync={() => navigate({ name: 'git-sync' })}
-            onOpenSongbook={() => navigate({ name: 'songbook' })}
+          <AuthorAccessGuard
+            title="Generador de Vídeo Protegido"
+            description="La creación de vídeos para YouTube con letra sincronizada está reservada únicamente para el autor propietario."
             onOpenAuthModal={onOpenAuthModal}
           />
         );
@@ -296,6 +283,7 @@ export const AppRouter: React.FC<AppRouterProps> = ({
           <GitSyncPage
             songs={songs}
             onSongsUpdated={onSongsUpdated}
+            onOpenAuthModal={onOpenAuthModal}
           />
         ) : (
           <AuthorAccessGuard
@@ -310,6 +298,7 @@ export const AppRouter: React.FC<AppRouterProps> = ({
           <SpotifyImportPage
             songs={songs}
             onImport={onImportSongs}
+            onOpenAuthModal={onOpenAuthModal}
           />
         ) : (
           <AuthorAccessGuard
@@ -333,6 +322,7 @@ export const AppRouter: React.FC<AppRouterProps> = ({
             albums={albums}
             isAuthor={isAuthor}
             catalog={catalog}
+            routeSection={currentRoute.name === 'catalog' ? currentRoute.section : undefined}
             onSelectSong={(s) => navigate({ name: 'song-detail', songId: s.id })}
             onEditSong={onOpenEditSong}
             onDownloadMd={onDownloadMd}
