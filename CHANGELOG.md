@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-11-26
+
+### 🎉 Features
+
+- add js-yaml for robust frontmatter handling ([fa81b39](../../commit/fa81b39)) - Tony G. Bolaño
+
+### 🔄 Other Changes
+
+- feat ([18e9f6a](../../commit/18e9f6a)) - auth): implement server-side session management (Tony G. Bolaño
+- feat ([0fab4b0](../../commit/0fab4b0)) - sync): implement atomic GitHub sync operations (Tony G. Bolaño
+
+---
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.69.0] - 2026-11-25
 
 ### 🎉 Features
