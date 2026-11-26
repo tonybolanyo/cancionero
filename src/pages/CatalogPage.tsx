@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
 import { useSongCatalog } from '../hooks/useSongCatalog';
@@ -8,8 +8,11 @@ import { SongFilters } from '../components/SongFilters';
 import { SongCard } from '../components/SongCard';
 import { SongExpandedRow } from '../components/SongExpandedRow';
 import { SongCompactView } from '../components/SongCompactView';
-import { SongDashboard } from '../components/SongDashboard';
 import { Disc, ArrowRight, Plus, Music2, BarChart3, BookOpen } from 'lucide-react';
+
+const SongDashboard = lazy(() =>
+  import('../components/SongDashboard').then((m) => ({ default: m.SongDashboard }))
+);
 
 export interface CatalogPageProps {
   songs: Song[];
@@ -300,10 +303,12 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
 
       {/* Recharts Data Visualization Dashboard Section (Exclusively for Author) */}
       {isAuthor && (
-        <SongDashboard
-          songs={songs}
-          isAuthor={isAuthor}
-        />
+        <Suspense fallback={null}>
+          <SongDashboard
+            songs={songs}
+            isAuthor={isAuthor}
+          />
+        </Suspense>
       )}
     </>
   );

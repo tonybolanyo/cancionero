@@ -1,15 +1,31 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Song } from '../../types/song';
 import { PushResult } from '../../services/githubSyncService';
 import { SONGWRITING_TEMPLATES } from '../../utils/songwriterHelper';
 import { ToastData, GitNotificationToast } from '../GitNotificationToast';
-import { GitHubAuthModal } from '../GitHubAuthModal';
-import { RenameFileModal } from '../RenameFileModal';
-import { DeleteSongModal } from '../DeleteSongModal';
-import { VersionHistory } from '../VersionHistory';
-import { KeyboardShortcutsModal } from '../KeyboardShortcutsModal';
-import { SongwritingQuickStartModal } from '../SongwritingQuickStartModal';
-import { SongVideoVisualizerModal } from '../SongVideoVisualizerModal';
+
+// Lazy-loaded heavy modals so they stay out of the initial bundle
+const GitHubAuthModal = lazy(() =>
+  import('../GitHubAuthModal').then((m) => ({ default: m.GitHubAuthModal }))
+);
+const RenameFileModal = lazy(() =>
+  import('../RenameFileModal').then((m) => ({ default: m.RenameFileModal }))
+);
+const DeleteSongModal = lazy(() =>
+  import('../DeleteSongModal').then((m) => ({ default: m.DeleteSongModal }))
+);
+const VersionHistory = lazy(() =>
+  import('../VersionHistory').then((m) => ({ default: m.VersionHistory }))
+);
+const KeyboardShortcutsModal = lazy(() =>
+  import('../KeyboardShortcutsModal').then((m) => ({ default: m.KeyboardShortcutsModal }))
+);
+const SongwritingQuickStartModal = lazy(() =>
+  import('../SongwritingQuickStartModal').then((m) => ({ default: m.SongwritingQuickStartModal }))
+);
+const SongVideoVisualizerModal = lazy(() =>
+  import('../SongVideoVisualizerModal').then((m) => ({ default: m.SongVideoVisualizerModal }))
+);
 
 export interface AppModalsProps {
   // Auth Modal
@@ -98,67 +114,73 @@ export const AppModals: React.FC<AppModalsProps> = ({
 }) => {
   return (
     <>
-      {isAuthModalOpen && (
-        <GitHubAuthModal
-          isOpen={isAuthModalOpen}
-          onClose={onCloseAuthModal}
-        />
-      )}
+      <Suspense fallback={null}>
+        {isAuthModalOpen && (
+          <GitHubAuthModal
+            isOpen={isAuthModalOpen}
+            onClose={onCloseAuthModal}
+          />
+        )}
 
-      {isHistoryModalOpen && historySong && (
-        <VersionHistory
-          song={historySong}
-          isOpen={isHistoryModalOpen}
-          onClose={onCloseHistoryModal}
-          onRestoreSong={onSongRestored}
-          isAuthor={isAuthor}
-        />
-      )}
+        {isHistoryModalOpen && historySong && (
+          <VersionHistory
+            song={historySong}
+            isOpen={isHistoryModalOpen}
+            onClose={onCloseHistoryModal}
+            onRestoreSong={onSongRestored}
+            isAuthor={isAuthor}
+          />
+        )}
 
-      {isRenameModalOpen && renamingSong && (
-        <RenameFileModal
-          song={renamingSong}
-          isOpen={isRenameModalOpen}
-          onClose={onCloseRenameModal}
-          onRenameSuccess={onRenameSuccess}
-        />
-      )}
+        {isRenameModalOpen && renamingSong && (
+          <RenameFileModal
+            song={renamingSong}
+            isOpen={isRenameModalOpen}
+            onClose={onCloseRenameModal}
+            onRenameSuccess={onRenameSuccess}
+          />
+        )}
 
-      {isDeleteModalOpen && deletingSong && (
-        <DeleteSongModal
-          song={deletingSong}
-          isOpen={isDeleteModalOpen}
-          onClose={onCloseDeleteModal}
-          onDeleteSuccess={onDeleteSuccess}
-        />
-      )}
+        {isDeleteModalOpen && deletingSong && (
+          <DeleteSongModal
+            song={deletingSong}
+            isOpen={isDeleteModalOpen}
+            onClose={onCloseDeleteModal}
+            onDeleteSuccess={onDeleteSuccess}
+          />
+        )}
 
-      <KeyboardShortcutsModal
-        isOpen={isKeyboardShortcutsOpen}
-        onClose={onCloseKeyboardShortcuts}
-      />
+        {isKeyboardShortcutsOpen && (
+          <KeyboardShortcutsModal
+            isOpen={isKeyboardShortcutsOpen}
+            onClose={onCloseKeyboardShortcuts}
+          />
+        )}
 
-      <SongwritingQuickStartModal
-        isOpen={isQuickStartOpen}
-        onClose={onCloseQuickStart}
-        onStartWithLyrics={onStartWithLyrics}
-        onStartWithAudioFile={onStartWithAudioFile}
-        onStartWithTemplate={onStartWithTemplate}
-      />
+        {isQuickStartOpen && (
+          <SongwritingQuickStartModal
+            isOpen={isQuickStartOpen}
+            onClose={onCloseQuickStart}
+            onStartWithLyrics={onStartWithLyrics}
+            onStartWithAudioFile={onStartWithAudioFile}
+            onStartWithTemplate={onStartWithTemplate}
+          />
+        )}
+
+        {isVisualizerModalOpen && visualizerSong && (
+          <SongVideoVisualizerModal
+            song={visualizerSong}
+            allSongs={songs}
+            onSelectOtherSong={onSelectOtherSong}
+            onClose={onCloseVisualizer}
+          />
+        )}
+      </Suspense>
 
       <GitNotificationToast
         toast={gitToast}
         onDismiss={onDismissGitToast}
       />
-
-      {isVisualizerModalOpen && visualizerSong && (
-        <SongVideoVisualizerModal
-          song={visualizerSong}
-          allSongs={songs}
-          onSelectOtherSong={onSelectOtherSong}
-          onClose={onCloseVisualizer}
-        />
-      )}
     </>
   );
 };

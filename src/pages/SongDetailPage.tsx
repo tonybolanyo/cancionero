@@ -1,31 +1,20 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense, lazy } from 'react';
 import {
   ArrowLeft,
-  Play,
-  Pause,
-  ExternalLink,
   Edit3,
   Download,
   Copy,
   Check,
   Printer,
-  Music,
-  RotateCcw,
   History,
   FileDown,
   Disc,
-  Lock,
-  Cloud,
   Sparkles,
-  ScrollText,
   Youtube,
   Sliders,
-  Repeat,
   Maximize2,
-  Volume2,
-  Square
+  ExternalLink
 } from 'lucide-react';
-import { SongVideoVisualizerModal } from '../components/SongVideoVisualizerModal';
 import { Song } from '../types/song';
 import { Album } from '../types/album';
 import { GoogleDriveService } from '../services/googleDriveService';
@@ -33,12 +22,10 @@ import {
   songToMarkdown,
   transposeLyrics,
   transposeChord,
-  parseLyricLine,
   AccidentalPreference
 } from '../utils/markdownParser';
 import { isSafeExternalUrl } from '../utils/authConfig';
 import { exportSongToPdf } from '../utils/pdfGenerator';
-import { SyncedLyrics } from '../components/SyncedLyrics';
 import { SyncedLyricLine, LrcMetadata } from '../types/lyrics';
 import { parseLrc, isLrcContent } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
@@ -62,15 +49,28 @@ import {
 } from '../lib/music/midiExporter';
 import { downloadChordProFile } from '../lib/music/chordPro';
 import { SongChordsBar, HarmonicNotationView } from '../components/ChordDiagramCard';
-import { MetronomeWidget } from '../components/MetronomeWidget';
-import { ChromaticTunerModal } from '../components/ChromaticTunerModal';
-import { StageModeOverlay } from '../components/StageModeOverlay';
+import { SongDetailAudioPlayer } from '../components/songDetail/SongDetailAudioPlayer';
+import { SongDetailToolbar, SongDetailTab } from '../components/songDetail/SongDetailToolbar';
+import { SongDetailLyricsRenderer } from '../components/songDetail/SongDetailLyricsRenderer';
 import {
   useKeyboardShortcuts,
   SHORTCUT_PRIORITY,
   isEditableTarget,
   hasActiveModalDialog
 } from '../hooks/useKeyboardShortcuts';
+
+const SongVideoVisualizerModal = lazy(() =>
+  import('../components/SongVideoVisualizerModal').then((m) => ({ default: m.SongVideoVisualizerModal }))
+);
+const SyncedLyrics = lazy(() =>
+  import('../components/SyncedLyrics').then((m) => ({ default: m.SyncedLyrics }))
+);
+const ChromaticTunerModal = lazy(() =>
+  import('../components/ChromaticTunerModal').then((m) => ({ default: m.ChromaticTunerModal }))
+);
+const StageModeOverlay = lazy(() =>
+  import('../components/StageModeOverlay').then((m) => ({ default: m.StageModeOverlay }))
+);
 
 interface SongDetailPageProps {
   song: Song;
@@ -121,12 +121,11 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     return 'base';
   });
   const [copied, setCopied] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'lyrics' | 'synced_lyrics' | 'markdown' | 'notes'>('lyrics');
+  const [activeTab, setActiveTab] = useState<SongDetailTab>('lyrics');
   const [syncedLines, setSyncedLines] = useState<SyncedLyricLine[]>([]);
   const [lrcMetadata, setLrcMetadata] = useState<LrcMetadata>({});
   const [, setCustomLrcText] = useState<string>('');
 
-  // Auto-scroll state for singing/playing
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
   const [scrollSpeed, setScrollSpeed] = useState<number>(1);
   const [, setIsExportingPdf] = useState<boolean>(false);
@@ -135,7 +134,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [isTunerOpen, setIsTunerOpen] = useState<boolean>(false);
   const scrollIntervalRef = useRef<number | null>(null);
 
-  // Musical rehearsal states (Chords SVG, Capo, Notation, Synthesis)
   const [instrument, setInstrument] = useState<InstrumentType>('guitar');
   const [capoFret, setCapoFret] = useState<number>(0);
   const [notationView, setNotationView] = useState<HarmonicNotationView>('chords');
@@ -146,7 +144,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   const completeness = React.useMemo(() => calculateSongCompleteness(song), [song]);
 
-  // Smart auto-scroll based on song duration (fallback 210s) and scrollSpeed multiplier
   useEffect(() => {
     if (isAutoScrolling) {
       let targetSec = 210;
@@ -177,7 +174,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     };
   }, [isAutoScrolling, scrollSpeed, song.duration]);
 
-  // Audio player refs (PitchShiftPlayer + HTML5 audio fallback)
   const audioRef = useRef<HTMLAudioElement>(null);
   const dspPlayerRef = useRef<PitchShiftPlayer | null>(null);
   const [useDspPlayer, setUseDspPlayer] = useState<boolean>(false);
@@ -190,7 +186,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const [loopEnd, setLoopEnd] = useState<number | null>(null);
   const [syncAudioPitch, setSyncAudioPitch] = useState<boolean>(true);
 
-  // Private demo / Google Drive resolution states
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string>('');
   const [isLoadingDriveAudio, setIsLoadingDriveAudio] = useState<boolean>(false);
   const [driveAudioError, setDriveAudioError] = useState<string | null>(null);
@@ -211,7 +206,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     const resolveAudio = async () => {
       const fileId = song.driveFileId || (song.audioUrl?.startsWith('gdrive://') ? song.audioUrl.replace('gdrive://', '') : null);
 
-      // Private maqueta protection: hide audio if user is not author
       if ((fileId || song.isPrivateDemo) && !isAuthor) {
         setResolvedAudioUrl('');
         return;
@@ -282,7 +276,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     }
   }, [song.id, song.lrc, song.lyrics]);
 
-  // Decode resolved audio into PitchShiftPlayer when available
   useEffect(() => {
     let cancelled = false;
     setUseDspPlayer(false);
@@ -318,7 +311,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         setDuration(decoded.duration);
         setUseDspPlayer(true);
       } catch {
-        // Fallback smoothly to HTML5 <audio> for cross-origin URLs without CORS headers
         if (!cancelled) setUseDspPlayer(false);
       }
     };
@@ -329,27 +321,25 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     };
   }, [resolvedAudioUrl, isAuthor]);
 
-  // Sync PitchShiftPlayer pitch with lyric transposition when enabled
   useEffect(() => {
     if (useDspPlayer && dspPlayerRef.current) {
       dspPlayerRef.current.setPitch(syncAudioPitch ? semitones : 0);
     }
   }, [semitones, syncAudioPitch, useDspPlayer]);
 
-  // Find linked album if any
   const linkedAlbum = React.useMemo(() => {
     if (song.albumId) {
-      return albums.find(a => a.id === song.albumId);
+      return albums.find((a) => a.id === song.albumId);
     }
-    // Fallback: match by tracks or notes
-    return albums.find(a =>
-      a.tracks?.some(t => t.songId === song.id) ||
-      (song.notes && song.notes.toLowerCase().includes(a.title.toLowerCase())) ||
-      (song.tags && song.tags.some(tag => tag.toLowerCase() === a.id.toLowerCase()))
+    return albums.find(
+      (a) =>
+        a.tracks?.some((t) => t.songId === song.id) ||
+        (song.notes && song.notes.toLowerCase().includes(a.title.toLowerCase())) ||
+        (song.tags && song.tags.some((tag) => tag.toLowerCase() === a.id.toLowerCase()))
     );
   }, [albums, song.albumId, song.id, song.notes, song.tags]);
 
-  const trackInAlbum = linkedAlbum?.tracks?.find(t => t.songId === song.id);
+  const trackInAlbum = linkedAlbum?.tracks?.find((t) => t.songId === song.id);
 
   const handleChordPositionChange = (pos: 'above' | 'inline') => {
     setChordPosition(pos);
@@ -383,11 +373,14 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
       audioRef.current.pause();
       setIsPlayingAudio(false);
     } else {
-      audioRef.current.play().then(() => {
-        setIsPlayingAudio(true);
-      }).catch(err => {
-        console.warn('Could not play audio', err);
-      });
+      audioRef.current
+        .play()
+        .then(() => {
+          setIsPlayingAudio(true);
+        })
+        .catch((err) => {
+          console.warn('Could not play audio', err);
+        });
     }
   }, [useDspPlayer, isPlayingAudio]);
 
@@ -399,19 +392,17 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     return true;
   }, [isStageModeOpen, isTunerOpen, isVisualizerOpen, goBack]);
 
-  // Register Escape at navigation priority (yields to active modals and overlays)
   useEffect(() => {
     register('song-detail-go-back', {
       key: 'Escape',
       priority: SHORTCUT_PRIORITY.NAVIGATION,
       description: 'Volver al catálogo',
       when: () => !isStageModeOpen && !isTunerOpen && !isVisualizerOpen && !hasActiveModalDialog(),
-      callback: handleEscapeGoBack,
+      callback: handleEscapeGoBack
     });
     return () => unregister('song-detail-go-back');
   }, [register, unregister, isStageModeOpen, isTunerOpen, isVisualizerOpen, handleEscapeGoBack]);
 
-  // Spacebar to toggle audio playback (with memoized handler and explicit dependencies)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -498,13 +489,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     dspPlayerRef.current?.clearLoop();
   };
 
-  const formatAudioTime = (seconds: number): string => {
-    if (isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const handleSaveSyncedLyrics = (newLines: SyncedLyricLine[], rawLrc: string) => {
     if (!isAuthor) return;
     setSyncedLines(newLines);
@@ -522,14 +506,10 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   };
 
   const handleTranspose = (delta: number) => {
-    setSemitones(prev => {
+    setSemitones((prev) => {
       const next = prev + delta;
       return next > 11 ? next - 12 : next < -11 ? next + 12 : next;
     });
-  };
-
-  const handleResetTranspose = () => {
-    setSemitones(0);
   };
 
   const handleCopyLyrics = () => {
@@ -540,14 +520,10 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     try {
       setIsExportingPdf(true);
-      exportSongToPdf(song, {
+      await exportSongToPdf(song, {
         semitones,
         showChords,
         chordPosition,
@@ -649,164 +625,13 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
   const stageItems = useMemo(() => {
     if (songs.length === 0) return [{ song }];
-    return songs.map(s => ({ song: s }));
+    return songs.map((s) => ({ song: s }));
   }, [songs, song]);
 
   const stageInitialIndex = useMemo(() => {
-    const idx = stageItems.findIndex(item => item.song.id === song.id);
+    const idx = stageItems.findIndex((item) => item.song.id === song.id);
     return idx >= 0 ? idx : 0;
   }, [stageItems, song.id]);
-
-  const renderLyrics = () => {
-    const lines = transposedLyrics.split('\n');
-    let currentSecId = 'section-0';
-    let chordIndexInSec = 0;
-
-    return lines.map((line, idx) => {
-      if (line.startsWith('##') || line.startsWith('#')) {
-        const headingTitle = line.replace(/^#+\s*/, '').trim();
-        const matchedSec = sectionProgressions.find(
-          s => s.title.toLowerCase() === headingTitle.toLowerCase()
-        );
-        currentSecId = matchedSec?.id || `heading-${idx}`;
-        chordIndexInSec = 0;
-        const isPlayingThisSec = matchedSec && playingProgressionId === matchedSec.id;
-
-        return (
-          <div
-            key={idx}
-            className="flex items-center justify-between gap-2 mt-6 mb-2 border-b border-[var(--border-subtle)] pb-1"
-          >
-            <h4 className="text-xs font-mono uppercase tracking-wider text-[var(--accent-primary)] font-semibold">
-              {headingTitle}
-            </h4>
-            {showChords && matchedSec && matchedSec.chords.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleToggleProgression(matchedSec.id, matchedSec.chords)}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors cursor-pointer ${
-                  isPlayingThisSec
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold'
-                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border border-[var(--border-subtle)]'
-                }`}
-                title={isPlayingThisSec ? 'Detener progresión de la sección' : `Escuchar progresión (${matchedSec.chords.join(' - ')})`}
-              >
-                {isPlayingThisSec ? <Square className="w-2.5 h-2.5 fill-current" /> : <Volume2 className="w-3 h-3" />}
-                <span>{isPlayingThisSec ? 'Detener' : 'Oír sección'}</span>
-              </button>
-            )}
-          </div>
-        );
-      }
-
-      if (!line.trim()) {
-        return <div key={idx} className="h-4" />;
-      }
-
-      if (showChords && /\[([A-G][#b]?[^\]]*)\]/.test(line)) {
-        if (chordPosition === 'above') {
-          const segments = parseLyricLine(line);
-          return (
-            <div key={idx} className="flex flex-wrap items-end my-1 font-mono leading-none">
-              {segments.map((segment, sIdx) => {
-                const chord = segment.chord;
-                const text = segment.text;
-                const displayChord = chord ? formatDisplayedChord(chord) : '';
-                let isStepActive = false;
-                if (chord) {
-                  const thisChordIdx = chordIndexInSec;
-                  chordIndexInSec++;
-                  isStepActive =
-                    activeProgressionStep !== null &&
-                    activeProgressionStep.id === currentSecId &&
-                    activeProgressionStep.index === thisChordIdx;
-                }
-                return (
-                  <span key={sIdx} className="inline-flex flex-col mr-1">
-                    {chord ? (
-                      <button
-                        type="button"
-                        onClick={() => handleInlineChordClick(chord)}
-                        className={`text-left text-xs font-bold hover:underline select-none h-4 cursor-pointer rounded px-0.5 transition-colors ${
-                          isStepActive
-                            ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
-                            : 'text-[var(--accent-primary)]'
-                        }`}
-                        title={`Oír y ver diagrama de ${chord}`}
-                      >
-                        {displayChord}
-                      </button>
-                    ) : (
-                      <span className="text-xs font-bold select-none h-4">{'\u00A0'}</span>
-                    )}
-                    <span className={`font-serif text-[var(--text-primary)] leading-normal ${
-                      fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
-                    }`}>
-                      {text || '\u00A0'}
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-          );
-        }
-
-        const parts = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
-        return (
-          <p key={idx} className="leading-relaxed font-mono text-[var(--text-primary)] flex flex-wrap items-baseline gap-1 my-1">
-            {parts.map((part, pIdx) => {
-              if (part.startsWith('[') && part.endsWith(']')) {
-                const chordSymbol = part.slice(1, -1);
-                const thisChordIdx = chordIndexInSec;
-                chordIndexInSec++;
-                const isStepActive =
-                  activeProgressionStep !== null &&
-                  activeProgressionStep.id === currentSecId &&
-                  activeProgressionStep.index === thisChordIdx;
-                return (
-                  <button
-                    key={pIdx}
-                    type="button"
-                    onClick={() => handleInlineChordClick(chordSymbol)}
-                    className={`inline-block px-1.5 py-0.5 rounded font-mono font-semibold text-xs border -translate-y-1 mx-0.5 select-none cursor-pointer transition-colors ${
-                      isStepActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
-                        : 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] border-[var(--accent-border)]'
-                    }`}
-                    title={`Oír y ver diagrama de ${chordSymbol}`}
-                  >
-                    {formatDisplayedChord(chordSymbol)}
-                  </button>
-                );
-              }
-              return (
-                <span
-                  key={pIdx}
-                  className={`font-serif text-[var(--text-primary)] ${
-                    fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
-                  }`}
-                >
-                  {part}
-                </span>
-              );
-            })}
-          </p>
-        );
-      }
-
-      const cleanLine = line.replace(/\[[^\]]+\]/g, '');
-      return (
-        <p
-          key={idx}
-          className={`leading-relaxed font-serif text-[var(--text-secondary)] my-1 ${
-            fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'
-          }`}
-        >
-          {cleanLine}
-        </p>
-      );
-    });
-  };
 
   return (
     <div className="max-w-[1440px] 3xl:max-w-[2000px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
@@ -820,7 +645,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           <span>{linkedAlbum ? `Volver a ${linkedAlbum.title}` : 'Volver al catálogo'}</span>
         </button>
 
-        {/* Quick author & export actions */}
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -898,14 +722,14 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             </button>
           )}
           <button
-            onClick={handleExportPdf}
+            onClick={() => void handleExportPdf()}
             className="p-2 text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
             title="Exportar PDF para atril"
           >
             <FileDown className="w-4 h-4" />
           </button>
           <button
-            onClick={handlePrint}
+            onClick={() => window.print()}
             className="p-2 text-[var(--text-secondary)] hover:text-[var(--accent-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
             title="Imprimir partitura / letra"
           >
@@ -918,9 +742,13 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
       {isAuthor && (
         <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xs flex flex-wrap items-center justify-between gap-4 animate-fadeIn">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
-              completeness.percent >= 80 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-            }`}>
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                completeness.percent >= 80
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+              }`}
+            >
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -928,15 +756,17 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 <span className="text-xs font-bold text-[var(--text-primary)]">
                   Taller de Autor · {completeness.statusLabel} ({completeness.percent}%)
                 </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                  song.status === 'published' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                }`}>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    song.status === 'published'
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                  }`}
+                >
                   {song.status === 'published' ? 'Publicada' : song.status === 'draft' ? 'Borrador' : 'Inédita'}
                 </span>
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {completeness.nextSuggestion}
-              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">{completeness.nextSuggestion}</p>
             </div>
           </div>
 
@@ -966,16 +796,14 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </div>
       )}
 
-      {/* Album Linkage Banner (if this song belongs to an album) */}
+      {/* Album Linkage Banner */}
       {linkedAlbum && (
         <div className="mb-6 p-3.5 rounded-xl bg-[var(--accent-subtle)]/50 border border-[var(--accent-border)] flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2.5 min-w-0">
             <Disc className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
             <span className="text-[var(--text-secondary)] truncate">
               Perteneciente al álbum <strong className="text-[var(--text-primary)]">{linkedAlbum.title}</strong>
-              {trackInAlbum?.order && (
-                <span className="font-mono ml-1 font-semibold">· Pista #{trackInAlbum.order}</span>
-              )}
+              {trackInAlbum?.order && <span className="font-mono ml-1 font-semibold">· Pista #{trackInAlbum.order}</span>}
             </span>
           </div>
           <button
@@ -1021,7 +849,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
         {song.tags && song.tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mb-4">
-            {song.tags.map(tag => (
+            {song.tags.map((tag) => (
               <span
                 key={tag}
                 className="text-[11px] font-mono text-[var(--accent-primary)] bg-[var(--accent-subtle)] border border-[var(--accent-border)] px-2 py-0.5 rounded"
@@ -1032,7 +860,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           </div>
         )}
 
-        {/* Streaming links & Audio preview if present */}
         <div className="flex flex-wrap items-center gap-3">
           {song.spotifyUrl && isSafeExternalUrl(song.spotifyUrl) && (
             <a
@@ -1081,425 +908,74 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         </div>
       </div>
 
-      {/* Protected Private Maqueta message for non-author visitors */}
-      {!isAuthor && (song.driveFileId || song.isPrivateDemo || (song.audioUrl && (song.audioUrl.startsWith('gdrive://') || song.audioUrl.startsWith('blob:')))) && (
-        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5 text-[var(--text-secondary)]">
-            <div className="w-8 h-8 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] shrink-0">
-              <Lock className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-semibold text-[var(--text-primary)] block">Maqueta acústica de autor protegida</span>
-              <span className="text-[11px] text-[var(--text-muted)]">
-                Grabación íntima guardada en Google Drive. Inicia sesión como autor para escucharla.
-              </span>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono uppercase tracking-wider font-bold px-2.5 py-1 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)] self-start sm:self-auto">
-            Privada (Solo autor)
-          </span>
-        </div>
-      )}
+      {/* Audio Player & Drive Protection */}
+      <SongDetailAudioPlayer
+        song={song}
+        isAuthor={isAuthor}
+        resolvedAudioUrl={resolvedAudioUrl}
+        useDspPlayer={useDspPlayer}
+        semitones={semitones}
+        syncAudioPitch={syncAudioPitch}
+        onToggleSyncAudioPitch={() => setSyncAudioPitch((v) => !v)}
+        onEditSong={onEdit}
+        audioRef={audioRef}
+        isPlayingAudio={isPlayingAudio}
+        onTogglePlayAudio={togglePlayAudio}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onAudioEnded={() => setIsPlayingAudio(false)}
+        onAudioError={(msg) => {
+          setIsPlayingAudio(false);
+          setDriveAudioError(msg);
+        }}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        playbackRate={playbackRate}
+        onSpeedChange={handleSpeedChange}
+        loopStart={loopStart}
+        loopEnd={loopEnd}
+        onSetLoopA={handleSetLoopA}
+        onSetLoopB={handleSetLoopB}
+        onClearLoop={handleClearLoop}
+        eqMode={eqMode}
+        onEqModeChange={handleEqModeChange}
+        isLoadingDriveAudio={isLoadingDriveAudio}
+        driveAudioError={driveAudioError}
+        driveTokenStatus={driveTokenStatus}
+        onLoginWithGoogle={loginWithGoogle}
+      />
 
-      {/* Author Audio Player Bar with PitchShiftPlayer, Speed, A-B Loop & EQ Isolation */}
-      {isAuthor && resolvedAudioUrl && (
-        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs pb-2 border-b border-[var(--border-subtle)]">
-            <div className="flex items-center gap-2 min-w-0">
-              <Cloud className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
-              <span className="font-semibold text-[var(--text-primary)] truncate">
-                {song.driveFileName || 'Pista de Ensayo'}
-              </span>
-              {useDspPlayer && (
-                <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                  · DSP Web Audio {syncAudioPitch && semitones !== 0 ? `(${semitones > 0 ? `+${semitones}` : semitones} st)` : ''}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => onEdit(song)}
-              className="text-[11px] font-medium text-[var(--accent-primary)] hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>Reanalizar en Taller</span>
-            </button>
-          </div>
-
-          <audio
-            ref={audioRef}
-            src={!useDspPlayer ? resolvedAudioUrl : undefined}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => setIsPlayingAudio(false)}
-            onError={(e) => {
-              if (!useDspPlayer) {
-                console.warn('Error en la reproducción de audio en SongDetailPage:', e);
-                setIsPlayingAudio(false);
-                setDriveAudioError('No se pudo reproducir la pista de audio.');
-              }
-            }}
-          />
-
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <button
-              onClick={togglePlayAudio}
-              className="w-10 h-10 rounded-full bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] flex items-center justify-center transition-all shadow-md shrink-0 cursor-pointer"
-            >
-              {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-            </button>
-            <div className="flex-1 w-full space-y-1">
-              <input
-                type="range"
-                min="0"
-                max={duration || 100}
-                step="0.05"
-                value={currentTime}
-                onChange={handleSeek}
-                className="w-full accent-[var(--accent-primary)] cursor-pointer"
-              />
-              <div className="flex justify-between text-[11px] font-mono tabular-nums text-[var(--text-muted)]">
-                <span>{formatAudioTime(currentTime)}</span>
-                {loopStart !== null && (
-                  <span className="text-[var(--accent-primary)] font-semibold">
-                    Bucle A-B: {formatAudioTime(loopStart)} → {loopEnd !== null ? formatAudioTime(loopEnd) : '...'}
-                  </span>
-                )}
-                <span>{formatAudioTime(duration)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Rehearsal DSP Bar: Speed, A-B Loop, Sync Pitch & Mid-Side/EQ */}
-          <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5 text-xs">
-            {/* Speed / Time-Stretching */}
-            <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)] font-mono">
-              <span className="text-[11px] text-[var(--text-muted)] px-1.5">Velocidad:</span>
-              {[0.6, 0.75, 0.85, 1.0, 1.15, 1.25].map(rate => (
-                <button
-                  key={rate}
-                  type="button"
-                  onClick={() => handleSpeedChange(rate)}
-                  className={`px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors ${
-                    playbackRate === rate
-                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-bold'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {rate}x
-                </button>
-              ))}
-            </div>
-
-            {/* A-B Loop */}
-            <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)] font-mono">
-              <Repeat className="w-3 h-3 text-[var(--accent-primary)] ml-1.5" />
-              <button
-                type="button"
-                onClick={handleSetLoopA}
-                className={`px-2 py-0.5 rounded text-[11px] cursor-pointer ${
-                  loopStart !== null ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-bold' : 'text-[var(--text-secondary)]'
-                }`}
-                title="Marcar punto A del bucle en el tiempo actual"
-              >
-                {loopStart !== null ? `A ${formatAudioTime(loopStart)}` : 'Marcar A'}
-              </button>
-              <button
-                type="button"
-                onClick={handleSetLoopB}
-                className={`px-2 py-0.5 rounded text-[11px] cursor-pointer ${
-                  loopEnd !== null ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-bold' : 'text-[var(--text-secondary)]'
-                }`}
-                title="Marcar punto B del bucle en el tiempo actual"
-              >
-                {loopEnd !== null ? `B ${formatAudioTime(loopEnd)}` : 'Marcar B'}
-              </button>
-              {(loopStart !== null || loopEnd !== null) && (
-                <button
-                  type="button"
-                  onClick={handleClearLoop}
-                  className="px-1.5 py-0.5 rounded text-[11px] text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-                  title="Limpiar bucle A-B"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-
-            {/* Mid-Side & EQ Isolation (when DSP player is active) */}
-            {useDspPlayer && (
-              <div className="flex flex-wrap items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
-                {(
-                  [
-                    { id: 'normal', label: 'Normal' },
-                    { id: 'vocal_cut', label: 'Atenuar voz' },
-                    { id: 'bass_isolate', label: 'Solo bajo' },
-                    { id: 'guitar_focus', label: 'Guitarra' }
-                  ] as const
-                ).map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleEqModeChange(item.id)}
-                    className={`px-2 py-0.5 rounded text-[11px] whitespace-nowrap cursor-pointer transition-colors ${
-                      eqMode === item.id
-                        ? 'bg-[var(--bg-surface)] text-[var(--accent-primary)] font-semibold shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setSyncAudioPitch(v => !v)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-mono whitespace-nowrap cursor-pointer border ${
-                    syncAudioPitch
-                      ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
-                      : 'border-transparent text-[var(--text-muted)]'
-                  }`}
-                  title="Sincronizar tono del audio con la transposición de la letra"
-                >
-                  {syncAudioPitch ? 'Tono ligado' : 'Audio original'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isAuthor && isLoadingDriveAudio && (
-        <div className="mb-6 p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs flex items-center gap-2.5 animate-pulse text-[var(--text-muted)]">
-          <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
-          <span>Cargando maqueta segura desde Google Drive...</span>
-        </div>
-      )}
-
-      {isAuthor && driveAudioError && (
-        <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Cloud className="w-4 h-4 shrink-0" />
-            <span>{driveAudioError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loginWithGoogle()}
-            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer shrink-0"
-          >
-            {driveTokenStatus === 'expired' ? 'Renovar sesión de Drive' : 'Conectar Google Drive'}
-          </button>
-        </div>
-      )}
-
-      {/* Content Toolbar: Tabs & Musical Controls */}
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-[var(--bg-surface-subtle)] rounded-lg">
-          <button
-            onClick={() => setActiveTab('lyrics')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              activeTab === 'lyrics'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Letra y Acordes
-          </button>
-          <button
-            onClick={() => setActiveTab('synced_lyrics')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              activeTab === 'synced_lyrics'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Letras Sincronizadas (LRC)
-          </button>
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              activeTab === 'notes'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Notas y Contexto
-          </button>
-          <button
-            onClick={() => setActiveTab('markdown')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              activeTab === 'markdown'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Markdown
-          </button>
-        </div>
-
-        {/* Musical & Transposition Controls (when on lyrics tab) */}
-        {activeTab === 'lyrics' && (
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Transpose Semitones */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg px-2 py-1">
-              <span className="text-xs text-[var(--text-muted)] font-mono">Tono:</span>
-              <button
-                onClick={() => handleTranspose(-1)}
-                className="w-6 h-6 flex items-center justify-center rounded text-xs hover:bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer"
-                title="Bajar medio tono (-1)"
-              >
-                -1
-              </button>
-              <span className="font-mono font-bold text-xs px-1 text-[var(--accent-primary)]">
-                {currentKey}
-              </span>
-              <button
-                onClick={() => handleTranspose(1)}
-                className="w-6 h-6 flex items-center justify-center rounded text-xs hover:bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer"
-                title="Subir medio tono (+1)"
-              >
-                +1
-              </button>
-              {semitones !== 0 && (
-                <button
-                  onClick={handleResetTranspose}
-                  className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer ml-1"
-                  title="Restablecer tono original"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Sharp / Flat preference */}
-            <button
-              onClick={() => setAccidentalPreference(prev => (prev === 'sharps' ? 'flats' : 'sharps'))}
-              className="px-2 py-1 text-xs font-mono rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-              title="Alternar sostenidos (#) y bemoles (b)"
-            >
-              {accidentalPreference === 'sharps' ? '#' : 'b'}
-            </button>
-
-            {/* Chords toggle */}
-            <button
-              onClick={() => setShowChords(!showChords)}
-              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors cursor-pointer ${
-                showChords
-                  ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
-                  : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
-              }`}
-            >
-              {showChords ? 'Acordes activados' : 'Sin acordes'}
-            </button>
-
-            {/* Chord position toggle (above vs inline) */}
-            {showChords && (
-              <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
-                <button
-                  onClick={() => handleChordPositionChange('above')}
-                  className={`px-2 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
-                    chordPosition === 'above' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-medium shadow-sm' : 'text-[var(--text-muted)]'
-                  }`}
-                  title="Acordes sobre la letra"
-                >
-                  Arriba
-                </button>
-                <button
-                  onClick={() => handleChordPositionChange('inline')}
-                  className={`px-2 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
-                    chordPosition === 'inline' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-medium shadow-sm' : 'text-[var(--text-muted)]'
-                  }`}
-                  title="Acordes en línea [Am]"
-                >
-                  En línea
-                </button>
-              </div>
-            )}
-
-            {/* Font size control */}
-            <div className="flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
-              {(['sm', 'base', 'lg'] as const).map(size => (
-                <button
-                  key={size}
-                  onClick={() => handleFontSizeChange(size)}
-                  className={`w-6 h-6 flex items-center justify-center rounded text-xs transition-colors cursor-pointer ${
-                    fontSize === size ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-bold shadow-sm' : 'text-[var(--text-muted)]'
-                  }`}
-                >
-                  {size === 'sm' ? 'A-' : size === 'lg' ? 'A+' : 'A'}
-                </button>
-              ))}
-            </div>
-
-            {/* Metronome & Tap Tempo */}
-            <MetronomeWidget
-              bpm={song.tempo || 96}
-              timeSignature={song.timeSignature || '4/4'}
-              compact
-            />
-
-            {/* Auto-scroll rehearsal button */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIsAutoScrolling(!isAutoScrolling)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
-                  isAutoScrolling
-                    ? 'bg-emerald-600 text-white border-emerald-700'
-                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Desplazamiento automático para leer la letra y tocar en atril"
-              >
-                <ScrollText className="w-3.5 h-3.5" />
-                <span>{isAutoScrolling ? 'Pausar Scroll' : 'Auto-Scroll'}</span>
-              </button>
-              {isAutoScrolling && (
-                <select
-                  value={scrollSpeed}
-                  onChange={(e) => setScrollSpeed(Number(e.target.value))}
-                  className="px-1.5 py-1 text-xs font-mono rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] cursor-pointer"
-                  aria-label="Velocidad de autodesplazamiento"
-                >
-                  <option value={0.7}>0.7x</option>
-                  <option value={1}>1x</option>
-                  <option value={1.3}>1.3x</option>
-                </select>
-              )}
-            </div>
-
-            {/* Preescucha progresión de acordes */}
-            {showChords && sectionProgressions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const allChords = sectionProgressions.flatMap(s => s.chords);
-                  handleToggleProgression('__full_song__', allChords);
-                }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
-                  playingProgressionId === '__full_song__'
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)]'
-                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--accent-primary)]'
-                }`}
-                title="Reproducir la progresión completa de acordes del tema al tempo configurado"
-              >
-                {playingProgressionId === '__full_song__' ? (
-                  <Square className="w-3 h-3 fill-current" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                )}
-                <span>{playingProgressionId === '__full_song__' ? 'Detener' : 'Oír progresión'}</span>
-              </button>
-            )}
-
-            {/* Copy lyrics */}
-            <button
-              onClick={handleCopyLyrics}
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-medium)] transition-colors whitespace-nowrap cursor-pointer"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copiada' : 'Copiar letra'}</span>
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Content Toolbar */}
+      <SongDetailToolbar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        currentKey={currentKey}
+        semitones={semitones}
+        onTranspose={handleTranspose}
+        onResetTranspose={() => setSemitones(0)}
+        accidentalPreference={accidentalPreference}
+        onToggleAccidentalPreference={() =>
+          setAccidentalPreference((prev) => (prev === 'sharps' ? 'flats' : 'sharps'))
+        }
+        showChords={showChords}
+        onToggleShowChords={() => setShowChords((prev) => !prev)}
+        chordPosition={chordPosition}
+        onChordPositionChange={handleChordPositionChange}
+        fontSize={fontSize}
+        onFontSizeChange={handleFontSizeChange}
+        tempo={song.tempo}
+        timeSignature={song.timeSignature}
+        isAutoScrolling={isAutoScrolling}
+        onToggleAutoScroll={() => setIsAutoScrolling((prev) => !prev)}
+        scrollSpeed={scrollSpeed}
+        onScrollSpeedChange={setScrollSpeed}
+        sectionProgressions={sectionProgressions}
+        playingProgressionId={playingProgressionId}
+        onToggleProgression={handleToggleProgression}
+        copied={copied}
+        onCopyLyrics={handleCopyLyrics}
+      />
 
       {/* Dynamic SVG Chord Diagrams, Capo Calculator & Roman/Nashville View */}
       {activeTab === 'lyrics' && showChords && uniqueSongChords.length > 0 && (
@@ -1521,16 +997,23 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 
       {/* Main Tab Views */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 sm:p-10 shadow-sm min-h-[450px]">
-        {/* Tab 1: Lyrics & Chords */}
         {activeTab === 'lyrics' && (
-          <div className="max-w-3xl">
-            {renderLyrics()}
-          </div>
+          <SongDetailLyricsRenderer
+            transposedLyrics={transposedLyrics}
+            showChords={showChords}
+            chordPosition={chordPosition}
+            fontSize={fontSize}
+            sectionProgressions={sectionProgressions}
+            playingProgressionId={playingProgressionId}
+            activeProgressionStep={activeProgressionStep}
+            onToggleProgression={handleToggleProgression}
+            onInlineChordClick={handleInlineChordClick}
+            formatDisplayedChord={formatDisplayedChord}
+          />
         )}
 
-        {/* Tab 2: Synced Lyrics (LRC) */}
         {activeTab === 'synced_lyrics' && (
-          <div>
+          <Suspense fallback={<div className="py-12 text-center text-xs text-[var(--text-muted)]">Cargando letras sincronizadas...</div>}>
             <SyncedLyrics
               lines={syncedLines}
               currentTime={currentTime}
@@ -1544,10 +1027,9 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               fontSize={fontSize}
               onSaveToSong={isAuthor ? handleSaveSyncedLyrics : undefined}
             />
-          </div>
+          </Suspense>
         )}
 
-        {/* Tab 3: Notes & Context */}
         {activeTab === 'notes' && (
           <div className="max-w-2xl space-y-6">
             <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
@@ -1566,25 +1048,32 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[var(--border-subtle)] text-xs">
               <div>
                 <span className="text-[var(--text-muted)] block mb-1">Afinación</span>
-                <span className="font-medium text-[var(--text-primary)]">{song.tuning || 'Estándar (EADGBE)'}</span>
+                <span className="font-medium text-[var(--text-primary)]">
+                  {song.tuning || 'Estándar (EADGBE)'}
+                </span>
               </div>
               <div>
                 <span className="text-[var(--text-muted)] block mb-1">Compás</span>
-                <span className="font-medium text-[var(--text-primary)]">{song.timeSignature || '4/4'}</span>
+                <span className="font-medium text-[var(--text-primary)]">
+                  {song.timeSignature || '4/4'}
+                </span>
               </div>
               <div>
                 <span className="text-[var(--text-muted)] block mb-1">Tono Principal</span>
-                <span className="font-medium font-mono text-[var(--text-primary)]">{song.key || 'Am'}</span>
+                <span className="font-medium font-mono text-[var(--text-primary)]">
+                  {song.key || 'Am'}
+                </span>
               </div>
               <div>
                 <span className="text-[var(--text-muted)] block mb-1">Tempo</span>
-                <span className="font-medium font-mono text-[var(--text-primary)]">{song.tempo ? `${song.tempo} BPM` : 'No especificado'}</span>
+                <span className="font-medium font-mono text-[var(--text-primary)]">
+                  {song.tempo ? `${song.tempo} BPM` : 'No especificado'}
+                </span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 4: Raw Markdown */}
         {activeTab === 'markdown' && (
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -1608,35 +1097,38 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         )}
       </div>
 
-      {/* Video Visualizer for YouTube Modal */}
       {isVisualizerOpen && (
-        <SongVideoVisualizerModal
-          song={song}
-          onClose={() => setIsVisualizerOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <SongVideoVisualizerModal
+            song={song}
+            onClose={() => setIsVisualizerOpen(false)}
+          />
+        </Suspense>
       )}
 
-      {/* Chromatic YIN Microphone Tuner Modal */}
       {isTunerOpen && (
-        <ChromaticTunerModal
-          initialTuning={song.tuning}
-          initialA4Hz={song.audioAnalysis?.referenceA4Hz || 440}
-          onClose={() => setIsTunerOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ChromaticTunerModal
+            initialTuning={song.tuning}
+            initialA4Hz={song.audioAnalysis?.referenceA4Hz || 440}
+            onClose={() => setIsTunerOpen(false)}
+          />
+        </Suspense>
       )}
 
-      {/* Fullscreen Stage / Atril Mode Overlay */}
       {isStageModeOpen && (
-        <StageModeOverlay
-          items={stageItems}
-          initialIndex={stageInitialIndex}
-          initialSemitones={semitones}
-          initialCapoFret={capoFret}
-          initialInstrument={instrument}
-          initialNotationView={notationView}
-          accidentalPreference={accidentalPreference}
-          onClose={() => setIsStageModeOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <StageModeOverlay
+            items={stageItems}
+            initialIndex={stageInitialIndex}
+            initialSemitones={semitones}
+            initialCapoFret={capoFret}
+            initialInstrument={instrument}
+            initialNotationView={notationView}
+            accidentalPreference={accidentalPreference}
+            onClose={() => setIsStageModeOpen(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

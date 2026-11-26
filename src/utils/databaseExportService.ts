@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import { Song } from '../types/song';
 import { songToMarkdown } from './markdownParser';
 import { StorageService } from '../services/storageService';
@@ -98,6 +97,7 @@ export async function exportDatabaseWithAudioZip(
 ): Promise<ExportResult> {
   await StorageService.init().catch(() => {});
 
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const currentDate = new Date().toISOString().slice(0, 10);
   const timestamp = new Date().toLocaleString('es-ES');

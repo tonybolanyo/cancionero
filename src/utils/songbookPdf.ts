@@ -1,4 +1,3 @@
-import { jsPDF } from 'jspdf';
 import { Song } from '../types/song';
 import {
   transposeChord,
@@ -818,10 +817,10 @@ export function exportSingleSongToAtrilPrint(
  * Generates and downloads a complete, print-ready PDF file for the entire Cancionero
  * using jsPDF with atril-ready formatting, cover page, table of contents, and page numbers.
  */
-export function exportSongbookToPdfFile(
+export async function exportSongbookToPdfFile(
   songs: Song[],
   options: SongbookExportOptions = {}
-): void {
+): Promise<void> {
   const {
     title = siteMetadata.name || 'Cancionero de Versos Perdidos',
     subtitle = siteMetadata.subtitle || 'Letras, acordes y notas de ensayo para atril',
@@ -838,6 +837,7 @@ export function exportSongbookToPdfFile(
 
   if (songs.length === 0) return;
 
+  const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -1216,8 +1216,8 @@ export function exportSongbookToPdfFile(
 /**
  * Enhanced single song export keeping backward compatibility
  */
-export function exportSongToPdf(song: Song, options: SongbookExportOptions = {}): void {
-  exportSongbookToPdfFile([song], {
+export async function exportSongToPdf(song: Song, options: SongbookExportOptions = {}): Promise<void> {
+  await exportSongbookToPdfFile([song], {
     includeCover: false,
     includeIndex: false,
     ...options

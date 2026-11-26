@@ -1,5 +1,4 @@
 import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
-import JSZip from 'jszip';
 import * as yaml from 'js-yaml';
 
 // Musical notes scale for chord transposition
@@ -461,6 +460,7 @@ export function getSpotifyEmbedUrl(url?: string): string | null {
  * Generate a complete ZIP archive for Git repository download
  */
 export async function generateGitRepositoryZip(songs: Song[]): Promise<Blob> {
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
 
   // Create directory structure:

@@ -21,7 +21,7 @@ export interface PdfExportOptions {
  * Generate and download an optimized, high-contrast, print-ready PDF for song lyrics.
  * Designed with pure white canvas, serif typography, structured metadata, and clean chord notation.
  */
-export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): void {
+export async function exportSongToPdf(song: Song, options: PdfExportOptions = {}): Promise<void> {
   const {
     showChords = true,
     semitones = 0,
@@ -31,7 +31,7 @@ export function exportSongToPdf(song: Song, options: PdfExportOptions = {}): voi
     includeNotes = true
   } = options;
 
-  exportSongbookToPdfFile([song], {
+  await exportSongbookToPdfFile([song], {
     showChords,
     chordPosition,
     accidentalPreference,
