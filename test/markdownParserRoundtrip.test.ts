@@ -189,3 +189,137 @@ describe('CAL-03: markdownParser.ts roundtrip & helpers', () => {
     assert.equal(getSpotifyEmbedUrl('https://open.spotify.com/album/abc'), null);
   });
 });
+
+describe('CAL-08: Robust js-yaml frontmatter parsing & lossless escaping', () => {
+  it('roundtrips backslashes, nested quotes, colons, tabs, YAML tokens, and complex nested audioAnalysis JSON', () => {
+    const complexSong: Song = {
+      id: 'cal08-special-chars',
+      title: 'Parte I: "Obertura" \\ C:\\Maquetas\\v2 #final',
+      status: 'private',
+      year: 2026,
+      genre: 'Folk: "Acústico" \\ Experimental',
+      key: 'C#m',
+      tempo: 118,
+      albumId: 'album-cal08',
+      albumTitle: 'Notas: "Entre \\ Sombras"',
+      trackNumber: 7,
+      driveFileName: 'C:\\Users\\tony\\Audio\\"Toma 1"\\demo.wav',
+      notes: 'Línea 1: "comillas" y \\barra simple\nLínea 2: doble \\\\barra y tab\tfinal\n--- separador ---\n[00:12] colons: ok',
+      lrc: '[00:01.00] Dice "hola" y \\adiós\n[00:05.50] Sigue: con dos puntos #tag',
+      tags: ['acústico', 'con "comillas"', 'ruta\\barra', 'parte: uno', 'true'],
+      audioAnalysis: {
+        analyzedAt: '2026-11-26T10:00:00.000Z',
+        source: 'essentia_wasm',
+        tempo: 118,
+        tempoConfidence: 0.96,
+        key: 'C#m',
+        scale: 'minor',
+        timeSignature: '6/8',
+        chordProgression: 'C#m - A - E - B',
+        chords: [
+          { startTime: 0, endTime: 2.5, chord: 'C#m', confidence: 0.94 },
+          { startTime: 2.5, endTime: 5.0, chord: 'A/C#', confidence: 0.89 }
+        ],
+        sections: [
+          {
+            id: 'sec-cal08',
+            type: 'Puente',
+            label: 'Puente: "El \\ Clímax"',
+            startTime: 45.2,
+            endTime: 68.4,
+            confidence: 0.91,
+            avgRms: 0.48,
+            repetitionGroup: 2,
+            isVocal: true
+          }
+        ],
+        musicalNotes: 'Nota 1: "crescendo" en \\C#m\\\nNota 2: compás 6/8\tcon \\n literal y "comillas \'anidadas\'"'
+      },
+      lyrics: '## Estrofa 1\n[C#m] Verso con "comillas" y \\barra\n---\n## Outro\n[A] Final',
+      createdAt: '2026-11-26T09:00:00.000Z',
+      updatedAt: '2026-11-26T10:00:00.000Z'
+    };
+
+    const md = songToMarkdown(complexSong);
+    const parsed = markdownToSong(md);
+
+    assert.equal(parsed.id, complexSong.id);
+    assert.equal(parsed.title, complexSong.title);
+    assert.equal(parsed.genre, complexSong.genre);
+    assert.equal(parsed.albumTitle, complexSong.albumTitle);
+    assert.equal(parsed.driveFileName, complexSong.driveFileName);
+    assert.equal(parsed.notes, complexSong.notes);
+    assert.equal(parsed.lrc, complexSong.lrc);
+    assert.deepEqual(parsed.tags, complexSong.tags);
+    assert.deepEqual(parsed.audioAnalysis, complexSong.audioAnalysis);
+    assert.equal(parsed.lyrics, complexSong.lyrics);
+
+    // Idempotent second serialization
+    assert.equal(songToMarkdown(parsed), md);
+  });
+
+  it('normalizes CRLF (\\r\\n) and UTF-8 BOM and parses YAML block scalars, colons, and native YAML audioAnalysis', () => {
+    const crlfAndBlockYaml = [
+      '\uFEFF---',
+      'id: cal08-crlf-yaml',
+      'title: "Capítulo 1: El regreso"',
+      'status: published',
+      'year: 2026',
+      'genre: Cantautor',
+      'key: Em',
+      'tempo: 88',
+      'notes: |-',
+      '  Primera línea: con dos puntos',
+      '  Segunda línea con "comillas" y \\barra',
+      'lrc: |-',
+      '  [00:04.00] Verso uno: inicio',
+      '  [00:09.50] Verso dos',
+      'audioAnalysis:',
+      '  analyzedAt: "2026-11-26T11:00:00.000Z"',
+      '  source: client_dsp',
+      '  tempo: 88',
+      '  key: Em',
+      '  musicalNotes: |-',
+      '    Análisis multilínea:',
+      '    con "detalle" y \\backslash',
+      'tags:',
+      '  - directo',
+      '  - "con: dos puntos"',
+      'createdAt: 2026-11-26T00:00:00.000Z',
+      'updatedAt: 2026-11-26T01:00:00.000Z',
+      '---',
+      '## Estrofa',
+      '[Em] Letra con CRLF',
+      '[C] Segunda línea'
+    ].join('\r\n');
+
+    const parsed = markdownToSong(crlfAndBlockYaml);
+
+    assert.equal(parsed.id, 'cal08-crlf-yaml');
+    assert.equal(parsed.title, 'Capítulo 1: El regreso');
+    assert.equal(parsed.status, 'published');
+    assert.equal(parsed.year, 2026);
+    assert.equal(parsed.tempo, 88);
+    assert.equal(parsed.notes, 'Primera línea: con dos puntos\nSegunda línea con "comillas" y \\barra');
+    assert.equal(parsed.lrc, '[00:04.00] Verso uno: inicio\n[00:09.50] Verso dos');
+    assert.deepEqual(parsed.tags, ['directo', 'con: dos puntos']);
+    assert.equal(parsed.audioAnalysis?.tempo, 88);
+    assert.equal(parsed.audioAnalysis?.key, 'Em');
+    assert.equal(parsed.audioAnalysis?.musicalNotes, 'Análisis multilínea:\ncon "detalle" y \\backslash');
+    assert.equal(parsed.lyrics, '## Estrofa\n[Em] Letra con CRLF\n[C] Segunda línea');
+  });
+
+  it('handles empty frontmatter and frontmatter without trailing newline', () => {
+    const emptyFm = '---\r\n---\r\n[Am] Solo letra';
+    const parsedEmpty = markdownToSong(emptyFm, 'sin-metadatos');
+    assert.equal(parsedEmpty.id, 'sin-metadatos');
+    assert.equal(parsedEmpty.lyrics, '[Am] Solo letra');
+
+    const noTrailingNewline = '---\nid: "sin-salto"\ntitle: "Sin salto final"\nstatus: "draft"\nyear: 2026\n---';
+    const parsedNoNewline = markdownToSong(noTrailingNewline);
+    assert.equal(parsedNoNewline.id, 'sin-salto');
+    assert.equal(parsedNoNewline.title, 'Sin salto final');
+    assert.equal(parsedNoNewline.lyrics, '');
+  });
+});
+

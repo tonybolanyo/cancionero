@@ -1,5 +1,6 @@
 import { Song, SongStatus, SavedAudioAnalysis } from '../types/song';
 import JSZip from 'jszip';
+import * as yaml from 'js-yaml';
 
 // Musical notes scale for chord transposition
 const CHROMATIC_SCALE_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -225,51 +226,76 @@ export function isValidPlayableAudioUrl(url: string | null | undefined): boolean
   );
 }
 
+const quoteYamlString = (value: string): string => JSON.stringify(value);
+
+const asOptionalString = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+};
+
+const parseOptionalInt = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value) : undefined;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+};
+
 /**
  * Serialize a Song object to Markdown with YAML frontmatter
  */
 export function songToMarkdown(song: Song): string {
   const safeId = song?.id || '';
-  const safeTitle = (song?.title || 'Sin título').replace(/"/g, '\\"');
+  const safeTitle = song?.title || 'Sin título';
   const safeStatus = song?.status || 'draft';
-  const safeYear = typeof song?.year === 'number' ? song.year : new Date().getFullYear();
-  const safeGenre = (song?.genre || 'Canción de Autor').replace(/"/g, '\\"');
+  const safeYear = typeof song?.year === 'number' && Number.isFinite(song.year) ? song.year : new Date().getFullYear();
+  const safeGenre = song?.genre || 'Canción de Autor';
   const safeKey = song?.key || 'Am';
   const safeCreatedAt = song?.createdAt || new Date().toISOString();
   const safeUpdatedAt = song?.updatedAt || new Date().toISOString();
-  const safeLyrics = (song?.lyrics || '').trim();
+  const safeLyrics = (song?.lyrics || '').replace(/\r\n?/g, '\n').trim();
 
   const frontmatterLines = [
     '---',
-    `id: "${safeId}"`,
-    `title: "${safeTitle}"`,
-    `status: "${safeStatus}"`,
+    `id: ${quoteYamlString(safeId)}`,
+    `title: ${quoteYamlString(safeTitle)}`,
+    `status: ${quoteYamlString(safeStatus)}`,
     `year: ${safeYear}`,
-    `genre: "${safeGenre}"`,
-    `key: "${safeKey}"`,
-    song?.tempo ? `tempo: ${song.tempo}` : null,
-    song?.albumId ? `albumId: "${song.albumId}"` : null,
-    song?.albumTitle ? `albumTitle: "${song.albumTitle.replace(/"/g, '\\"')}"` : null,
-    typeof song?.trackNumber === 'number' ? `trackNumber: ${song.trackNumber}` : null,
-    song?.timeSignature ? `timeSignature: "${song.timeSignature}"` : null,
-    song?.tuning ? `tuning: "${song.tuning}"` : null,
-    song?.duration ? `duration: "${song.duration}"` : null,
-    song?.spotifyUrl ? `spotifyUrl: "${song.spotifyUrl}"` : null,
-    song?.appleMusicUrl ? `appleMusicUrl: "${song.appleMusicUrl}"` : null,
-    song?.youtubeUrl ? `youtubeUrl: "${song.youtubeUrl}"` : null,
-    song?.soundcloudUrl ? `soundcloudUrl: "${song.soundcloudUrl}"` : null,
-    song?.audioUrl && isValidPlayableAudioUrl(song.audioUrl) && !song.audioUrl.startsWith('blob:') ? `audioUrl: "${song.audioUrl}"` : null,
-    song?.driveFileId ? `driveFileId: "${song.driveFileId}"` : null,
-    song?.driveFileName ? `driveFileName: "${song.driveFileName.replace(/"/g, '\\"')}"` : null,
+    `genre: ${quoteYamlString(safeGenre)}`,
+    `key: ${quoteYamlString(safeKey)}`,
+    typeof song?.tempo === 'number' && Number.isFinite(song.tempo) && song.tempo > 0 ? `tempo: ${song.tempo}` : null,
+    song?.albumId ? `albumId: ${quoteYamlString(song.albumId)}` : null,
+    song?.albumTitle ? `albumTitle: ${quoteYamlString(song.albumTitle)}` : null,
+    typeof song?.trackNumber === 'number' && Number.isFinite(song.trackNumber) ? `trackNumber: ${song.trackNumber}` : null,
+    song?.timeSignature ? `timeSignature: ${quoteYamlString(song.timeSignature)}` : null,
+    song?.tuning ? `tuning: ${quoteYamlString(song.tuning)}` : null,
+    song?.duration ? `duration: ${quoteYamlString(song.duration)}` : null,
+    song?.spotifyUrl ? `spotifyUrl: ${quoteYamlString(song.spotifyUrl)}` : null,
+    song?.appleMusicUrl ? `appleMusicUrl: ${quoteYamlString(song.appleMusicUrl)}` : null,
+    song?.youtubeUrl ? `youtubeUrl: ${quoteYamlString(song.youtubeUrl)}` : null,
+    song?.soundcloudUrl ? `soundcloudUrl: ${quoteYamlString(song.soundcloudUrl)}` : null,
+    song?.audioUrl && isValidPlayableAudioUrl(song.audioUrl) && !song.audioUrl.startsWith('blob:')
+      ? `audioUrl: ${quoteYamlString(song.audioUrl)}`
+      : null,
+    song?.driveFileId ? `driveFileId: ${quoteYamlString(song.driveFileId)}` : null,
+    song?.driveFileName ? `driveFileName: ${quoteYamlString(song.driveFileName)}` : null,
     typeof song?.isPrivateDemo === 'boolean' ? `isPrivateDemo: ${song.isPrivateDemo}` : null,
-    song?.coverImage ? `coverImage: "${song.coverImage}"` : null,
-    song?.notes ? `notes: "${song.notes.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
-    song?.lrc ? `lrc: "${song.lrc.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')}"` : null,
-    song?.audioAnalysis ? `audioAnalysis: "${JSON.stringify(song.audioAnalysis).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : null,
-    song?.tags && song.tags.length > 0 ? `tags: [${song.tags.map(t => `"${String(t).replace(/"/g, '')}"`).join(', ')}]` : null,
-    `createdAt: "${safeCreatedAt}"`,
-    `updatedAt: "${safeUpdatedAt}"`,
-    song?.gitHash ? `gitHash: "${song.gitHash}"` : null,
+    song?.coverImage ? `coverImage: ${quoteYamlString(song.coverImage)}` : null,
+    song?.notes ? `notes: ${quoteYamlString(song.notes)}` : null,
+    song?.lrc ? `lrc: ${quoteYamlString(song.lrc)}` : null,
+    song?.audioAnalysis ? `audioAnalysis: ${quoteYamlString(JSON.stringify(song.audioAnalysis))}` : null,
+    song?.tags && song.tags.length > 0
+      ? `tags: [${song.tags.map((t) => quoteYamlString(String(t))).join(', ')}]`
+      : null,
+    `createdAt: ${quoteYamlString(safeCreatedAt)}`,
+    `updatedAt: ${quoteYamlString(safeUpdatedAt)}`,
+    song?.gitHash ? `gitHash: ${quoteYamlString(song.gitHash)}` : null,
     '---'
   ].filter(Boolean);
 
@@ -282,12 +308,15 @@ export function songToMarkdown(song: Song): string {
  * Parse Markdown with YAML frontmatter into a Song object
  */
 export function markdownToSong(markdown: string, fallbackId?: string): Song {
-  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
-  const match = markdown.match(frontmatterRegex);
+  const normalizedMarkdown = markdown.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const frontmatterMatch = normalizedMarkdown.match(/^---\n([\s\S]*?)\n---(?:\n([\s\S]*))?$/);
+  const emptyFrontmatterMatch = !frontmatterMatch
+    ? normalizedMarkdown.match(/^---\n---(?:\n([\s\S]*))?$/)
+    : null;
 
   const now = new Date().toISOString();
 
-  if (!match) {
+  if (!frontmatterMatch && !emptyFrontmatterMatch) {
     // If no frontmatter, treat whole file as lyrics
     return {
       id: fallbackId || `cancion-${Date.now()}`,
@@ -296,50 +325,59 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
       year: new Date().getFullYear(),
       genre: 'Canción de Autor',
       key: 'C',
-      lyrics: markdown.trim(),
+      lyrics: normalizedMarkdown.trim(),
       createdAt: now,
       updatedAt: now
     };
   }
 
-  const frontmatterRaw = match[1];
-  const lyricsBody = match[2].trim();
+  const frontmatterRaw = frontmatterMatch ? frontmatterMatch[1] : '';
+  const lyricsBody = ((frontmatterMatch ? frontmatterMatch[2] : emptyFrontmatterMatch?.[1]) ?? '').trim();
 
-  const meta: Record<string, string> = {};
-  const lines = frontmatterRaw.split('\n');
-  for (const line of lines) {
-    const colonIndex = line.indexOf(':');
-    if (colonIndex > 0) {
-      const key = line.slice(0, colonIndex).trim();
-      let value = line.slice(colonIndex + 1).trim();
-      // Unquote if wrapped in quotes
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
+  let meta: Record<string, unknown> = {};
+  if (frontmatterRaw.trim()) {
+    const loaded = yaml.load(frontmatterRaw, { schema: yaml.CORE_SCHEMA });
+    if (loaded !== null && loaded !== undefined) {
+      if (typeof loaded !== 'object' || Array.isArray(loaded)) {
+        throw new Error('El frontmatter YAML debe ser un mapa clave-valor.');
       }
-      meta[key] = value.replace(/\\([\\n"])/g, (_, ch) => (ch === 'n' ? '\n' : ch));
+      meta = loaded as Record<string, unknown>;
     }
   }
 
-  const id = meta.id || fallbackId || meta.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `song-${Date.now()}`;
-  const status: SongStatus = (meta.status === 'published' || meta.status === 'draft' || meta.status === 'private') 
-    ? meta.status 
+  const rawId = asOptionalString(meta.id);
+  const rawTitle = asOptionalString(meta.title);
+  const rawStatus = asOptionalString(meta.status);
+  const id = rawId || fallbackId || rawTitle?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `song-${Date.now()}`;
+  const status: SongStatus = (rawStatus === 'published' || rawStatus === 'draft' || rawStatus === 'private')
+    ? rawStatus
     : 'draft';
 
   let parsedTags: string[] | undefined = undefined;
-  if (meta.tags) {
+  if (Array.isArray(meta.tags)) {
+    parsedTags = meta.tags
+      .map((t) => asOptionalString(t))
+      .filter((t): t is string => typeof t === 'string' && t.length > 0);
+  } else if (typeof meta.tags === 'string' && meta.tags.trim()) {
+    const rawTags = meta.tags.trim();
     try {
-      if (meta.tags.startsWith('[') && meta.tags.endsWith(']')) {
-        parsedTags = JSON.parse(meta.tags);
+      if (rawTags.startsWith('[') && rawTags.endsWith(']')) {
+        const jsonTags = JSON.parse(rawTags);
+        if (Array.isArray(jsonTags)) {
+          parsedTags = jsonTags.map((t) => String(t)).filter(Boolean);
+        }
       } else {
-        parsedTags = meta.tags.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        parsedTags = rawTags.split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
       }
     } catch {
-      parsedTags = meta.tags.replace(/[\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+      parsedTags = rawTags.replace(/[\[\]"]/g, '').split(',').map((s) => s.trim()).filter(Boolean);
     }
   }
 
   let parsedAudioAnalysis: SavedAudioAnalysis | undefined = undefined;
-  if (meta.audioAnalysis) {
+  if (meta.audioAnalysis && typeof meta.audioAnalysis === 'object' && !Array.isArray(meta.audioAnalysis)) {
+    parsedAudioAnalysis = meta.audioAnalysis as SavedAudioAnalysis;
+  } else if (typeof meta.audioAnalysis === 'string' && meta.audioAnalysis.trim()) {
     try {
       parsedAudioAnalysis = JSON.parse(meta.audioAnalysis);
     } catch (e) {
@@ -347,37 +385,48 @@ export function markdownToSong(markdown: string, fallbackId?: string): Song {
     }
   }
 
+  const rawAudioUrl = asOptionalString(meta.audioUrl);
+  const rawDriveFileId = asOptionalString(meta.driveFileId);
+  const parsedIsPrivateDemo =
+    typeof meta.isPrivateDemo === 'boolean'
+      ? meta.isPrivateDemo
+      : typeof meta.isPrivateDemo === 'string'
+        ? meta.isPrivateDemo === 'true'
+        : Boolean(rawDriveFileId)
+          ? true
+          : undefined;
+
   return {
     id,
-    title: meta.title || 'Sin título',
+    title: rawTitle || 'Sin título',
     status,
-    albumId: meta.albumId || undefined,
-    albumTitle: meta.albumTitle || undefined,
-    trackNumber: meta.trackNumber ? parseInt(meta.trackNumber, 10) : undefined,
-    year: meta.year ? parseInt(meta.year, 10) : new Date().getFullYear(),
-    genre: meta.genre || 'Acústica',
-    key: meta.key || 'Am',
-    tempo: meta.tempo ? parseInt(meta.tempo, 10) : undefined,
-    timeSignature: meta.timeSignature,
-    tuning: meta.tuning,
-    duration: meta.duration,
-    spotifyUrl: meta.spotifyUrl || undefined,
-    appleMusicUrl: meta.appleMusicUrl || undefined,
-    youtubeUrl: meta.youtubeUrl || undefined,
-    soundcloudUrl: meta.soundcloudUrl || undefined,
-    audioUrl: isValidPlayableAudioUrl(meta.audioUrl) ? meta.audioUrl : undefined,
-    driveFileId: meta.driveFileId || undefined,
-    driveFileName: meta.driveFileName || undefined,
-    isPrivateDemo: meta.isPrivateDemo !== undefined ? meta.isPrivateDemo === 'true' : (Boolean(meta.driveFileId) ? true : undefined),
-    coverImage: meta.coverImage || undefined,
-    notes: meta.notes || undefined,
-    lrc: meta.lrc || undefined,
+    albumId: asOptionalString(meta.albumId) || undefined,
+    albumTitle: asOptionalString(meta.albumTitle) || undefined,
+    trackNumber: parseOptionalInt(meta.trackNumber),
+    year: parseOptionalInt(meta.year) ?? new Date().getFullYear(),
+    genre: asOptionalString(meta.genre) || 'Acústica',
+    key: asOptionalString(meta.key) || 'Am',
+    tempo: parseOptionalInt(meta.tempo),
+    timeSignature: asOptionalString(meta.timeSignature),
+    tuning: asOptionalString(meta.tuning),
+    duration: asOptionalString(meta.duration),
+    spotifyUrl: asOptionalString(meta.spotifyUrl) || undefined,
+    appleMusicUrl: asOptionalString(meta.appleMusicUrl) || undefined,
+    youtubeUrl: asOptionalString(meta.youtubeUrl) || undefined,
+    soundcloudUrl: asOptionalString(meta.soundcloudUrl) || undefined,
+    audioUrl: isValidPlayableAudioUrl(rawAudioUrl) ? rawAudioUrl : undefined,
+    driveFileId: rawDriveFileId || undefined,
+    driveFileName: asOptionalString(meta.driveFileName) || undefined,
+    isPrivateDemo: parsedIsPrivateDemo,
+    coverImage: asOptionalString(meta.coverImage) || undefined,
+    notes: asOptionalString(meta.notes) || undefined,
+    lrc: asOptionalString(meta.lrc) || undefined,
     audioAnalysis: parsedAudioAnalysis,
     tags: parsedTags && parsedTags.length > 0 ? parsedTags : undefined,
     lyrics: lyricsBody,
-    createdAt: meta.createdAt || now,
-    updatedAt: meta.updatedAt || now,
-    gitHash: meta.gitHash || undefined
+    createdAt: asOptionalString(meta.createdAt) || now,
+    updatedAt: asOptionalString(meta.updatedAt) || now,
+    gitHash: asOptionalString(meta.gitHash) || undefined
   };
 }
 
