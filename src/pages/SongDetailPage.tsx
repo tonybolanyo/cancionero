@@ -43,6 +43,7 @@ import { SyncedLyricLine, LrcMetadata } from '../types/lyrics';
 import { parseLrc, isLrcContent } from '../lib/lyrics/parseLrc';
 import { SAMPLE_LRC_TEXT } from '../data/sampleLrc';
 import { StorageService } from '../services/storageService';
+import { useAuth } from '../context/AuthContext';
 import { useAppNavigation } from '../context/NavigationContext';
 import { calculateSongCompleteness } from '../utils/songwriterHelper';
 import { PitchShiftPlayer, AudioEqMode } from '../lib/audio/pitchShiftPlayer';
@@ -95,6 +96,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   onViewHistory
 }) => {
   const { navigate, goBack } = useAppNavigation();
+  const { isGoogleDriveConnected, driveTokenStatus, loginWithGoogle } = useAuth();
   const { register, unregister } = useKeyboardShortcuts();
 
   const [semitones, setSemitones] = useState<number>(0);
@@ -246,7 +248,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
         URL.revokeObjectURL(objectUrlToRevoke);
       }
     };
-  }, [song.driveFileId, song.audioUrl, song.isPrivateDemo, isAuthor]);
+  }, [song.driveFileId, song.audioUrl, song.isPrivateDemo, isAuthor, isGoogleDriveConnected, driveTokenStatus]);
 
   useEffect(() => {
     setSemitones(0);
@@ -1273,9 +1275,18 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
       )}
 
       {isAuthor && driveAudioError && (
-        <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
-          <Cloud className="w-4 h-4 shrink-0" />
-          <span>{driveAudioError}</span>
+        <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-4 h-4 shrink-0" />
+            <span>{driveAudioError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loginWithGoogle()}
+            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer shrink-0"
+          >
+            {driveTokenStatus === 'expired' ? 'Renovar sesión de Drive' : 'Conectar Google Drive'}
+          </button>
         </div>
       )}
 

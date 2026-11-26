@@ -164,7 +164,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
 }) => {
   const { navigate, goBack } = useAppNavigation();
   const { register, unregister } = useKeyboardShortcuts();
-  const { token, user, isAuthor, isGoogleDriveConnected, googleUser, loginWithGoogle } = useAuth();
+  const { token, isAuthenticated, user, isAuthor, isGoogleDriveConnected, driveTokenStatus, googleUser, loginWithGoogle } = useAuth();
   
   // Editor mode: desktop studio vs raw markdown
   const [editorMode, setEditorMode] = useState<'studio' | 'markdown'>('studio');
@@ -486,7 +486,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     }
 
     let pushResult: PushResult | undefined = undefined;
-    if (pushToGitHub && token) {
+    if (pushToGitHub && (isAuthenticated || token)) {
       setIsPushing(true);
       try {
         const config = GitHubSyncService.getRemoteConfig(user?.login);
@@ -536,6 +536,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     lyrics,
     lrc,
     pushToGitHub,
+    isAuthenticated,
     token,
     user,
     commitMessage,
@@ -992,6 +993,11 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       } finally {
         setIsUploadingToDrive(false);
       }
+    } else if (driveTokenStatus === 'expired') {
+      setDriveFeedback({
+        type: 'error',
+        message: 'Tu acceso a Google Drive ha caducado. Renueva la sesión en "Autor" para subir la maqueta.'
+      });
     } else {
       setDriveFeedback({
         type: 'info',
@@ -3423,9 +3429,9 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
               <strong className="text-[var(--text-primary)] tabular-nums">{completeness.percent}%</strong>
             </span>
             <span aria-hidden="true">·</span>
-            <span className="flex items-center gap-1" title={token ? `Conectado a GitHub como @${user?.login || 'autor'}` : 'Guardado solo localmente'}>
+            <span className="flex items-center gap-1" title={(isAuthenticated || token) ? `Conectado a GitHub como @${user?.login || 'autor'}` : 'Guardado solo localmente'}>
               <FolderGit2 className="w-3 h-3 text-[var(--accent-primary)]" />
-              <span>{token ? `@${user?.login || 'autor'}` : 'Local'}</span>
+              <span>{(isAuthenticated || token) ? `@${user?.login || 'autor'}` : 'Local'}</span>
             </span>
             {driveFileId && (
               <>

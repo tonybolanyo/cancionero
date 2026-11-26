@@ -9,10 +9,21 @@ export function buildAudioUploadFormData(file: File, mimeType: string): FormData
   return formData;
 }
 
+function buildServerAuthHeaders(token?: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'cancionero-client'
+  };
+  const clean = token?.trim();
+  if (clean) {
+    headers.Authorization = `Bearer ${clean}`;
+  }
+  return headers;
+}
+
 export async function requestServerAudioAnalysis(
   file: File,
   mimeType: string,
-  token: string
+  token?: string | null
 ): Promise<{
   ok: boolean;
   status: number;
@@ -20,13 +31,13 @@ export async function requestServerAudioAnalysis(
   durationSeconds: number;
 }> {
   const formData = buildAudioUploadFormData(file, mimeType);
+  const headers = buildServerAuthHeaders(token);
 
   const [response, durationSeconds] = await Promise.all([
     fetch(resolveAppUrl('api/analyze-audio'), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
+      credentials: 'include',
+      headers,
       body: formData
     }),
     getAudioDurationSeconds(file).catch(() => 0)
@@ -44,19 +55,19 @@ export async function requestServerAudioAnalysis(
 export async function requestServerLyricsTranscription(
   file: File,
   mimeType: string,
-  token: string
+  token?: string | null
 ): Promise<{
   ok: boolean;
   status: number;
   data: any;
 }> {
   const formData = buildAudioUploadFormData(file, mimeType);
+  const headers = buildServerAuthHeaders(token);
 
   const response = await fetch(resolveAppUrl('api/transcribe-lyrics'), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
+    credentials: 'include',
+    headers,
     body: formData
   });
 

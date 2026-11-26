@@ -27,6 +27,7 @@ export interface AppRouterProps {
   songs: Song[];
   albums: Album[];
   isAuthor: boolean;
+  isVerifyingSession?: boolean;
   catalog: ReturnType<typeof useSongCatalog>;
   pendingAudioFile: File | null;
   onSaveSong: (song: Song, pushResult?: PushResult) => void;
@@ -61,6 +62,7 @@ export const AppRouter: React.FC<AppRouterProps> = ({
   songs,
   albums,
   isAuthor,
+  isVerifyingSession = false,
   catalog,
   pendingAudioFile,
   onSaveSong,
@@ -79,6 +81,25 @@ export const AppRouter: React.FC<AppRouterProps> = ({
   onOpenAuthModal
 }) => {
   const { navigate } = useAppNavigation();
+
+  const isProtectedAuthorRoute =
+    currentRoute.name === 'album-new' ||
+    currentRoute.name === 'album-edit' ||
+    currentRoute.name === 'song-new' ||
+    currentRoute.name === 'song-edit' ||
+    currentRoute.name === 'audio-analyzer' ||
+    currentRoute.name === 'video-visualizer' ||
+    currentRoute.name === 'git-sync' ||
+    currentRoute.name === 'spotify-import';
+
+  if (isVerifyingSession && isProtectedAuthorRoute && !isAuthor) {
+    return (
+      <div className="max-w-md mx-auto py-20 text-center space-y-3">
+        <div className="w-7 h-7 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs text-[var(--text-muted)] font-mono">Verificando sesión de autor...</p>
+      </div>
+    );
+  }
 
   // Find active items for detail and edit views
   const activeDetailSong = currentRoute.name === 'song-detail' ? songs.find(s => s.id === currentRoute.songId) || null : null;

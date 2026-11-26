@@ -642,7 +642,10 @@ export class StorageService {
   }
 
   /**
-   * Validates if the current session has verified author rights.
+   * Validates if the current runtime session has verified author rights.
+   * Note: In browser environments, this delegates to runtime-verified session state
+   * (never trusting unverified localStorage JSON flags) as a local UX/IndexedDB guard.
+   * Authoritative enforcement happens server-side, via GitHub API, and via Google Drive OAuth.
    */
   static isAuthorAuthorized(): boolean {
     if (typeof window === 'undefined') return true;
@@ -650,7 +653,7 @@ export class StorageService {
   }
 
   /**
-   * Asserts that author privileges exist before mutating persistent content.
+   * Asserts that verified runtime author privileges exist before mutating local persistent content.
    */
   static assertAuthorAuthorized(actionName: string): void {
     if (!this.isAuthorAuthorized()) {

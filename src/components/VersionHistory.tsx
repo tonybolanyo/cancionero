@@ -34,7 +34,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   onRestoreSong,
   isAuthor
 }) => {
-  const { token } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const [selectedRecordIndex, setSelectedRecordIndex] = useState<number>(0);
   const [viewTab, setViewTab] = useState<'diff' | 'lyrics' | 'raw'>('diff');
   const [copied, setCopied] = useState<boolean>(false);
@@ -130,7 +130,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
     );
 
     let pushRes: PushResult | undefined;
-    if (GitHubSyncService.isAutoCommitEnabled() && token) {
+    if (GitHubSyncService.isAutoCommitEnabled() && (isAuthenticated || token)) {
       setRestoreNotice('Haciendo Push de la versión restaurada a GitHub...');
       try {
         pushRes = await GitHubSyncService.pushSongFile(

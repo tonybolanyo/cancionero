@@ -20,22 +20,41 @@ import {
   type PreparedGeminiAudioPart
 } from './src/lib/server/geminiAudio';
 
+import {
+  resolveServerAuthConfig,
+  resolveSessionSecretKey,
+  sealSessionPayload,
+  unsealSessionPayload,
+  parseCookies,
+  buildSessionCookieHeader,
+  buildClearSessionCookieHeader,
+  verifyCsrfRequest,
+  validateSafeRepoTarget,
+  validateSafeGitHubRepoPath,
+  SESSION_COOKIE_NAME,
+  SESSION_DEFAULT_TTL_MS,
+  SESSION_REMEMBER_TTL_MS,
+  type ServerAuthConfig
+} from './src/lib/server/authSession';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const AUTHORIZED_GITHUB_USER = (
-  process.env.VITE_GITHUB_ALLOWED_USER ||
-  process.env.AUTHORIZED_GITHUB_USER ||
-  'tonygb'
-).trim().toLowerCase();
+const isProdEnv = process.env.NODE_ENV === 'production';
+const serverAuthConfig: ServerAuthConfig = resolveServerAuthConfig(process.env, isProdEnv);
+const sessionSecretKey = resolveSessionSecretKey(process.env);
 
-const AUTHORIZED_AUTHOR_EMAIL = (
-  process.env.VITE_AUTHORIZED_AUTHOR_EMAIL ||
-  process.env.AUTHORIZED_AUTHOR_EMAIL ||
-  'tony@tonygb.com'
-).trim().toLowerCase();
+if (isProdEnv && (!serverAuthConfig.isGithubConfigured || !serverAuthConfig.isEmailConfigured)) {
+  console.error(
+    '[auth] CRÍTICO: AUTHORIZED_GITHUB_USER y/o AUTHORIZED_AUTHOR_EMAIL no están configurados en .env en producción. Las rutas protegidas rechazarán el acceso (fail-closed).'
+  );
+} else if (!isProdEnv && serverAuthConfig.usedDevFallback) {
+  console.warn(
+    '[auth] AUTHORIZED_GITHUB_USER / AUTHORIZED_AUTHOR_EMAIL no definidos en .env; usando valores de desarrollo. En producción es obligatorio definirlos en .env.'
+  );
+}
 
 // In-memory token verification cache to avoid excessive external API roundtrips
 interface CachedTokenVerification {
@@ -78,27 +97,32 @@ function apiRateLimiter(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-/**
- * Verifies if the request carries a token belonging to the authorized author
- */
-async function verifyAuthorRequest(req: Request): Promise<{ authorized: boolean; reason?: string }> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { authorized: false, reason: 'Cabecera Authorization Bearer requerida.' };
+function getSealedSessionFromRequest(req: Request) {
+  const cookies = parseCookies(req.headers.cookie);
+  const raw = cookies[SESSION_COOKIE_NAME];
+  return unsealSessionPayload(raw, sessionSecretKey);
+}
+
+async function verifyGitHubTokenIdentity(
+  token: string,
+  expectedLogin: string
+): Promise<{ authorized: boolean; login?: string; user?: any; reason?: string }> {
+  if (!expectedLogin) {
+    return {
+      authorized: false,
+      reason: 'AUTHORIZED_GITHUB_USER no está configurado en el servidor.'
+    };
   }
 
-  const token = authHeader.substring(7).trim();
-  if (!token) {
-    return { authorized: false, reason: 'Token de autorización ausente.' };
-  }
-
-  // Check cache
   const cached = tokenVerificationCache.get(token);
   if (cached && Date.now() < cached.expiresAt) {
-    return { authorized: cached.authorized, reason: cached.authorized ? undefined : 'Token no autorizado.' };
+    return {
+      authorized: cached.authorized,
+      login: cached.userIdentifier,
+      reason: cached.authorized ? undefined : 'Token no autorizado.'
+    };
   }
 
-  // 1. Try GitHub REST API (PAT)
   try {
     const ghRes = await fetch('https://api.github.com/user', {
       headers: {
@@ -108,56 +132,143 @@ async function verifyAuthorRequest(req: Request): Promise<{ authorized: boolean;
       }
     });
 
-    if (ghRes.ok) {
-      const ghUser = await ghRes.json();
-      const login = String(ghUser.login || '').trim().toLowerCase();
-      const isAllowed = login === AUTHORIZED_GITHUB_USER;
-
-      tokenVerificationCache.set(token, {
-        authorized: isAllowed,
-        userIdentifier: login,
-        expiresAt: Date.now() + 5 * 60 * 1000 // Cache for 5 minutes
-      });
-
-      if (isAllowed) {
-        return { authorized: true };
-      }
-      return { authorized: false, reason: `Usuario @${login} no coincide con el autor autorizado (@${AUTHORIZED_GITHUB_USER}).` };
+    if (!ghRes.ok) {
+      return { authorized: false, reason: `GitHub rechazó el token (HTTP ${ghRes.status}).` };
     }
+
+    const ghUser = await ghRes.json();
+    const login = String(ghUser.login || '').trim().toLowerCase();
+    const isAllowed = Boolean(login) && login === expectedLogin;
+
+    tokenVerificationCache.set(token, {
+      authorized: isAllowed,
+      userIdentifier: login,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+
+    if (isAllowed) {
+      return { authorized: true, login, user: ghUser };
+    }
+    return {
+      authorized: false,
+      login,
+      reason: `Usuario @${login} no coincide con el autor autorizado (@${expectedLogin}).`
+    };
   } catch {
-    // If GitHub check fails or token is not GitHub, proceed to Google check
+    return { authorized: false, reason: 'Error de red validando credenciales con GitHub.' };
+  }
+}
+
+/**
+ * Verifies if the request carries a valid HttpOnly session cookie or Bearer token
+ * belonging to the authorized author. Enforces CSRF checks on cookie-authenticated mutations.
+ */
+async function verifyAuthorRequest(
+  req: Request
+): Promise<{ authorized: boolean; githubToken?: string; authSource?: 'cookie' | 'bearer'; reason?: string }> {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+      return { authorized: false, reason: 'Token de autorización ausente.' };
+    }
+
+    // 1. Check cache
+    const cached = tokenVerificationCache.get(token);
+    if (cached && Date.now() < cached.expiresAt) {
+      return {
+        authorized: cached.authorized,
+        githubToken: cached.authorized ? token : undefined,
+        authSource: 'bearer',
+        reason: cached.authorized ? undefined : 'Token no autorizado.'
+      };
+    }
+
+    // 2. Try GitHub REST API (PAT)
+    if (serverAuthConfig.authorizedGithubUser) {
+      const ghCheck = await verifyGitHubTokenIdentity(token, serverAuthConfig.authorizedGithubUser);
+      if (ghCheck.authorized) {
+        return { authorized: true, githubToken: token, authSource: 'bearer' };
+      }
+      if (ghCheck.login) {
+        return { authorized: false, reason: ghCheck.reason };
+      }
+    }
+
+    // 3. Try Google OAuth tokeninfo
+    if (serverAuthConfig.authorizedAuthorEmail) {
+      try {
+        const googleRes = await fetch(
+          `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`
+        );
+        if (googleRes.ok) {
+          const googleData = await googleRes.json();
+          const email = String(googleData.email || '').trim().toLowerCase();
+          const emailVerified = googleData.email_verified !== false && googleData.email_verified !== 'false';
+          const isAllowed = emailVerified && Boolean(email) && email === serverAuthConfig.authorizedAuthorEmail;
+
+          tokenVerificationCache.set(token, {
+            authorized: isAllowed,
+            userIdentifier: email,
+            expiresAt: Date.now() + 5 * 60 * 1000
+          });
+
+          if (isAllowed) {
+            return { authorized: true, authSource: 'bearer' };
+          }
+          return {
+            authorized: false,
+            reason: `Cuenta Google (${email}) no coincide con el correo propietario (${serverAuthConfig.authorizedAuthorEmail}).`
+          };
+        }
+      } catch {
+        // Google check failed
+      }
+    }
+
+    tokenVerificationCache.set(token, {
+      authorized: false,
+      userIdentifier: 'invalid',
+      expiresAt: Date.now() + 60 * 1000
+    });
+
+    return { authorized: false, reason: 'Token de autorización inválido o no reconocido.' };
   }
 
-  // 2. Try Google OAuth tokeninfo
-  try {
-    const googleRes = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`);
-    if (googleRes.ok) {
-      const googleData = await googleRes.json();
-      const email = String(googleData.email || '').trim().toLowerCase();
-      const isAllowed = email === AUTHORIZED_AUTHOR_EMAIL;
-
-      tokenVerificationCache.set(token, {
-        authorized: isAllowed,
-        userIdentifier: email,
-        expiresAt: Date.now() + 5 * 60 * 1000
-      });
-
-      if (isAllowed) {
-        return { authorized: true };
-      }
-      return { authorized: false, reason: `Cuenta Google (${email}) no coincide con el correo propietario (${AUTHORIZED_AUTHOR_EMAIL}).` };
-    }
-  } catch {
-    // Google check failed
+  // Fallback to encrypted HttpOnly session cookie
+  const sealedSession = getSealedSessionFromRequest(req);
+  if (!sealedSession) {
+    return { authorized: false, reason: 'Sesión de autor o cabecera Authorization Bearer requerida.' };
   }
 
-  tokenVerificationCache.set(token, {
-    authorized: false,
-    userIdentifier: 'invalid',
-    expiresAt: Date.now() + 60 * 1000
-  });
+  // Enforce CSRF protection on cookie-authenticated mutating requests
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase())) {
+    const csrf = verifyCsrfRequest(req);
+    if (!csrf.ok) {
+      return { authorized: false, reason: csrf.reason };
+    }
+  }
 
-  return { authorized: false, reason: 'Token de autorización inválido o no reconocido.' };
+  if (
+    !serverAuthConfig.authorizedGithubUser ||
+    sealedSession.login.trim().toLowerCase() !== serverAuthConfig.authorizedGithubUser
+  ) {
+    return { authorized: false, reason: 'Sesión de cookie no coincide con el autor autorizado.' };
+  }
+
+  const ghCheck = await verifyGitHubTokenIdentity(
+    sealedSession.token,
+    serverAuthConfig.authorizedGithubUser
+  );
+  if (!ghCheck.authorized) {
+    return { authorized: false, reason: ghCheck.reason || 'Sesión de GitHub expirada o revocada.' };
+  }
+
+  return {
+    authorized: true,
+    githubToken: sealedSession.token,
+    authSource: 'cookie'
+  };
 }
 
 /**
@@ -166,11 +277,14 @@ async function verifyAuthorRequest(req: Request): Promise<{ authorized: boolean;
 async function requireAuthorAuth(req: Request, res: Response, next: NextFunction) {
   const check = await verifyAuthorRequest(req);
   if (!check.authorized) {
+    const configuredHint = serverAuthConfig.authorizedGithubUser || 'no-configurado';
     return res.status(403).json({
       success: false,
-      error: `Acceso denegado: Operación reservada exclusivamente para el autor propietario (@${AUTHORIZED_GITHUB_USER} / ${AUTHORIZED_AUTHOR_EMAIL}). ${check.reason || ''}`
+      error: `Acceso denegado: Operación reservada exclusivamente para el autor propietario (@${configuredHint}). ${check.reason || ''}`
     });
   }
+  (req as any).verifiedAuthorGithubToken = check.githubToken;
+  (req as any).verifiedAuthSource = check.authSource;
   next();
 }
 
@@ -279,6 +393,7 @@ function extractAudioSourceFromRequest(req: Request, defaultMime: string): Audio
 
 async function startServer() {
   const app = express();
+  app.set('trust proxy', 1);
   // Dev server must always run on port 3000 as required by the environment
   const PORT = 3000;
   const isProd = process.env.NODE_ENV === 'production';
@@ -293,7 +408,7 @@ async function startServer() {
   });
 
   // Safe JSON/urlencoded limits (audio files are streamed via multipart/form-data)
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
   const rawBase = process.env.VITE_BASE_URL || process.env.BASE_PATH || '/cancionero/';
@@ -303,6 +418,524 @@ async function startServer() {
 
   const apiRouter = express.Router();
   apiRouter.use(apiRateLimiter);
+
+  // Auth Session Check (HttpOnly cookie)
+  apiRouter.get('/auth/session', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    const sealed = getSealedSessionFromRequest(req);
+    if (!sealed) {
+      return res.json({
+        authMode: 'server_cookie',
+        authenticated: false,
+        isAuthor: false,
+        user: null,
+        storageMode: 'http_only_cookie',
+        authorizedUsername: serverAuthConfig.authorizedGithubUser
+      });
+    }
+
+    if (
+      !serverAuthConfig.authorizedGithubUser ||
+      sealed.login.trim().toLowerCase() !== serverAuthConfig.authorizedGithubUser
+    ) {
+      res.setHeader('Set-Cookie', buildClearSessionCookieHeader(req));
+      return res.json({
+        authMode: 'server_cookie',
+        authenticated: false,
+        isAuthor: false,
+        user: null,
+        storageMode: 'http_only_cookie',
+        authorizedUsername: serverAuthConfig.authorizedGithubUser
+      });
+    }
+
+    const ghCheck = await verifyGitHubTokenIdentity(
+      sealed.token,
+      serverAuthConfig.authorizedGithubUser
+    );
+    if (!ghCheck.authorized) {
+      res.setHeader('Set-Cookie', buildClearSessionCookieHeader(req));
+      return res.json({
+        authMode: 'server_cookie',
+        authenticated: false,
+        isAuthor: false,
+        user: null,
+        storageMode: 'http_only_cookie',
+        authorizedUsername: serverAuthConfig.authorizedGithubUser
+      });
+    }
+
+    return res.json({
+      authMode: 'server_cookie',
+      authenticated: true,
+      isAuthor: true,
+      user: sealed.user,
+      rememberMe: sealed.rememberMe,
+      storageMode: 'http_only_cookie',
+      authorizedUsername: serverAuthConfig.authorizedGithubUser
+    });
+  });
+
+  // Auth Login: Validates GitHub PAT server-side and stores it ONLY in an encrypted HttpOnly cookie
+  apiRouter.post('/auth/github', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const csrf = verifyCsrfRequest(req);
+    if (!csrf.ok) {
+      return res.status(403).json({ success: false, error: csrf.reason });
+    }
+
+    if (!serverAuthConfig.isGithubConfigured || !serverAuthConfig.authorizedGithubUser) {
+      return res.status(503).json({
+        success: false,
+        error: 'AUTHORIZED_GITHUB_USER no está configurado en las variables de entorno del servidor (.env).'
+      });
+    }
+
+    const rawToken = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const rememberMe = Boolean(req.body?.rememberMe);
+
+    if (!rawToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Por favor introduce tu Personal Access Token (PAT) de GitHub.'
+      });
+    }
+
+    try {
+      const ghRes = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${rawToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'tony-cancionero-server'
+        }
+      });
+
+      if (!ghRes.ok) {
+        if (ghRes.status === 401) {
+          return res.status(401).json({
+            success: false,
+            error: 'Token de GitHub no válido o expirado (HTTP 401 Unauthorized).'
+          });
+        }
+        if (ghRes.status === 403) {
+          return res.status(403).json({
+            success: false,
+            error: 'Límite de solicitudes de la API de GitHub superado o acceso denegado (HTTP 403).'
+          });
+        }
+        return res.status(ghRes.status).json({
+          success: false,
+          error: `Error al conectar con la API de GitHub (código HTTP ${ghRes.status}).`
+        });
+      }
+
+      const userData = await ghRes.json();
+      const login = String(userData.login || '').trim().toLowerCase();
+
+      if (!login || login !== serverAuthConfig.authorizedGithubUser) {
+        return res.status(403).json({
+          success: false,
+          error: `Acceso denegado: Te has identificado en GitHub como @${login || 'desconocido'}, pero solamente el usuario @${serverAuthConfig.authorizedGithubUser} tiene permisos de autor en este cancionero.`
+        });
+      }
+
+      const githubUser = {
+        login: userData.login,
+        name: userData.name || userData.login,
+        avatar_url: userData.avatar_url,
+        html_url: userData.html_url,
+        bio: userData.bio,
+        email: userData.email
+      };
+
+      const ttlMs = rememberMe ? SESSION_REMEMBER_TTL_MS : SESSION_DEFAULT_TTL_MS;
+      const now = Date.now();
+      const sealed = sealSessionPayload(
+        {
+          token: rawToken,
+          login: userData.login,
+          user: githubUser,
+          rememberMe,
+          iat: now,
+          exp: now + ttlMs
+        },
+        sessionSecretKey
+      );
+
+      tokenVerificationCache.set(rawToken, {
+        authorized: true,
+        userIdentifier: login,
+        expiresAt: now + 5 * 60 * 1000
+      });
+
+      res.setHeader(
+        'Set-Cookie',
+        buildSessionCookieHeader(sealed, {
+          rememberMe,
+          maxAgeSeconds: rememberMe ? Math.floor(ttlMs / 1000) : undefined,
+          req
+        })
+      );
+
+      return res.json({
+        success: true,
+        authMode: 'server_cookie',
+        storageMode: 'http_only_cookie',
+        user: githubUser
+      });
+    } catch (err: any) {
+      return res.status(502).json({
+        success: false,
+        error: `Error de red al conectar con api.github.com: ${err?.message || 'Comprueba tu conexión.'}`
+      });
+    }
+  });
+
+  // Auth Logout: Clears HttpOnly cookie and verification cache
+  apiRouter.post('/auth/logout', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const csrf = verifyCsrfRequest(req);
+    if (!csrf.ok) {
+      return res.status(403).json({ success: false, error: csrf.reason });
+    }
+    const sealed = getSealedSessionFromRequest(req);
+    if (sealed?.token) {
+      tokenVerificationCache.delete(sealed.token);
+    }
+    res.setHeader('Set-Cookie', buildClearSessionCookieHeader(req));
+    return res.json({ success: true });
+  });
+
+  // Authenticated GitHub Proxy: Atomic multi-file push using HttpOnly session PAT
+  apiRouter.post('/github/push', requireAuthorAuth, async (req, res) => {
+    const githubToken = (req as any).verifiedAuthorGithubToken as string | undefined;
+    if (!githubToken) {
+      return res.status(403).json({
+        success: false,
+        message: 'Se requiere sesión de GitHub válida para hacer push al repositorio.'
+      });
+    }
+
+    const { owner, repo, branch, commitMessage, files } = req.body || {};
+    const targetCheck = validateSafeRepoTarget(
+      owner,
+      repo,
+      branch,
+      serverAuthConfig.authorizedGithubUser
+    );
+    if (!targetCheck.valid) {
+      return res.status(400).json({ success: false, message: targetCheck.error });
+    }
+
+    const cleanMessage = typeof commitMessage === 'string' ? commitMessage.trim().slice(0, 500) : '';
+    if (!cleanMessage) {
+      return res.status(400).json({ success: false, message: 'Mensaje de commit requerido.' });
+    }
+
+    if (!Array.isArray(files) || files.length === 0 || files.length > 500) {
+      return res.status(400).json({ success: false, message: 'Lista de archivos inválida para commit atómico.' });
+    }
+
+    const dedupMap = new Map<string, { path: string; content?: string; delete?: boolean }>();
+    for (const item of files) {
+      if (!item || !validateSafeGitHubRepoPath(item.path)) {
+        return res.status(400).json({
+          success: false,
+          message: `Ruta de archivo no permitida en repositorio: ${String(item?.path || '')}`
+        });
+      }
+      dedupMap.set(item.path.trim(), {
+        path: item.path.trim(),
+        content: typeof item.content === 'string' ? item.content : '',
+        delete: Boolean(item.delete)
+      });
+    }
+
+    const targetRepo = `${targetCheck.owner}/${targetCheck.repo}`;
+    const apiBase = `https://api.github.com/repos/${targetCheck.owner}/${targetCheck.repo}`;
+    const encodedBranch = encodeURIComponent(targetCheck.branch);
+    const ghHeaders: Record<string, string> = {
+      Authorization: `Bearer ${githubToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'tony-cancionero-server'
+    };
+
+    try {
+      const refRes = await fetch(`${apiBase}/git/ref/heads/${encodedBranch}`, {
+        method: 'GET',
+        headers: ghHeaders,
+        cache: 'no-cache'
+      });
+      if (!refRes.ok) {
+        const errData = await refRes.json().catch(() => ({}));
+        return res.status(refRes.status).json({
+          success: false,
+          requiresPermissions: refRes.status === 401 || refRes.status === 403 || refRes.status === 404,
+          targetRepo,
+          message: errData.message || `Error GitHub ref (${refRes.status})`
+        });
+      }
+      const refData = await refRes.json();
+      const baseCommitSha: string | undefined = refData?.object?.sha;
+      if (!baseCommitSha) {
+        return res.status(502).json({ success: false, targetRepo, message: 'No se pudo obtener SHA de la rama.' });
+      }
+
+      const baseCommitRes = await fetch(`${apiBase}/git/commits/${baseCommitSha}`, {
+        method: 'GET',
+        headers: ghHeaders,
+        cache: 'no-cache'
+      });
+      if (!baseCommitRes.ok) {
+        const errData = await baseCommitRes.json().catch(() => ({}));
+        return res.status(baseCommitRes.status).json({
+          success: false,
+          targetRepo,
+          message: errData.message || `Error obteniendo commit base (${baseCommitRes.status})`
+        });
+      }
+      const baseCommitData = await baseCommitRes.json();
+      const baseTreeSha: string | undefined = baseCommitData?.tree?.sha;
+      if (!baseTreeSha) {
+        return res.status(502).json({ success: false, targetRepo, message: 'No se pudo obtener árbol base.' });
+      }
+
+      const filesToCommit = Array.from(dedupMap.values());
+      const filesToCreate = filesToCommit.filter(f => !f.delete);
+      const filesToDelete = filesToCommit.filter(f => f.delete);
+      const treeEntries: Array<{ path: string; mode: '100644'; type: 'blob'; sha: string | null }> = [];
+      let catalogBlobSha: string | null = null;
+
+      const BATCH_SIZE = 6;
+      for (let i = 0; i < filesToCreate.length; i += BATCH_SIZE) {
+        const batch = filesToCreate.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async file => {
+            const blobRes = await fetch(`${apiBase}/git/blobs`, {
+              method: 'POST',
+              headers: ghHeaders,
+              body: JSON.stringify({
+                content: Buffer.from(file.content ?? '', 'utf8').toString('base64'),
+                encoding: 'base64'
+              })
+            });
+            if (!blobRes.ok) {
+              const errData = await blobRes.json().catch(() => ({}));
+              throw Object.assign(new Error(errData.message || 'Error creando blob'), { status: blobRes.status });
+            }
+            const blobData = await blobRes.json();
+            if (file.path === 'catalog.json') {
+              catalogBlobSha = blobData.sha;
+            }
+            return {
+              path: file.path,
+              mode: '100644' as const,
+              type: 'blob' as const,
+              sha: blobData.sha as string
+            };
+          })
+        );
+        treeEntries.push(...batchResults);
+      }
+
+      for (const delFile of filesToDelete) {
+        treeEntries.push({
+          path: delFile.path,
+          mode: '100644',
+          type: 'blob',
+          sha: null
+        });
+      }
+
+      const treeRes = await fetch(`${apiBase}/git/trees`, {
+        method: 'POST',
+        headers: ghHeaders,
+        body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries })
+      });
+      if (!treeRes.ok) {
+        const errData = await treeRes.json().catch(() => ({}));
+        return res.status(treeRes.status).json({
+          success: false,
+          targetRepo,
+          message: errData.message || `Error creando árbol Git (${treeRes.status})`
+        });
+      }
+      const treeData = await treeRes.json();
+
+      const commitRes = await fetch(`${apiBase}/git/commits`, {
+        method: 'POST',
+        headers: ghHeaders,
+        body: JSON.stringify({
+          message: cleanMessage,
+          tree: treeData.sha,
+          parents: [baseCommitSha]
+        })
+      });
+      if (!commitRes.ok) {
+        const errData = await commitRes.json().catch(() => ({}));
+        return res.status(commitRes.status).json({
+          success: false,
+          targetRepo,
+          message: errData.message || `Error creando commit (${commitRes.status})`
+        });
+      }
+      const newCommitData = await commitRes.json();
+
+      const patchRefRes = await fetch(`${apiBase}/git/refs/heads/${encodedBranch}`, {
+        method: 'PATCH',
+        headers: ghHeaders,
+        body: JSON.stringify({ sha: newCommitData.sha, force: false })
+      });
+      if (!patchRefRes.ok) {
+        const errData = await patchRefRes.json().catch(() => ({}));
+        return res.status(patchRefRes.status).json({
+          success: false,
+          isConflict: patchRefRes.status === 409 || patchRefRes.status === 422,
+          targetRepo,
+          message: errData.message || `Error actualizando rama (${patchRefRes.status})`
+        });
+      }
+
+      const newCommitSha = String(newCommitData.sha);
+      const shortSha = newCommitSha.substring(0, 7);
+      const committedPaths = filesToCommit.map(f => f.path);
+
+      return res.json({
+        success: true,
+        commitSha: shortSha,
+        fullCommitSha: newCommitSha,
+        catalogBlobSha,
+        commitUrl: newCommitData.html_url || `https://github.com/${targetRepo}/commit/${newCommitSha}`,
+        targetRepo,
+        filesCommitted: committedPaths,
+        message: `Commit atómico completado en GitHub: [${shortSha}] (${committedPaths.length} archivos sincronizados en ${targetRepo}@${targetCheck.branch})`
+      });
+    } catch (err: any) {
+      return res.status(err?.status || 502).json({
+        success: false,
+        targetRepo,
+        message: err?.message || 'Error al ejecutar push atómico vía servidor.'
+      });
+    }
+  });
+
+  // Authenticated GitHub Proxy: Fetch catalog.json using HttpOnly session PAT
+  apiRouter.get('/github/catalog', requireAuthorAuth, async (req, res) => {
+    const githubToken = (req as any).verifiedAuthorGithubToken as string | undefined;
+    if (!githubToken) {
+      return res.status(403).json({ success: false, error: 'Sesión de GitHub requerida.' });
+    }
+
+    const targetCheck = validateSafeRepoTarget(
+      req.query.owner,
+      req.query.repo,
+      req.query.branch,
+      serverAuthConfig.authorizedGithubUser
+    );
+    if (!targetCheck.valid) {
+      return res.status(400).json({ success: false, error: targetCheck.error });
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'tony-cancionero-server'
+    };
+    const ifNoneMatch = typeof req.headers['if-none-match'] === 'string' ? req.headers['if-none-match'] : '';
+    if (ifNoneMatch) {
+      headers['If-None-Match'] = ifNoneMatch;
+    }
+
+    try {
+      const ghRes = await fetch(
+        `https://api.github.com/repos/${targetCheck.owner}/${targetCheck.repo}/contents/catalog.json?ref=${encodeURIComponent(targetCheck.branch)}&_t=${Date.now()}`,
+        { headers, cache: 'no-cache' }
+      );
+      if (ghRes.status === 304) {
+        return res.json({
+          success: true,
+          notModified: true,
+          etag: ghRes.headers.get('etag') || ifNoneMatch
+        });
+      }
+      if (!ghRes.ok) {
+        return res.status(ghRes.status).json({ success: false, error: `GitHub HTTP ${ghRes.status}` });
+      }
+      const data = await ghRes.json();
+      const contentStr = data?.content ? Buffer.from(String(data.content), 'base64').toString('utf8') : '[]';
+      const songs = JSON.parse(contentStr);
+      return res.json({
+        success: true,
+        notModified: false,
+        etag: ghRes.headers.get('etag'),
+        sha: data?.sha || null,
+        songs: Array.isArray(songs) ? songs : []
+      });
+    } catch (err: any) {
+      return res.status(502).json({ success: false, error: err?.message || 'Error leyendo catálogo remoto.' });
+    }
+  });
+
+  // Authenticated GitHub Proxy: Delete file using HttpOnly session PAT
+  apiRouter.post('/github/delete-file', requireAuthorAuth, async (req, res) => {
+    const githubToken = (req as any).verifiedAuthorGithubToken as string | undefined;
+    if (!githubToken) {
+      return res.status(403).json({ success: false, error: 'Sesión de GitHub requerida.' });
+    }
+
+    const { owner, repo, branch, path: filePath, message } = req.body || {};
+    const targetCheck = validateSafeRepoTarget(
+      owner,
+      repo,
+      branch,
+      serverAuthConfig.authorizedGithubUser
+    );
+    if (!targetCheck.valid) {
+      return res.status(400).json({ success: false, error: targetCheck.error });
+    }
+
+    if (!validateSafeGitHubRepoPath(filePath) || !String(filePath).startsWith('songs/')) {
+      return res.status(400).json({ success: false, error: 'Solo se permite eliminar archivos en songs/*.md.' });
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${githubToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'tony-cancionero-server'
+    };
+
+    try {
+      const getRes = await fetch(
+        `https://api.github.com/repos/${targetCheck.owner}/${targetCheck.repo}/contents/${filePath}?ref=${encodeURIComponent(targetCheck.branch)}`,
+        { headers }
+      );
+      if (!getRes.ok) {
+        return res.json({ success: false });
+      }
+      const getData = await getRes.json();
+      if (!getData?.sha) {
+        return res.json({ success: false });
+      }
+
+      const delRes = await fetch(
+        `https://api.github.com/repos/${targetCheck.owner}/${targetCheck.repo}/contents/${filePath}`,
+        {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({
+            message: typeof message === 'string' && message.trim() ? message.trim().slice(0, 300) : `delete: ${filePath}`,
+            sha: getData.sha,
+            branch: targetCheck.branch
+          })
+        }
+      );
+      return res.json({ success: delRes.ok });
+    } catch {
+      return res.json({ success: false });
+    }
+  });
 
   // API Endpoint: Audio Musical Analysis via Gemini AI (Protected: Author Only)
   apiRouter.post('/analyze-audio', requireAuthorAuth, handleAudioUpload, async (req, res) => {
@@ -544,7 +1177,10 @@ Reglas:
     res.json({
       status: 'ok',
       hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
-      audioModel: resolveGeminiAudioModel()
+      audioModel: resolveGeminiAudioModel(),
+      authMode: 'server_cookie',
+      hasServerAuthorConfig:
+        serverAuthConfig.isGithubConfigured && serverAuthConfig.isEmailConfigured
     });
   });
 

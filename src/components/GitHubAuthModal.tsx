@@ -25,14 +25,17 @@ interface GitHubAuthModalProps {
 export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClose }) => {
   const {
     isAuthenticated,
-    isAuthor,
     user,
     authorizedUsername,
     loginWithGitHub,
     logout,
     isVerifyingSession,
+    authStorageMode,
+    isServerAuthMode,
     googleUser,
     isGoogleDriveConnected,
+    driveTokenStatus,
+    driveTokenExpiresAt,
     loginWithGoogle,
     logoutGoogle
   } = useAuth();
@@ -45,6 +48,23 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!isOpen) return null;
+
+  const storageModeLabel = (() => {
+    switch (authStorageMode) {
+      case 'http_only_cookie':
+        return 'Cookie HttpOnly cifrada en servidor (sin secretos en el navegador)';
+      case 'session_encrypted':
+        return 'sessionStorage cifrado (AES-GCM · expira al cerrar la pestaña)';
+      case 'persistent_encrypted':
+        return 'localStorage cifrado (AES-GCM · persistencia prolongada)';
+      default:
+        return isServerAuthMode ? 'Servidor (Cookie HttpOnly)' : 'Solo en memoria de sesión';
+    }
+  })();
+
+  const formattedDriveExpiry = driveTokenExpiresAt
+    ? new Date(driveTokenExpiresAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,8 +128,8 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
     });
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setStatusMessage(null);
     setToken('');
   };
@@ -152,12 +172,19 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                 <span>Autorización exclusiva para @{authorizedUsername}</span>
               </div>
               <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--bg-modal)] text-[var(--accent-primary)] border border-[var(--accent-border)] font-semibold">
-                GitHub Pages
+                {isServerAuthMode ? 'Servidor HttpOnly' : 'GitHub Pages'}
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-              El repositorio y la web estática en GitHub Pages son completamente públicos y <strong>no contienen ningún dato sensible ni token</strong>.
-              El acceso a la sección de autor está protegido criptográficamente: solo el usuario titular de la cuenta <strong className="text-[var(--text-primary)] font-mono">@{authorizedUsername}</strong> puede desbloquear la edición tras validar su identidad con la API de GitHub.
+              {isServerAuthMode ? (
+                <>
+                  El backend gestiona tu sesión mediante una <strong>cookie HttpOnly cifrada</strong>: el token nunca se expone al código del navegador ni se guarda en <code className="font-mono">localStorage</code>.
+                </>
+              ) : (
+                <>
+                  El repositorio y la web estática son públicos y <strong>no contienen ningún dato sensible</strong>. Tu token se valida directamente con la API de GitHub y se cifra localmente en <code className="font-mono">sessionStorage</code> por defecto.
+                </>
+              )}
             </p>
           </div>
 
@@ -191,14 +218,16 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                     Google Drive (Maquetas Privadas)
                   </span>
                   <span className="text-[11px] text-[var(--text-muted)]">
-                    {isGoogleDriveConnected
-                      ? `Conectado como ${googleUser?.email || 'Autor'}`
-                      : 'Permite alojar y escuchar maquetas seguras fuera de GitHub'}
+                    {driveTokenStatus === 'connected'
+                      ? `Conectado como ${googleUser?.email || 'Autor'}${formattedDriveExpiry ? ` · token válido hasta ~${formattedDriveExpiry}` : ''}`
+                      : driveTokenStatus === 'expired'
+                        ? `Sesión Firebase activa (${googleUser?.email || 'Autor'}), pero el token de Drive ha caducado`
+                        : 'Permite alojar y escuchar maquetas seguras fuera de GitHub'}
                   </span>
                 </div>
               </div>
 
-              {isGoogleDriveConnected ? (
+              {isGoogleDriveConnected && driveTokenStatus === 'connected' ? (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                     Activo
@@ -209,6 +238,21 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                     className="px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                   >
                     Desconectar
+                  </button>
+                </div>
+              ) : driveTokenStatus === 'expired' ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30">
+                    Caducado
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    disabled={isGoogleLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isGoogleLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+                    <span>{isGoogleLoading ? 'Renovando...' : 'Renovar acceso'}</span>
                   </button>
                 </div>
               ) : (
@@ -248,6 +292,10 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                   <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                     <UserCheck className="w-3.5 h-3.5" />
                     <span>Identidad verificada como Autor Único</span>
+                  </div>
+
+                  <div className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
+                    Almacenamiento: {storageModeLabel}
                   </div>
 
                   {user.bio && (
@@ -362,7 +410,7 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
               </div>
 
               {/* Persistence option */}
-              <div className="pt-1">
+              <div className="pt-1 space-y-2">
                 <label className="flex items-center gap-2.5 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -370,8 +418,21 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="w-4 h-4 rounded text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] bg-[var(--bg-input)] border-[var(--border-subtle)] cursor-pointer"
                   />
-                  <span>Recordar sesión en este navegador (usar solo en tu equipo personal)</span>
+                  <span>
+                    {isServerAuthMode
+                      ? 'Mantener sesión persistente (7 días en cookie HttpOnly segura)'
+                      : 'Recordar sesión en este navegador (usar solo en tu equipo personal)'}
+                  </span>
                 </label>
+
+                {rememberMe && !isServerAuthMode && (
+                  <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-2 leading-relaxed">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Advertencia de seguridad:</strong> En modo estático (GitHub Pages), recordar la sesión almacena el token cifrado en <code className="font-mono">localStorage</code> durante 7 días en lugar de borrarse al cerrar la pestaña. Úsalo únicamente en tu dispositivo personal y usa tokens con permisos mínimos.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Action button */}

@@ -2,7 +2,7 @@ import { Song } from '../types/song';
 import { Album } from '../types/album';
 import { StorageService } from './storageService';
 import { songToMarkdown } from '../utils/markdownParser';
-import { AUTHORIZED_GITHUB_USER } from '../utils/authConfig';
+import { AUTHORIZED_GITHUB_USER, isServerCookieAuthActive } from '../utils/authConfig';
 import { resolveAppUrl } from '../utils/appUrl';
 
 export interface RemoteConfig {
@@ -375,7 +375,7 @@ export class GitHubSyncService {
       Expires: '0'
     };
 
-    // 1. Authenticated GitHub API (if token provided)
+    // 1. Authenticated GitHub API (via explicit token OR server.ts HttpOnly cookie proxy)
     // Uses ETag If-None-Match to detect 304 Not Modified instantly without payload transfer
     if (cleanToken) {
       try {
@@ -421,6 +421,45 @@ export class GitHubSyncService {
         }
       } catch (err) {
         console.warn('Sync via authenticated GitHub API failed, checking fallbacks:', err);
+      }
+    } else if (isServerCookieAuthActive()) {
+      try {
+        const proxyHeaders: Record<string, string> = {
+          Accept: 'application/json',
+          'X-Requested-With': 'cancionero-client'
+        };
+        if (storedEtag) {
+          proxyHeaders['If-None-Match'] = storedEtag;
+        }
+        const query = new URLSearchParams({
+          owner: config.owner,
+          repo: config.repo,
+          branch: config.branch
+        });
+        const proxyRes = await fetch(resolveAppUrl(`api/github/catalog?${query.toString()}`), {
+          credentials: 'include',
+          headers: proxyHeaders,
+          cache: 'no-cache'
+        });
+        if (proxyRes.ok) {
+          const proxyData = await proxyRes.json();
+          if (proxyData?.notModified) {
+            matchedEtag = true;
+            matchedSource = `GitHub API vía servidor (${targetRepo})`;
+            if (proxyData.etag) {
+              this.saveCatalogETag(proxyData.etag);
+            }
+          } else if (Array.isArray(proxyData?.songs) && proxyData.songs.length > 0) {
+            remoteSongs = proxyData.songs;
+            sourceLabel = `GitHub API vía servidor (${targetRepo})`;
+            fetchedSha = proxyData.sha || null;
+            if (proxyData.etag) {
+              newEtagToSave = proxyData.etag;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Sync via server GitHub proxy failed, checking fallbacks:', err);
       }
     }
 
@@ -791,14 +830,6 @@ export class GitHubSyncService {
     const targetRepo = `${config.owner}/${config.repo}`;
     const targetUrl = `https://github.com/${targetRepo}`;
 
-    if (!cleanToken) {
-      return {
-        success: false,
-        targetRepo,
-        message: `No has iniciado sesión con token de GitHub. Para hacer push directo a ${targetRepo}, inicia sesión con tu Personal Access Token.`
-      };
-    }
-
     if (!options.files || options.files.length === 0) {
       return {
         success: false,
@@ -815,6 +846,86 @@ export class GitHubSyncService {
       }
     }
     const filesToCommit = Array.from(dedupMap.values());
+
+    if (!cleanToken) {
+      if (isServerCookieAuthActive()) {
+        try {
+          const proxyRes = await fetch(resolveAppUrl('api/github/push'), {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'cancionero-client'
+            },
+            body: JSON.stringify({
+              owner: config.owner,
+              repo: config.repo,
+              branch: config.branch,
+              commitMessage: options.commitMessage,
+              files: filesToCommit
+            })
+          });
+          const proxyData = await proxyRes.json().catch(() => ({}));
+          if (!proxyRes.ok || !proxyData?.success) {
+            return {
+              success: false,
+              requiresPermissions: proxyData?.requiresPermissions,
+              isConflict: proxyData?.isConflict,
+              targetRepo,
+              message: proxyData?.message || proxyData?.error || `Error al hacer push vía servidor (${proxyRes.status}).`
+            };
+          }
+
+          this.recordPushSuccess();
+          if (proxyData.fullCommitSha) {
+            this.saveRemoteCommitSha(proxyData.fullCommitSha);
+          }
+          if (proxyData.catalogBlobSha) {
+            this.saveRemoteSha(proxyData.catalogBlobSha);
+          }
+          const catalogFile = filesToCommit.find(f => f.path === 'catalog.json' && !f.delete);
+          let contentHash: string | null = null;
+          if (catalogFile?.content !== undefined) {
+            try {
+              contentHash = computeContentHash(JSON.stringify(JSON.parse(catalogFile.content)));
+            } catch {
+              contentHash = computeContentHash(catalogFile.content);
+            }
+          }
+          this.saveLastSyncMeta({
+            repo: targetRepo,
+            branch: config.branch,
+            catalogSha: proxyData.catalogBlobSha || this.getRemoteSha(),
+            commitSha: proxyData.fullCommitSha || null,
+            contentHash,
+            syncedAt: new Date().toISOString()
+          });
+          this.clearCatalogETag();
+
+          return {
+            success: true,
+            commitSha: proxyData.commitSha,
+            fullCommitSha: proxyData.fullCommitSha,
+            commitUrl: proxyData.commitUrl,
+            targetRepo,
+            filesCommitted: proxyData.filesCommitted,
+            message: proxyData.message
+          };
+        } catch (err: any) {
+          return {
+            success: false,
+            targetRepo,
+            message: `Error de conexión con servidor para push a GitHub: ${err?.message || 'Error desconocido'}`
+          };
+        }
+      }
+
+      return {
+        success: false,
+        targetRepo,
+        message: `No has iniciado sesión con token de GitHub. Para hacer push directo a ${targetRepo}, inicia sesión con tu Personal Access Token.`
+      };
+    }
 
     const apiBase = `https://api.github.com/repos/${config.owner}/${config.repo}`;
     const encodedBranch = encodeURIComponent(config.branch);
@@ -1301,8 +1412,31 @@ export class GitHubSyncService {
     token?: string | null,
     customConfig?: RemoteConfig
   ): Promise<boolean> {
-    if (!token?.trim()) return false;
     const config = customConfig || this.getRemoteConfig();
+    if (!token?.trim()) {
+      if (!isServerCookieAuthActive()) return false;
+      try {
+        const res = await fetch(resolveAppUrl('api/github/delete-file'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'cancionero-client'
+          },
+          body: JSON.stringify({
+            owner: config.owner,
+            repo: config.repo,
+            branch: config.branch,
+            path: oldPath,
+            message
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        return Boolean(res.ok && data?.success);
+      } catch {
+        return false;
+      }
+    }
 
     try {
       const sha = await this.getFileSha(config.owner, config.repo, oldPath, config.branch, token);

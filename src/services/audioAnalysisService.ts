@@ -1,6 +1,6 @@
 import { AudioAnalysisResult, analyzeAudioWithWebAudio } from '../utils/webAudioAnalyzer';
 import { requestServerAudioAnalysis } from '../lib/audio/serverAudioClient';
-import { getStoredAuthorToken } from '../utils/authConfig';
+import { getStoredAuthorToken, isRuntimeAuthorVerified, isServerCookieAuthActive } from '../utils/authConfig';
 
 export interface AnalysisProgressCallback {
   (stage: 'reading' | 'ai_analysis' | 'dsp_analysis' | 'complete', message: string): void;
@@ -55,17 +55,22 @@ export class AudioAnalysisService {
 
     onProgress?.('reading', 'Leyendo archivo de audio...');
 
-    // 1. Optional Server-Side AI (only if explicitly enabled with author credentials)
+    // 1. Optional Server-Side AI (only if explicitly enabled with author credentials or HttpOnly server cookie)
     if (options?.useServerAi) {
       const token = options?.authToken || getStoredAuthorToken();
-      if (!token) {
-        console.info('Audio analysis: no author token provided for server AI, using client Web Audio DSP.');
+      const canUseServerCookie = isRuntimeAuthorVerified() && isServerCookieAuthActive();
+      if (!token && !canUseServerCookie) {
+        console.info('Audio analysis: no author session available for server AI, using client Web Audio DSP.');
       } else {
         try {
           onProgress?.('ai_analysis', 'Consultando modelo de Inteligencia Artificial (tempo, escala, acordes)...');
 
           const mimeType = resolveMimeType();
-          const { ok, data, durationSeconds } = await requestServerAudioAnalysis(file, mimeType, token);
+          const { ok, data, durationSeconds } = await requestServerAudioAnalysis(
+            file,
+            mimeType,
+            token || undefined
+          );
 
           if (ok && data) {
             if (data.success && data.analysis) {

@@ -18,7 +18,7 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
   onClose,
   onDeleteSuccess,
 }) => {
-  const { token, isAuthor } = useAuth();
+  const { token, isAuthenticated, isAuthor } = useAuth();
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoPush, setAutoPush] = useState<boolean>(() =>
     GitHubSyncService.isAutoCommitEnabled()
@@ -50,8 +50,8 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
 
       let pushResult: PushResult | undefined;
 
-      // 2. If remote sync requested and token is present, delete from GitHub atomically with catalog.json & albums.json
-      if (autoCommit && autoPush && token?.trim()) {
+      // 2. If remote sync requested and author is GitHub-authenticated (PAT or HttpOnly cookie), delete atomically
+      if (autoCommit && autoPush && (isAuthenticated || token?.trim())) {
         const commitMsg = defaultCommitMessage;
 
         pushResult = await GitHubSyncService.pushFullCatalog(

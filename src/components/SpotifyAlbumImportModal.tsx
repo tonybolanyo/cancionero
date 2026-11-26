@@ -42,7 +42,7 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
   onImport,
   existingSongs
 }) => {
-  const { token, isAuthor } = useAuth();
+  const { token, isAuthenticated, isAuthor } = useAuth();
   const [spotifyUrl, setSpotifyUrl] = useState('');
   const [manualMode, setManualMode] = useState(false);
   const [albumTitle, setAlbumTitle] = useState('');
@@ -172,7 +172,7 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
       }
 
       // Optionally push to GitHub atomically if authenticated
-      if (token && isAuthor) {
+      if ((isAuthenticated || token) && isAuthor) {
         try {
           await GitHubSyncService.pushFullCatalog(
             StorageService.getSongs(),

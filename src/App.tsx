@@ -29,7 +29,7 @@ import { AppRouter } from './components/routing/AppRouter';
 import { AppModals } from './components/modals/AppModals';
 
 function CancioneroApp() {
-  const { isAuthor, token, user } = useAuth();
+  const { isAuthor, token, user, isVerifyingSession } = useAuth();
   const { currentRoute, navigate } = useAppNavigation();
   const { toggleTheme } = useTheme();
   const { register, unregister } = useKeyboardShortcuts();
@@ -114,6 +114,9 @@ function CancioneroApp() {
   // Auto-open visualizer when navigating to video-visualizer route
   useEffect(() => {
     if (currentRoute.name === 'video-visualizer') {
+      if (isVerifyingSession) {
+        return;
+      }
       if (!isAuthor) {
         modals.openAuthModal();
         navigate({ name: 'catalog' });
@@ -124,7 +127,7 @@ function CancioneroApp() {
         modals.openVisualizer(targetSong);
       }
     }
-  }, [currentRoute, songsManager.songs, isAuthor, modals, navigate]);
+  }, [currentRoute, songsManager.songs, isAuthor, isVerifyingSession, modals, navigate]);
 
   // Global Keyboard Shortcuts registration
   useEffect(() => {
@@ -361,6 +364,7 @@ function CancioneroApp() {
           songs={songsManager.songs}
           albums={albumsManager.albums}
           isAuthor={isAuthor}
+          isVerifyingSession={isVerifyingSession}
           catalog={catalog}
           pendingAudioFile={modals.pendingAudioFile}
           onSaveSong={(song, pushResult) =>

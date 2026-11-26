@@ -13,7 +13,7 @@ import { decodeAudioBuffer } from '../lib/audio/tempo';
 import { extractMonoChannelData } from '../lib/audio/bufferUtils';
 import { segmentsToSyncedLyricLines } from '../lib/lyrics/transcription';
 import { requestServerLyricsTranscription } from '../lib/audio/serverAudioClient';
-import { getStoredAuthorToken } from '../utils/authConfig';
+import { getStoredAuthorToken, isRuntimeAuthorVerified, isServerCookieAuthActive } from '../utils/authConfig';
 
 const DEFAULT_LOCAL_MODEL = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16000;
@@ -218,7 +218,8 @@ export class LyricsTranscriptionService {
     }
 
     const token = authToken || getStoredAuthorToken();
-    if (!token) {
+    const canUseServerCookie = isRuntimeAuthorVerified() && isServerCookieAuthActive();
+    if (!token && !canUseServerCookie) {
       throw new Error('Operación no permitida: Se requiere iniciar sesión como autor para transcribir con el backend.');
     }
 
@@ -226,7 +227,11 @@ export class LyricsTranscriptionService {
       file.type ||
       (file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : file.name.toLowerCase().endsWith('.mp3') ? 'audio/mpeg' : 'audio/mpeg');
 
-    const { ok, status, data } = await requestServerLyricsTranscription(file, mimeType, token);
+    const { ok, status, data } = await requestServerLyricsTranscription(
+      file,
+      mimeType,
+      token || undefined
+    );
 
     if (!ok || !data) {
       throw new Error(`Backend de transcripción no disponible (${status}).`);
