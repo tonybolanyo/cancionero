@@ -31,6 +31,7 @@ import { chordToFunctionalSymbol } from '../lib/music/harmonyEngine';
 import { playChordPreview } from '../lib/audio/chordSynth';
 import { ChordDiagramCard, HarmonicNotationView } from './ChordDiagramCard';
 import { MetronomeWidget } from './MetronomeWidget';
+import { useDialogFocusManagement } from './modals/AccessibleModal';
 
 export interface StageSetlistItem {
   song: Song;
@@ -87,6 +88,13 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
 
   const activeItem = items[currentIndex];
   const song = activeItem?.song;
+
+  useDialogFocusManagement({
+    isOpen: Boolean(song),
+    panelRef: containerRef,
+    closeOnEscape: false,
+    lockBodyScroll: true
+  });
 
   // Reset per-song transposition when advancing through a setlist
   useEffect(() => {
@@ -249,7 +257,8 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col focus:outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={`Modo Escenario: ${song.title}`}

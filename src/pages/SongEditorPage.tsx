@@ -57,6 +57,7 @@ import {
   findLastChordBeforeCursor,
   HarmonicChordEntry
 } from '../lib/music/harmonyEngine';
+import { ConfirmDialog, useConfirmDialog } from '../components/modals/ConfirmDialog';
 import {
   playChordProgression,
   ProgressionPlaybackHandle
@@ -120,6 +121,7 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
     isGoogleDriveConnected,
     driveTokenStatus
   } = useAuth();
+  const { requestConfirm, confirmDialogProps } = useConfirmDialog();
 
   // Editor mode & active workbench tab
   const [editorMode, setEditorMode] = useState<'studio' | 'markdown'>('studio');
@@ -785,14 +787,27 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
   const handleApplyTemplate = (templateKey: string) => {
     const tpl = SONGWRITING_TEMPLATES.find((t) => t.id === templateKey);
     if (!tpl) return;
-    if (lyrics.trim() && !window.confirm(`¿Reemplazar la letra actual por la plantilla "${tpl.title}"?`)) {
+    const applyTemplate = () => {
+      setLyrics(tpl.lyrics);
+      if (tpl.key) setKey(tpl.key);
+      if (tpl.tempo) setTempo(tpl.tempo.toString());
+      if (tpl.timeSignature) setTimeSignature(tpl.timeSignature);
+      showFeedback(`Plantilla "${tpl.title}" aplicada`);
+    };
+
+    if (lyrics.trim()) {
+      requestConfirm({
+        title: 'Aplicar plantilla',
+        message: `¿Reemplazar la letra actual por la plantilla "${tpl.title}"?`,
+        confirmLabel: 'Reemplazar letra',
+        cancelLabel: 'Cancelar',
+        variant: 'warning',
+        onConfirm: applyTemplate
+      });
       return;
     }
-    setLyrics(tpl.lyrics);
-    if (tpl.key) setKey(tpl.key);
-    if (tpl.tempo) setTempo(tpl.tempo.toString());
-    if (tpl.timeSignature) setTimeSignature(tpl.timeSignature);
-    showFeedback(`Plantilla "${tpl.title}" aplicada`);
+
+    applyTemplate();
   };
 
   const handleTransposeLyrics = (delta: number) => {
@@ -1176,14 +1191,24 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       showFeedback('No se encontraron líneas líricas en LRC');
       return;
     }
-    if (
-      lyrics.trim() &&
-      !window.confirm('¿Deseas reemplazar la letra actual por la letra limpia de LRC (sin marcas de tiempo)?')
-    ) {
+    const applyCleanLyrics = () => {
+      setLyrics(cleanLyrics);
+      showFeedback('Letra importada desde LRC sin marcas de tiempo');
+    };
+
+    if (lyrics.trim()) {
+      requestConfirm({
+        title: 'Reemplazar letra desde LRC',
+        message: '¿Deseas reemplazar la letra actual por la letra limpia de LRC (sin marcas de tiempo)?',
+        confirmLabel: 'Reemplazar letra',
+        cancelLabel: 'Cancelar',
+        variant: 'warning',
+        onConfirm: applyCleanLyrics
+      });
       return;
     }
-    setLyrics(cleanLyrics);
-    showFeedback('Letra importada desde LRC sin marcas de tiempo');
+
+    applyCleanLyrics();
   };
 
   const toggleLocalAudio = () => {
@@ -1756,6 +1781,8 @@ export const SongEditorPage: React.FC<SongEditorPageProps> = ({
       </Suspense>
 
       {isShortcutsModalOpen && <EditorShortcutsDialog onClose={() => setIsShortcutsModalOpen(false)} />}
+
+      <ConfirmDialog {...confirmDialogProps} />
     </div>
   );
 };

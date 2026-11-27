@@ -4,6 +4,7 @@ import { Song } from '../types/song';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface DeleteSongModalProps {
   song: Song | null;
@@ -80,8 +81,16 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
-      <div className="relative w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-red-500/30 shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200">
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={isProcessing ? () => {} : onClose}
+      titleId="delete-song-modal-title"
+      closeOnBackdropClick={!isProcessing}
+      closeOnEscape={!isProcessing}
+      zIndexClass="z-60"
+      backdropClassName="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn"
+      panelClassName="relative w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-red-500/30 shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200"
+    >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--border-subtle)] bg-red-500/10">
           <div className="flex items-center gap-3">
@@ -89,7 +98,7 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
+              <h3 id="delete-song-modal-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
                 Eliminar Canción Completa
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
@@ -99,8 +108,10 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             disabled={isProcessing}
+            aria-label="Cerrar modal"
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer disabled:opacity-40"
           >
             <X className="w-5 h-5" />
@@ -203,7 +214,6 @@ export const DeleteSongModal: React.FC<DeleteSongModalProps> = ({
             )}
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

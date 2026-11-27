@@ -35,6 +35,7 @@ import type {
 } from '../lib/video/types';
 import { VisualizerSettingsTab } from './video/VisualizerSettingsTab';
 import { VisualizerExportTab } from './video/VisualizerExportTab';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 export { formatFileSize, RESOLUTION_PRESETS, EFFECT_OPTIONS, THEME_OPTIONS };
 export type {
@@ -484,12 +485,16 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
   allSongs = [],
   onSelectOtherSong
 }) => {
+  const { isAuthor } = useAuth();
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="video-visualizer-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+    <AccessibleModal
+      isOpen={isAuthor}
+      onClose={onClose}
+      titleId="video-visualizer-title"
+      zIndexClass="z-50"
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+      panelClassName="relative w-full max-w-6xl flex items-center justify-center focus:outline-none"
     >
       <SongVideoVisualizerWorkspace
         song={song}
@@ -498,6 +503,6 @@ export const SongVideoVisualizerModal: React.FC<SongVideoVisualizerModalProps> =
         onSelectOtherSong={onSelectOtherSong}
         mode="modal"
       />
-    </div>
+    </AccessibleModal>
   );
 };

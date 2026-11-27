@@ -440,6 +440,9 @@ function CancioneroApp() {
         songs={songsManager.songs}
         onSelectOtherSong={(newSong) => modals.setVisualizerSong(newSong)}
         onCloseVisualizer={modals.closeVisualizer}
+        pendingDeleteAlbum={albumsManager.pendingDeleteAlbum?.album || null}
+        onConfirmDeleteAlbum={albumsManager.confirmDeleteAlbum}
+        onCancelDeleteAlbum={albumsManager.cancelDeleteAlbum}
       />
     </>
   );

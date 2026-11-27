@@ -18,6 +18,8 @@ import { StorageService, SongVersionRecord } from '../services/storageService';
 import { songToMarkdown, markdownToSong } from '../utils/markdownParser';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
+import { ConfirmDialog } from './modals/ConfirmDialog';
 
 interface VersionHistoryProps {
   song: Song | null;
@@ -39,6 +41,8 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   const [viewTab, setViewTab] = useState<'diff' | 'lyrics' | 'raw'>('diff');
   const [copied, setCopied] = useState<boolean>(false);
   const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState<boolean>(false);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
 
   const songId = song?.id || '';
   const songUpdatedAt = song?.updatedAt || '';
@@ -96,59 +100,70 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   // Strict author-only gate
   if (!isAuthor) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-        <div className="p-6 rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] max-w-md w-full text-center space-y-4">
-          <ShieldAlert className="w-10 h-10 text-[var(--accent-primary)] mx-auto" />
-          <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
-            Acceso Restringido al Autor
-          </h3>
-          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            El historial de versiones y la visualización de commits de control de versiones solo están disponibles en Modo Autor autenticado.
-          </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
+      <AccessibleModal
+        isOpen={isOpen}
+        onClose={onClose}
+        titleId="version-history-restricted-title"
+        panelClassName="p-6 rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] max-w-md w-full text-center space-y-4 shadow-[var(--modal-shadow)] text-[var(--text-primary)]"
+      >
+        <ShieldAlert className="w-10 h-10 text-[var(--accent-primary)] mx-auto" />
+        <h3 id="version-history-restricted-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
+          Acceso Restringido al Autor
+        </h3>
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+          El historial de versiones y la visualización de commits de control de versiones solo están disponibles en Modo Autor autenticado.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer"
+        >
+          Cerrar
+        </button>
+      </AccessibleModal>
     );
   }
 
-  const handleRestore = async () => {
+  const handleRequestRestore = () => {
     if (!selectedRecord) return;
-    const confirmRestore = confirm(
-      `¿Deseas restaurar la canción a la versión del commit [${selectedRecord.commit.hash}] "${selectedRecord.commit.message}"? Se creará un nuevo commit de restauración en Git.`
-    );
-    if (!confirmRestore) return;
+    setIsRestoreConfirmOpen(true);
+  };
 
-    const restored = StorageService.restoreSongVersion(
-      song.id,
-      selectedRecord.markdown,
-      selectedRecord.commit.hash
-    );
+  const executeRestore = async () => {
+    if (!selectedRecord) return;
+    setIsRestoring(true);
 
-    let pushRes: PushResult | undefined;
-    if (GitHubSyncService.isAutoCommitEnabled() && (isAuthenticated || token)) {
-      setRestoreNotice('Haciendo Push de la versión restaurada a GitHub...');
-      try {
-        pushRes = await GitHubSyncService.pushSongFile(
-          restored,
-          `revert(song): restaurar "${restored.title}" al commit [${selectedRecord.commit.hash}]`,
-          token
-        );
-      } catch (e) {
-        console.warn('Push on restore failed', e);
+    try {
+      const restored = StorageService.restoreSongVersion(
+        song.id,
+        selectedRecord.markdown,
+        selectedRecord.commit.hash
+      );
+
+      let pushRes: PushResult | undefined;
+      if (GitHubSyncService.isAutoCommitEnabled() && (isAuthenticated || token)) {
+        setRestoreNotice('Haciendo Push de la versión restaurada a GitHub...');
+        try {
+          pushRes = await GitHubSyncService.pushSongFile(
+            restored,
+            `revert(song): restaurar "${restored.title}" al commit [${selectedRecord.commit.hash}]`,
+            token
+          );
+        } catch (e) {
+          console.warn('Push on restore failed', e);
+        }
       }
-    }
 
-    onRestoreSong(restored, pushRes);
-    setRestoreNotice(`Canción restaurada exitosamente a la versión [${selectedRecord.commit.hash}].`);
-    setTimeout(() => {
-      setRestoreNotice(null);
-      onClose();
-    }, 1500);
+      setIsRestoreConfirmOpen(false);
+      onRestoreSong(restored, pushRes);
+      setRestoreNotice(`Canción restaurada exitosamente a la versión [${selectedRecord.commit.hash}].`);
+      setTimeout(() => {
+        setRestoreNotice(null);
+        onClose();
+      }, 1500);
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   const handleCopyMarkdown = () => {
@@ -159,8 +174,14 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm overflow-hidden">
-      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200">
+    <>
+      <AccessibleModal
+        isOpen={isOpen}
+        onClose={onClose}
+        titleId="version-history-title"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm overflow-hidden"
+        panelClassName="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
           <div className="flex items-center gap-3">
@@ -169,7 +190,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
+                <h3 id="version-history-title" className="font-serif text-xl font-bold text-[var(--text-primary)]">
                   Historial de Versiones Git
                 </h3>
                 <span className="text-[11px] font-mono text-[var(--accent-primary)] font-semibold px-2 py-0.5 rounded bg-[var(--accent-subtle)] border border-[var(--accent-border)]">
@@ -183,7 +204,9 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar historial de versiones"
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -310,7 +333,8 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
 
                 {!selectedRecord?.isCurrent && (
                   <button
-                    onClick={handleRestore}
+                    type="button"
+                    onClick={handleRequestRestore}
                     className="px-3 py-1.5 text-xs font-semibold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
                     title="Restaurar la canción a este punto de la historia"
                   >
@@ -394,7 +418,23 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
             Cerrar
           </button>
         </div>
-      </div>
-    </div>
+      </AccessibleModal>
+
+      <ConfirmDialog
+        isOpen={isRestoreConfirmOpen}
+        title="Restaurar versión de canción"
+        message={
+          selectedRecord
+            ? `¿Deseas restaurar la canción a la versión del commit [${selectedRecord.commit.hash}] "${selectedRecord.commit.message}"? Se creará un nuevo commit de restauración en Git.`
+            : ''
+        }
+        confirmLabel="Restaurar versión"
+        cancelLabel="Cancelar"
+        variant="warning"
+        isProcessing={isRestoring}
+        onConfirm={executeRestore}
+        onCancel={() => setIsRestoreConfirmOpen(false)}
+      />
+    </>
   );
 };

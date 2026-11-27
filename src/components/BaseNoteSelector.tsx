@@ -19,7 +19,7 @@ export const BaseNoteSelector: React.FC<BaseNoteSelectorProps> = ({
   const flatNotes = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
   return (
-    <div className="bg-[var(--bg-secondary)] rounded-lg p-6 border border-[var(--border-color)]">
+    <div className="bg-[var(--bg-surface)] rounded-2xl p-6 border border-[var(--border-subtle)]">
       <div className="flex items-center gap-2 mb-4">
         <Music className="w-5 h-5 text-[var(--accent-primary)]" />
         <h3 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -31,11 +31,12 @@ export const BaseNoteSelector: React.FC<BaseNoteSelectorProps> = ({
         {notes.map((note) => (
           <button
             key={note}
+            type="button"
             onClick={() => onNoteChange(note)}
-            className={`py-3 px-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
+            className={`py-3 px-2 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
               selectedNote === note
-                ? 'bg-[var(--accent-primary)] text-white shadow-lg scale-105'
-                : 'bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]'
+                ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-md scale-105'
+                : 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]'
             }`}
           >
             {note}
@@ -44,7 +45,7 @@ export const BaseNoteSelector: React.FC<BaseNoteSelectorProps> = ({
       </div>
 
       {/* Alternative notation toggle */}
-      <div className="mt-4 p-3 bg-[var(--bg-primary)] rounded border border-[var(--border-color)]">
+      <div className="mt-4 p-3 bg-[var(--bg-surface-subtle)] rounded-xl border border-[var(--border-subtle)]">
         <p className="text-sm text-[var(--text-secondary)]">
           Nota seleccionada: <span className="font-bold text-[var(--accent-primary)]">{selectedNote}</span>
         </p>

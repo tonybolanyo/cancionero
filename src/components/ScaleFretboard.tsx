@@ -49,7 +49,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
   };
 
   return (
-    <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-800 dark:border-amber-700 rounded-lg p-4 overflow-x-auto">
+    <div className="bg-[var(--bg-surface-subtle)] border border-[var(--border-medium)] rounded-xl p-4 overflow-x-auto">
       <svg width={totalWidth} height={totalHeight} className="mx-auto">
         {/* Frets */}
         {Array.from({ length: position.endFret - position.startFret + 2 }).map((_, i) => {
@@ -64,7 +64,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                 y1={20}
                 x2={x}
                 y2={20 + strings * stringSpacing}
-                stroke={fretNum === 0 ? '#000' : '#999'}
+                stroke={fretNum === 0 ? 'var(--text-primary)' : 'var(--border-strong)'}
                 strokeWidth={fretNum === 0 ? 3 : 1}
               />
               
@@ -74,7 +74,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                   x={x}
                   y={15}
                   textAnchor="middle"
-                  className="text-xs font-bold text-gray-700 dark:text-gray-300"
+                  className="text-xs font-bold text-[var(--text-secondary)]"
                   fill="currentColor"
                 >
                   {fretNum}
@@ -96,7 +96,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                 y1={y}
                 x2={totalWidth - 20}
                 y2={y}
-                stroke="#999"
+                stroke="var(--border-strong)"
                 strokeWidth={stringIdx === 0 || stringIdx === 5 ? 2 : 1}
               />
               
@@ -106,7 +106,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                 y={y}
                 textAnchor="middle"
                 dy="0.3em"
-                className="text-xs font-bold text-gray-700 dark:text-gray-300"
+                className="text-xs font-bold text-[var(--text-secondary)]"
                 fill="currentColor"
               >
                 {['E', 'A', 'D', 'G', 'B', 'E'][stringIdx]}
@@ -135,8 +135,8 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                   cx={x}
                   cy={y}
                   r={circleRadius}
-                  fill={isRoot ? '#dc2626' : '#2563eb'}
-                  opacity="0.9"
+                  fill={isRoot ? 'var(--accent-primary)' : 'var(--text-primary)'}
+                  opacity="0.92"
                 />
                 
                 {/* Circle border */}
@@ -145,7 +145,7 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                   cy={y}
                   r={circleRadius}
                   fill="none"
-                  stroke={isRoot ? '#7f1d1d' : '#1e3a8a'}
+                  stroke={isRoot ? 'var(--accent-active)' : 'var(--border-strong)'}
                   strokeWidth="2"
                 />
                 
@@ -155,8 +155,8 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
                   y={y}
                   textAnchor="middle"
                   dy="0.3em"
-                  className="text-xs font-bold text-white select-none"
-                  fill="white"
+                  className="text-xs font-bold select-none"
+                  fill={isRoot ? 'var(--accent-text)' : 'var(--text-inverse)'}
                   pointerEvents="none"
                 >
                   {getNoteCircleText(stringIdx, fret)}
@@ -169,12 +169,12 @@ export const ScaleFretboard: React.FC<ScaleFretboardProps> = ({
       
       <div className="mt-4 flex items-center justify-center gap-6 text-sm">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-red-600"></div>
-          <span className="text-gray-700 dark:text-gray-300">Raíz (Root)</span>
+          <div className="w-4 h-4 rounded-full bg-[var(--accent-primary)]"></div>
+          <span className="text-[var(--text-secondary)]">Raíz (Root)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-blue-600"></div>
-          <span className="text-gray-700 dark:text-gray-300">Notas de la escala</span>
+          <div className="w-4 h-4 rounded-full bg-[var(--text-primary)]"></div>
+          <span className="text-[var(--text-secondary)]">Notas de la escala</span>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import {
   Cloud
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface GitHubAuthModalProps {
   isOpen: boolean;
@@ -135,8 +136,13 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
-      <div className="relative w-full max-w-lg max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200">
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={onClose}
+      titleId="github-auth-modal-title"
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn"
+      panelClassName="relative w-full max-w-lg max-h-[92vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-y-auto text-[var(--text-primary)] transition-colors duration-200"
+    >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
           <div className="flex items-center gap-3">
@@ -144,7 +150,7 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
               {isAuthenticated ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
+              <h3 id="github-auth-modal-title" className="font-serif text-xl font-bold text-[var(--text-primary)]">
                 {isAuthenticated ? 'Sesión de Autor Verificada' : 'Acceso Restringido de Autor'}
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
@@ -154,7 +160,9 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar ventana"
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer transition-colors"
             title="Cerrar ventana"
           >
@@ -468,7 +476,6 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
             Cerrar
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

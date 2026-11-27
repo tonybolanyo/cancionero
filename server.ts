@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -393,10 +394,11 @@ function extractAudioSourceFromRequest(req: Request, defaultMime: string): Audio
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.set('trust proxy', 1);
   // Dev server must always run on port 3000 as required by the environment
-  const PORT = 3000;
   const isProd = process.env.NODE_ENV === 'production';
+  const PORT = isProd ? Number(process.env.PORT) || 3000 : 3000;
 
   // Security Headers Middleware
   app.use((req, res, next) => {
@@ -1209,11 +1211,27 @@ Reglas:
 
   // Serve Vite in dev mode or static files in production
   if (!isProd) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
+    const vitePromise = createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer }
+      },
       appType: 'spa'
     });
-    app.use(vite.middlewares);
+
+    vitePromise.catch((err) => {
+      console.error('[vite] Error inicializando Vite dev middleware:', err);
+      process.exit(1);
+    });
+
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     if (baseMount !== '/') {
@@ -1231,9 +1249,17 @@ Reglas:
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.on('error', (err) => {
+    console.error('[server] Error en servidor HTTP:', err);
+    process.exit(1);
+  });
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('[server] Error fatal al iniciar el servidor:', err);
+  process.exit(1);
+});

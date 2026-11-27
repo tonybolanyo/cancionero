@@ -68,7 +68,7 @@ export const ScaleDictionaryPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[var(--bg-canvas)] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -88,18 +88,18 @@ export const ScaleDictionaryPage: React.FC = () => {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start justify-between gap-3">
+          <div className="bg-[var(--state-error-bg)] border border-[var(--state-error-border)] text-[var(--state-error-text)] rounded-lg p-4 flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-red-900 dark:text-red-200">Error</h3>
-                <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+                <h3 className="font-semibold">Error</h3>
+                <p className="text-sm opacity-90">{error}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={initializeDictionary}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors shrink-0"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--state-error-border)] hover:bg-[var(--bg-hover)] transition-colors shrink-0 cursor-pointer"
             >
               Reintentar
             </button>
@@ -117,7 +117,7 @@ export const ScaleDictionaryPage: React.FC = () => {
         {!isLoading && !error && (
           <>
             {/* Tabs Navigation */}
-            <div className="flex gap-2 border-b border-[var(--border-color)] overflow-x-auto">
+            <div className="flex gap-2 border-b border-[var(--border-subtle)] overflow-x-auto">
               <button
                 onClick={() => handleTabChange('explorer')}
                 className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors border-b-2 ${
@@ -164,7 +164,7 @@ export const ScaleDictionaryPage: React.FC = () => {
             {/* Left Panel - Scale List */}
             <div className="lg:col-span-1">
               <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden sticky top-4">
-                <div className="px-6 py-4 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-primary-dark)] text-white">
+                <div className="px-6 py-4 bg-[var(--accent-primary)] text-[var(--accent-text)]">
                   <h2 className="text-xl font-bold">Escalas Disponibles</h2>
                   <p className="text-sm opacity-90 mt-1">{allScales.length} escalas</p>
                 </div>
@@ -181,9 +181,9 @@ export const ScaleDictionaryPage: React.FC = () => {
                       <div key={scaleId}>
                         <button
                           onClick={() => handleScaleSelect(scaleId)}
-                          className={`w-full px-4 py-3 text-left transition-all ${
+                          className={`w-full px-4 py-3 text-left transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-[var(--accent-primary-light)] border-l-4 border-[var(--accent-primary)]'
+                              ? 'bg-[var(--accent-subtle)] ring-1 ring-inset ring-[var(--accent-border)]'
                               : 'hover:bg-[var(--bg-surface-subtle)]'
                           }`}
                         >
@@ -258,10 +258,10 @@ export const ScaleDictionaryPage: React.FC = () => {
                             <button
                               key={idx}
                               onClick={() => setSelectedPosition(idx)}
-                              className={`p-3 rounded-lg text-left transition-all ${
+                              className={`p-3 rounded-lg text-left transition-all cursor-pointer ${
                                 selectedPosition === idx
-                                  ? 'bg-[var(--accent-primary)] text-white'
-                                  : 'bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                                  ? 'bg-[var(--accent-primary)] text-[var(--accent-text)]'
+                                  : 'bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
                               }`}
                             >
                               <p className="font-semibold">{position.name}</p>
@@ -284,11 +284,11 @@ export const ScaleDictionaryPage: React.FC = () => {
 
                       {/* Position Info */}
                       <div className="pt-4 border-t border-[var(--border-subtle)]">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                          <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                        <div className="bg-[var(--state-info-bg)] border border-[var(--state-info-border)] text-[var(--state-info-text)] rounded-lg p-4">
+                          <h4 className="font-semibold mb-2">
                             💡 Consejo de práctica
                           </h4>
-                          <p className="text-sm text-blue-800 dark:text-blue-300">
+                          <p className="text-sm opacity-90">
                             Practica cambiar entre posiciones fluIdamente. La clave es memorizar la forma del patrón 
                             y trasladarla a diferentes trastes. Comienza lentamente y acelera gradualmente.
                           </p>
@@ -325,7 +325,7 @@ export const ScaleDictionaryPage: React.FC = () => {
                 />
 
                 {/* Quick Reference for Common Progressions */}
-                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-6 border border-amber-200 dark:border-amber-800">
+                <div className="bg-[var(--bg-surface)] rounded-2xl p-6 border border-[var(--border-subtle)]">
                   <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">
                     📋 Progresiones de Acordes Comunes
                   </h3>
@@ -341,7 +341,7 @@ export const ScaleDictionaryPage: React.FC = () => {
                         onClick={() => {
                           handleScaleSelect('minor');
                         }}
-                        className="w-full p-4 bg-white dark:bg-[var(--bg-primary)] rounded-lg border border-amber-300 dark:border-amber-700 hover:shadow-md transition-all text-left"
+                        className="w-full p-4 bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-hover)] rounded-xl border border-[var(--border-subtle)] hover:border-[var(--accent-border)] transition-all text-left cursor-pointer"
                       >
                         <div className="font-semibold text-[var(--text-primary)]">{item.name}</div>
                         <div className="text-sm text-[var(--text-secondary)] mt-1">

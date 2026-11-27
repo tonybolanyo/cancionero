@@ -28,6 +28,7 @@ import { LrcSyncAssistant } from './LrcSyncAssistant';
 import { LyricsTranscriptionService } from '../services/lyricsTranscriptionService';
 import { LocalTranscriptionSupport, LyricsTranscriptionResult } from '../types/transcription';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 export interface SyncedLyricsProps {
   lines: SyncedLyricLine[];
@@ -346,7 +347,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
               {seg.chord && (
                 <span className={`font-mono text-xs font-bold px-1 py-0.5 rounded ${
                   isCurrent
-                    ? 'bg-[var(--accent-primary)] text-white shadow-xs'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-xs'
                     : 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]'
                 }`}>
                   {seg.chord}
@@ -372,7 +373,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
           {onTogglePlay && (
             <button
               onClick={onTogglePlay}
-              className="w-8 h-8 rounded-full bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs transition-colors"
+              className="w-8 h-8 rounded-full bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] flex items-center justify-center shrink-0 cursor-pointer shadow-xs transition-colors"
               title={isPlaying ? 'Pausar reproducción' : 'Iniciar reproducción'}
             >
               {isPlaying ? (
@@ -411,7 +412,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
           {isAuthor && (
             <button
               onClick={() => setIsAssistantOpen(true)}
-              className="px-2.5 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              className="px-2.5 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
               title="Abrir Asistente para estampar marcas de tiempo en vivo pulsando la barra espaciadora"
             >
               <Clock className="w-3.5 h-3.5" />
@@ -477,7 +478,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
           {isAuthor && onUpdateLyrics && (
             <button
               onClick={() => setIsImportModalOpen(true)}
-              className="px-2.5 py-1 rounded-md bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-white font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded-md bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-text)] font-medium transition-colors cursor-pointer flex items-center gap-1.5"
               title="Importar archivo .LRC o pegar texto con marcas de tiempo"
             >
               <Upload className="w-3.5 h-3.5" />
@@ -585,7 +586,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
                   <button
                     onClick={handleLocalTranscription}
                     disabled={isTranscribing || !transcriptionFile}
-                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-[var(--accent-text)] text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
                   >
                     {isTranscribing ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
                     <span>{isTranscribing ? 'Transcribiendo...' : 'Iniciar transcripción local'}</span>
@@ -609,7 +610,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
                   <button
                     onClick={handleBackendTranscription}
                     disabled={isTranscribing || !backendConsent || !transcriptionFile}
-                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-[var(--accent-text)] text-xs font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
                   >
                     {isTranscribing ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
                     <span>{isTranscribing ? 'Transcribiendo...' : 'Transcribir vía backend'}</span>
@@ -654,7 +655,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
               </div>
               <button
                 onClick={handleApplyLineEdits}
-                className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-[var(--accent-text)] text-xs font-semibold hover:bg-[var(--accent-hover)] cursor-pointer flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Aplicar edición de texto y tiempos</span>
@@ -685,7 +686,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={() => setIsAssistantOpen(true)}
-                  className="px-4 py-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] text-xs font-bold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Grabar Marcas en Vivo (Tap-to-Sync)</span>
@@ -733,7 +734,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
                   }}
                   className={`px-2 py-0.5 rounded font-mono text-[11px] tabular-nums shrink-0 transition-colors select-none ${
                     isCurrent
-                      ? 'bg-[var(--accent-primary)] text-white font-bold'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] font-bold'
                       : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] group-hover:border-[var(--accent-primary)]'
                   }`}
                   title={`Saltar a ${formatLrcTimestamp(line.time)}`}
@@ -766,15 +767,21 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
       </div>
 
       {/* Modal para importar / pegar texto LRC */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] p-6 shadow-2xl space-y-4">
+      <AccessibleModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        ariaLabel="Importar Letra Sincronizada (LRC)"
+        zIndexClass="z-60"
+        backdropClassName="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs"
+        panelClassName="w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] p-6 shadow-2xl space-y-4 text-[var(--text-primary)]"
+      >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
                 <Upload className="w-4 h-4 text-[var(--accent-primary)]" />
                 <span>Importar Letra Sincronizada (LRC)</span>
               </h3>
               <button
+                type="button"
                 onClick={() => setIsImportModalOpen(false)}
                 className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer text-xs"
               >
@@ -795,7 +802,7 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
             />
 
             {importError && (
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--state-error-bg)] border border-[var(--state-error-border)] text-[var(--state-error-text)] text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{importError}</span>
               </div>
@@ -823,15 +830,13 @@ export const SyncedLyrics: React.FC<SyncedLyricsProps> = ({
                   type="button"
                   onClick={() => processLrcContent(pasteText)}
                   disabled={!pasteText.trim()}
-                  className="px-4 py-1.5 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                  className="px-4 py-1.5 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
                 >
                   Procesar y Sincronizar
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+      </AccessibleModal>
 
       {/* Interactive Tap-to-Sync Assistant Modal */}
       <LrcSyncAssistant

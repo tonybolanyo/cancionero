@@ -2,7 +2,10 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import {defineConfig} from 'vite';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
   const base = process.env.VITE_BASE_URL || process.env.BASE_PATH || '/cancionero/';
@@ -15,8 +18,8 @@ export default defineConfig(() => {
         name: 'sync-assets-plugin',
         buildStart() {
           try {
-            const rootCatalog = path.resolve(__dirname, 'catalog.json');
-            const publicDir = path.resolve(__dirname, 'public');
+            const rootCatalog = path.resolve(rootDir, 'catalog.json');
+            const publicDir = path.resolve(rootDir, 'public');
             const publicCatalog = path.resolve(publicDir, 'catalog.json');
             if (!fs.existsSync(publicDir)) {
               fs.mkdirSync(publicDir, { recursive: true });
@@ -24,11 +27,11 @@ export default defineConfig(() => {
             if (fs.existsSync(rootCatalog)) {
               fs.copyFileSync(rootCatalog, publicCatalog);
             }
-            const bundledPath = path.resolve(__dirname, 'src/data/bundledSongs.json');
+            const bundledPath = path.resolve(rootDir, 'src/data/bundledSongs.json');
             if (fs.existsSync(rootCatalog) && !fs.existsSync(bundledPath)) {
               fs.copyFileSync(rootCatalog, bundledPath);
             }
-            const wasmSource = path.resolve(__dirname, 'node_modules/essentia.js/dist/essentia-wasm.web.wasm');
+            const wasmSource = path.resolve(rootDir, 'node_modules/essentia.js/dist/essentia-wasm.web.wasm');
             const publicWasm = path.resolve(publicDir, 'essentia-wasm.web.wasm');
             if (fs.existsSync(wasmSource) && !fs.existsSync(publicWasm)) {
               fs.copyFileSync(wasmSource, publicWasm);
@@ -38,7 +41,7 @@ export default defineConfig(() => {
               fs.mkdirSync(publicDataDir, { recursive: true });
             }
             for (const dictFile of ['chord-dictionary.json', 'scale-dictionary.json']) {
-              const srcDict = path.resolve(__dirname, 'data', dictFile);
+              const srcDict = path.resolve(rootDir, 'data', dictFile);
               const dstDict = path.resolve(publicDataDir, dictFile);
               if (fs.existsSync(srcDict)) {
                 fs.copyFileSync(srcDict, dstDict);
@@ -52,7 +55,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(rootDir, '.'),
       },
     },
     server: {

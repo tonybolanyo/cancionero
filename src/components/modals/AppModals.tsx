@@ -1,8 +1,10 @@
 import React, { Suspense, lazy } from 'react';
 import { Song } from '../../types/song';
+import { Album } from '../../types/album';
 import { PushResult } from '../../services/githubSyncService';
 import { SONGWRITING_TEMPLATES } from '../../utils/songwriterHelper';
 import { ToastData, GitNotificationToast } from '../GitNotificationToast';
+import { ConfirmDialog } from './ConfirmDialog';
 
 // Lazy-loaded heavy modals so they stay out of the initial bundle
 const GitHubAuthModal = lazy(() =>
@@ -72,6 +74,11 @@ export interface AppModalsProps {
   songs: Song[];
   onSelectOtherSong: (song: Song) => void;
   onCloseVisualizer: () => void;
+
+  // Delete Album Confirmation
+  pendingDeleteAlbum?: Album | null;
+  onConfirmDeleteAlbum?: () => void;
+  onCancelDeleteAlbum?: () => void;
 }
 
 export const AppModals: React.FC<AppModalsProps> = ({
@@ -110,7 +117,11 @@ export const AppModals: React.FC<AppModalsProps> = ({
   visualizerSong,
   songs,
   onSelectOtherSong,
-  onCloseVisualizer
+  onCloseVisualizer,
+
+  pendingDeleteAlbum,
+  onConfirmDeleteAlbum,
+  onCancelDeleteAlbum
 }) => {
   return (
     <>
@@ -176,6 +187,21 @@ export const AppModals: React.FC<AppModalsProps> = ({
           />
         )}
       </Suspense>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteAlbum)}
+        title="Eliminar álbum"
+        message={
+          pendingDeleteAlbum
+            ? `¿Estás seguro de que deseas eliminar el álbum "${pendingDeleteAlbum.title}"? Las canciones del catálogo no se borrarán.`
+            : ''
+        }
+        confirmLabel="Eliminar álbum"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={() => onConfirmDeleteAlbum?.()}
+        onCancel={() => onCancelDeleteAlbum?.()}
+      />
 
       <GitNotificationToast
         toast={gitToast}

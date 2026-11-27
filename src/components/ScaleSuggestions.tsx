@@ -34,9 +34,9 @@ export const ScaleSuggestions: React.FC<ScaleSuggestionsProps> = ({
   }
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800">
+    <div className="bg-[var(--bg-surface)] rounded-2xl p-6 border border-[var(--border-subtle)]">
       <div className="flex items-center gap-2 mb-4">
-        <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <Lightbulb className="w-5 h-5 text-[var(--accent-primary)]" />
         <h3 className="text-lg font-semibold text-[var(--text-primary)]">
           Escalas Sugeridas
         </h3>
@@ -50,14 +50,15 @@ export const ScaleSuggestions: React.FC<ScaleSuggestionsProps> = ({
 
       <div className="space-y-3">
         {suggestions.map((suggestion, index) => (
-          <div
+          <button
             key={index}
-            className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer hover:shadow-md ${
+            type="button"
+            className={`w-full text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-md ${
               suggestion.compatibility === 'perfect'
-                ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                ? 'bg-[var(--state-success-bg)]/40 border-[var(--state-success-border)]'
                 : suggestion.compatibility === 'good'
-                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
-                : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700'
+                ? 'bg-[var(--state-info-bg)]/40 border-[var(--state-info-border)]'
+                : 'bg-[var(--state-warning-bg)]/40 border-[var(--state-warning-border)]'
             }`}
             onClick={() => onSelectScale?.(suggestion.scaleId)}
           >
@@ -73,13 +74,19 @@ export const ScaleSuggestions: React.FC<ScaleSuggestionsProps> = ({
               
               <div className="flex items-center gap-2 ml-4">
                 <div className="text-right">
-                  <div className="flex items-center gap-1 justify-end mb-1">
+                  <div className="flex items-center gap-1 justify-end mb-1 text-[var(--text-primary)]">
                     <TrendingUp className="w-4 h-4" />
                     <span className="font-bold text-sm">
                       {Math.round(suggestion.confidence * 100)}%
                     </span>
                   </div>
-                  <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-opacity-20 bg-current">
+                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold border ${
+                    suggestion.compatibility === 'perfect'
+                      ? 'bg-[var(--state-success-bg)] text-[var(--state-success-text)] border-[var(--state-success-border)]'
+                      : suggestion.compatibility === 'good'
+                      ? 'bg-[var(--state-info-bg)] text-[var(--state-info-text)] border-[var(--state-info-border)]'
+                      : 'bg-[var(--state-warning-bg)] text-[var(--state-warning-text)] border-[var(--state-warning-border)]'
+                  }`}>
                     {suggestion.compatibility === 'perfect' && '⭐ Perfecta'}
                     {suggestion.compatibility === 'good' && '✓ Buena'}
                     {suggestion.compatibility === 'fair' && '~ Regular'}
@@ -89,24 +96,24 @@ export const ScaleSuggestions: React.FC<ScaleSuggestionsProps> = ({
             </div>
 
             {/* Confidence bar */}
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div className="w-full bg-[var(--bg-surface-muted)] rounded-full h-2 overflow-hidden">
               <div
                 className={`h-2 rounded-full transition-all ${
                   suggestion.compatibility === 'perfect'
-                    ? 'bg-green-500'
+                    ? 'bg-[var(--state-success-border)]'
                     : suggestion.compatibility === 'good'
-                    ? 'bg-blue-500'
-                    : 'bg-yellow-500'
+                    ? 'bg-[var(--state-info-border)]'
+                    : 'bg-[var(--state-warning-border)]'
                 }`}
                 style={{ width: `${suggestion.confidence * 100}%` }}
               />
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
-      <div className="mt-4 p-3 bg-blue-100 dark:bg-blue-900/40 rounded border border-blue-300 dark:border-blue-700">
-        <p className="text-xs text-blue-800 dark:text-blue-300 flex items-start gap-2">
+      <div className="mt-4 p-3 bg-[var(--state-info-bg)] rounded-lg border border-[var(--state-info-border)]">
+        <p className="text-xs text-[var(--state-info-text)] flex items-start gap-2">
           <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" />
           Haz clic en una escala para verla en el diapasón
         </p>

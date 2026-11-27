@@ -100,7 +100,7 @@ export function Footer({
             <Music2 className="w-3.5 h-3.5 text-[var(--accent-primary)] opacity-50" />
             <span>{DISPLAY_VERSION}</span>
             {BUILD_BRANCH && !['unknown', 'master', 'main'].includes(BUILD_BRANCH) && (
-              <span className="ml-2 px-2 py-0.5 rounded bg-[var(--bg-subtle)] text-[var(--text-muted)] opacity-75">
+              <span className="ml-2 px-2 py-0.5 rounded bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] opacity-75">
                 {BUILD_BRANCH}
               </span>
             )}

@@ -4,6 +4,7 @@ import { Song } from '../types/song';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService, PushResult } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface RenameFileModalProps {
   song: Song | null;
@@ -116,8 +117,15 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
   const cleanPreview = sanitizeSlug(newSlug) || 'nuevo-nombre';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden">
-      <div className="relative w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200">
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={isProcessing ? () => {} : onClose}
+      titleId="rename-file-modal-title"
+      closeOnBackdropClick={!isProcessing}
+      closeOnEscape={!isProcessing}
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden"
+      panelClassName="relative w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)] transition-colors duration-200"
+    >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-modal)]">
           <div className="flex items-center gap-3">
@@ -125,7 +133,7 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
+              <h3 id="rename-file-modal-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
                 Renombrar archivo Markdown
               </h3>
               <p className="text-xs text-[var(--text-muted)] truncate max-w-xs">
@@ -135,7 +143,9 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar modal"
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -264,7 +274,6 @@ export const RenameFileModal: React.FC<RenameFileModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

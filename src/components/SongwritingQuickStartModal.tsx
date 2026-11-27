@@ -12,6 +12,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { SONGWRITING_TEMPLATES } from '../utils/songwriterHelper';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface SongwritingQuickStartModalProps {
   isOpen: boolean;
@@ -68,8 +69,13 @@ export const SongwritingQuickStartModal: React.FC<SongwritingQuickStartModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden text-[var(--text-primary)]">
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={onClose}
+      titleId="quick-start-modal-title"
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+      panelClassName="relative w-full max-w-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden text-[var(--text-primary)]"
+    >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
           <div className="flex items-center gap-3">
@@ -77,7 +83,7 @@ export const SongwritingQuickStartModal: React.FC<SongwritingQuickStartModalProp
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
+              <h3 id="quick-start-modal-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
                 Taller de Creación de Canción
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
@@ -86,7 +92,9 @@ export const SongwritingQuickStartModal: React.FC<SongwritingQuickStartModalProp
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar taller"
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -250,7 +258,6 @@ export const SongwritingQuickStartModal: React.FC<SongwritingQuickStartModalProp
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

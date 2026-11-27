@@ -60,7 +60,7 @@ export const VisualizerExportTab: React.FC<VisualizerExportTabProps> = ({
           <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
             <button
               onClick={onDownloadVideo}
-              className="w-full sm:flex-1 py-3 px-4 rounded-xl text-xs font-bold text-white bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:flex-1 py-3 px-4 rounded-xl text-xs font-bold text-[var(--accent-text)] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               <Download className="w-4 h-4" />
               <span>Descargar Vídeo para YouTube</span>

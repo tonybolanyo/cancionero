@@ -26,15 +26,15 @@ export const ChordPositionSelector: React.FC<ChordPositionSelectorProps> = ({
           key={index}
           type="button"
           onClick={() => onSelectPosition(index)}
-          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition-all text-xs font-mono ${
+          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition-all text-xs font-mono cursor-pointer ${
             selectedPosition === index
-              ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-white shadow-sm'
+              ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-text)] shadow-sm'
               : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:bg-[var(--bg-surface)]'
           }`}
           title={position.description}
         >
           <span className="font-semibold">{position.name}</span>
-          <span className={`text-[10px] font-normal ${selectedPosition === index ? 'text-white' : getDifficultyColor(position.difficulty)}`}>
+          <span className={`text-[10px] font-normal ${selectedPosition === index ? 'text-[var(--accent-text)] opacity-90' : getDifficultyColor(position.difficulty)}`}>
             ({getDifficultyLabel(position.difficulty)})
           </span>
         </button>

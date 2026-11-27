@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
 import {
   Play,
   Pause,
@@ -21,6 +21,7 @@ import {
 import { SyncedLyricLine, LrcMetadata, formatLrcTimestamp, downloadFile } from '../types/lyrics';
 import { serializeToLrc, createLrcBlob, stripChordsFromText } from '../lib/lyrics/parseLrc';
 import { createVttBlob } from '../lib/lyrics/toVtt';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 export interface LrcSyncAssistantProps {
   isOpen: boolean;
@@ -98,7 +99,9 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState<boolean>(false);
 
+  const titleId = useId();
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const stampButtonRef = useRef<HTMLButtonElement>(null);
 
   // Inicializar líneas al abrir
   useEffect(() => {
@@ -223,16 +226,12 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
       } else if (e.key.toLowerCase() === 'p') {
         e.preventDefault();
         onTogglePlay();
-      } else if (e.key === 'Escape') {
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleStampCurrent, handleUndo, onTogglePlay, onClose]);
+  }, [isOpen, handleStampCurrent, handleUndo, onTogglePlay]);
 
   // Auto-scroll del visor para mantener la línea activa en el foco
   useEffect(() => {
@@ -311,8 +310,15 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
   const nextLine = currentIndex + 1 < lines.length ? lines[currentIndex + 1] : null;
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-2 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn">
-      <div className="relative w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-[1920px] max-h-[94vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)]">
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={onClose}
+      titleId={titleId}
+      zIndexClass="z-60"
+      initialFocusRef={stampButtonRef}
+      backdropClassName="fixed inset-0 z-60 flex items-center justify-center p-2 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm overflow-hidden animate-fadeIn"
+      panelClassName="relative w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl 3xl:max-w-[1920px] max-h-[94vh] flex flex-col rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)]"
+    >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
           <div className="flex items-center gap-2.5">
@@ -321,7 +327,7 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)]">
+                <h3 id={titleId} className="text-sm sm:text-base font-bold text-[var(--text-primary)]">
                   Asistente de Sincronización en Vivo (Tap-to-Sync)
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
@@ -336,16 +342,20 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
 
           <div className="flex items-center gap-1.5">
             <button
+              type="button"
               onClick={() => setShowShortcutsHelp(!showShortcutsHelp)}
               className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
               title="Atajos de teclado"
+              aria-label="Mostrar atajos de teclado"
             >
               <HelpCircle className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
               title="Cerrar asistente"
+              aria-label="Cerrar asistente"
             >
               <X className="w-5 h-5" />
             </button>
@@ -385,8 +395,9 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
           {/* Audio Playback & Progress Status Bar */}
           <div className="flex items-center gap-4 mb-4">
             <button
+              type="button"
               onClick={onTogglePlay}
-              className="w-11 h-11 rounded-full bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white flex items-center justify-center shadow-md cursor-pointer transition-transform active:scale-95"
+              className="w-11 h-11 rounded-full bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] flex items-center justify-center shadow-md cursor-pointer transition-transform active:scale-95"
               title={isPlaying ? 'Pausar audio (Tecla P)' : 'Iniciar audio (Tecla P)'}
             >
               {isPlaying ? (
@@ -465,12 +476,14 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
             </button>
 
             <button
+              ref={stampButtonRef}
+              type="button"
               onClick={handleStampCurrent}
               disabled={isFinished}
               className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer select-none ${
                 stampFlash
                   ? 'bg-emerald-500 text-white ring-4 ring-emerald-500/30'
-                  : 'bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white'
+                  : 'bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)]'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
               title="Estampar tiempo actual en este verso y pasar al siguiente (Barra Espaciadora)"
             >
@@ -617,7 +630,7 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
               className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ${
                 savedSuccess
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white disabled:opacity-40 disabled:cursor-not-allowed'
+                  : 'bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] disabled:opacity-40 disabled:cursor-not-allowed'
               }`}
             >
               {savedSuccess ? (
@@ -634,7 +647,6 @@ export const LrcSyncAssistant: React.FC<LrcSyncAssistantProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

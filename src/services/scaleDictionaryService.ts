@@ -119,13 +119,13 @@ export function getScalesByDifficulty(difficulty: 'easy' | 'medium' | 'hard'): s
 export function getDifficultyColor(difficulty: 'easy' | 'medium' | 'hard'): string {
   switch (difficulty) {
     case 'easy':
-      return 'text-green-500';
+      return 'text-emerald-600 dark:text-emerald-400';
     case 'medium':
-      return 'text-yellow-500';
+      return 'text-amber-600 dark:text-amber-400';
     case 'hard':
-      return 'text-red-500';
+      return 'text-rose-600 dark:text-rose-400';
     default:
-      return 'text-gray-500';
+      return 'text-[var(--text-muted)]';
   }
 }
 

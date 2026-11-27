@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { SongStatus } from '../../types/song';
 import { AccidentalPreference } from '../../utils/markdownParser';
+import { AccessibleModal } from '../modals/AccessibleModal';
 
 export type EditorWorkbenchTab = 'lyrics.md' | 'audio-studio.dsp' | 'sync.lrc' | 'metadata.json';
 
@@ -799,8 +800,13 @@ export const SongExportActions: React.FC<SongExportActionsProps> = ({
 };
 
 export const EditorShortcutsDialog: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
+  <AccessibleModal
+    isOpen={true}
+    onClose={onClose}
+    ariaLabel="Atajos de Teclado del Estudio"
+    backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
+    panelClassName="bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4 text-[var(--text-primary)]"
+  >
       <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
         <div className="flex items-center gap-2">
           <HelpCircle className="w-4 h-4 text-[var(--accent-primary)]" />
@@ -808,7 +814,12 @@ export const EditorShortcutsDialog: React.FC<{ onClose: () => void }> = ({ onClo
             Atajos de Teclado del Estudio
           </h3>
         </div>
-        <button type="button" onClick={onClose} className="text-xs opacity-70 hover:opacity-100 cursor-pointer">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+          aria-label="Cerrar atajos de teclado"
+        >
           ✕
         </button>
       </div>
@@ -855,6 +866,5 @@ export const EditorShortcutsDialog: React.FC<{ onClose: () => void }> = ({ onClo
           Entendido
         </button>
       </div>
-    </div>
-  </div>
+  </AccessibleModal>
 );

@@ -49,7 +49,7 @@ export const ChordDictionaryDemoPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[var(--bg-canvas)] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -69,18 +69,18 @@ export const ChordDictionaryDemoPage: React.FC = () => {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start justify-between gap-3">
+          <div className="bg-[var(--state-error-bg)] border border-[var(--state-error-border)] text-[var(--state-error-text)] rounded-lg p-4 flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-red-900 dark:text-red-200">Error</h3>
-                <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+                <h3 className="font-semibold">Error</h3>
+                <p className="text-sm opacity-90">{error}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={initializeDictionary}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors shrink-0"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--state-error-border)] hover:bg-[var(--bg-hover)] transition-colors shrink-0 cursor-pointer"
             >
               Reintentar
             </button>
@@ -170,9 +170,9 @@ export const ChordDictionaryDemoPage: React.FC = () => {
                       <button
                         key={chord}
                         onClick={() => toggleChord(chord)}
-                        className={`px-3 py-2 rounded-lg font-mono font-semibold text-sm transition-all ${
+                        className={`px-3 py-2 rounded-lg font-mono font-semibold text-sm transition-all cursor-pointer ${
                           selectedChords.includes(chord)
-                            ? 'bg-[var(--accent-primary)] text-white shadow-sm'
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] shadow-sm'
                             : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]'
                         }`}
                       >
@@ -237,15 +237,15 @@ export const ChordDictionaryDemoPage: React.FC = () => {
                     </h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded bg-green-100 text-green-700 font-semibold">Fácil</span>
+                        <span className="px-3 py-1 rounded bg-[var(--state-success-bg)] text-[var(--state-success-text)] border border-[var(--state-success-border)] font-semibold">Fácil</span>
                         <span className="text-[var(--text-secondary)]">Acordes abiertos, fáciles de aprender</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded bg-yellow-100 text-yellow-700 font-semibold">Medio</span>
+                        <span className="px-3 py-1 rounded bg-[var(--state-warning-bg)] text-[var(--state-warning-text)] border border-[var(--state-warning-border)] font-semibold">Medio</span>
                         <span className="text-[var(--text-secondary)]">Requieren cejilla o más coordinación</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded bg-red-100 text-red-700 font-semibold">Difícil</span>
+                        <span className="px-3 py-1 rounded bg-[var(--state-error-bg)] text-[var(--state-error-text)] border border-[var(--state-error-border)] font-semibold">Difícil</span>
                         <span className="text-[var(--text-secondary)]">Cejillas complejas o posiciones altas</span>
                       </div>
                     </div>
@@ -292,10 +292,10 @@ export const ChordDictionaryDemoPage: React.FC = () => {
             </section>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-900">
+            <div className="bg-[var(--state-info-bg)] border border-[var(--state-info-border)] text-[var(--state-info-text)] rounded-lg p-4">
+              <p className="text-sm">
                 <strong>ℹ️ Nota:</strong> El diccionario de acordes se carga automáticamente desde{' '}
-                <code className="bg-blue-100 px-2 py-1 rounded font-mono text-xs">
+                <code className="bg-[var(--bg-code)] text-[var(--code-text)] border border-[var(--code-border)] px-2 py-0.5 rounded font-mono text-xs">
                   /public/data/chord-dictionary.json
                 </code>
                 . Puedes expandir este diccionario agregando más acordes y posiciones.

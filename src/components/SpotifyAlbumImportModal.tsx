@@ -4,6 +4,7 @@ import { Song, SongStatus } from '../types/song';
 import { StorageService } from '../services/storageService';
 import { GitHubSyncService } from '../services/githubSyncService';
 import { useAuth } from '../context/AuthContext';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 export interface SpotifyAlbumImportWorkspaceProps {
   onImport: (songs: Song[]) => void;
@@ -222,22 +223,22 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
     <div
       className={
         isModal
-          ? 'bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl m-4 overflow-hidden'
+          ? 'bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-2xl shadow-[var(--modal-shadow)] w-full max-w-2xl overflow-hidden text-[var(--text-primary)]'
           : 'w-full max-w-3xl mx-auto rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden text-[var(--text-primary)]'
       }
     >
       {/* Header */}
       <div
-        className={`flex items-center justify-between p-6 border-b ${
-          isModal
-            ? 'border-gray-200 dark:border-gray-700'
-            : 'border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]/60'
+        className={`flex items-center justify-between p-6 border-b border-[var(--border-subtle)] ${
+          isModal ? 'bg-[var(--bg-modal)]' : 'bg-[var(--bg-surface-subtle)]/60'
         }`}
       >
         <div className="flex items-center gap-3">
-          <Music className="text-blue-500" size={24} />
+          <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-primary)] shrink-0">
+            <Music size={18} />
+          </div>
           {isModal ? (
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h2 id="spotify-import-modal-title" className="font-serif text-xl font-bold text-[var(--text-primary)]">
               Importar Disco de Spotify
             </h2>
           ) : (
@@ -248,31 +249,32 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
         </div>
         {isModal && onClose && (
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer"
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition cursor-pointer"
             aria-label="Cerrar"
           >
-            <X size={20} className="text-gray-600 dark:text-gray-400" />
+            <X size={20} />
           </button>
         )}
       </div>
 
       {/* Content */}
-      <div className={isModal ? 'p-6 max-h-[70vh] overflow-y-auto' : 'p-6'}>
+      <div className={isModal ? 'p-6 max-h-[70vh] overflow-y-auto bg-[var(--bg-surface)]' : 'p-6'}>
           {error && (
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="mb-4 p-4 bg-[var(--state-error-bg)] border border-[var(--state-error-border)] text-[var(--state-error-text)] rounded-xl">
               <div className="flex items-start gap-3">
-                <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
-                <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+                <AlertCircle className="shrink-0 mt-0.5" size={20} />
+                <p className="text-sm">{error}</p>
               </div>
             </div>
           )}
 
           {importStatus === 'done' && (
-            <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+            <div className="mb-4 p-4 bg-[var(--state-success-bg)] border border-[var(--state-success-border)] text-[var(--state-success-text)] rounded-xl">
               <div className="flex items-start gap-3">
-                <Check className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
-                <p className="text-sm text-green-800 dark:text-green-300">
+                <Check className="shrink-0 mt-0.5" size={20} />
+                <p className="text-sm font-medium">
                   ¡Canciones importadas exitosamente!
                 </p>
               </div>
@@ -283,7 +285,7 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
             <>
               {/* Spotify URL Input */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   URL de Spotify del Disco
                 </label>
                 <input
@@ -291,19 +293,20 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                   value={spotifyUrl}
                   onChange={(e) => setSpotifyUrl(e.target.value)}
                   placeholder="https://open.spotify.com/album/..."
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-[var(--input-border)] rounded-lg bg-[var(--input-bg)] text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:outline-none focus:border-[var(--input-border-focus)]"
                   disabled={isLoading}
                 />
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-xs text-[var(--text-muted)] mt-1">
                   Puedes extraer la URL directamente del navegador de Spotify
                 </p>
               </div>
 
               {spotifyUrl && !manualMode && (
                 <button
+                  type="button"
                   onClick={handleExtractSpotifyData}
                   disabled={isLoading}
-                  className="w-full mb-6 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
+                  className="w-full mb-6 px-4 py-2.5 bg-[var(--button-primary-bg)] hover:bg-[var(--button-primary-hover-bg)] disabled:bg-[var(--button-primary-disabled-bg)] disabled:text-[var(--button-primary-disabled-text)] text-[var(--button-primary-text)] font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isLoading ? (
                     <>
@@ -322,7 +325,7 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
               {/* Manual Entry */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Nombre del Disco
                   </label>
                   <input
@@ -330,13 +333,13 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                     value={albumTitle}
                     onChange={(e) => setAlbumTitle(e.target.value)}
                     placeholder="ej: Cartas sin sello"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-[var(--input-border)] rounded-lg bg-[var(--input-bg)] text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:outline-none focus:border-[var(--input-border-focus)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                       Artista
                     </label>
                     <input
@@ -344,42 +347,43 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                       value={artistName}
                       onChange={(e) => setArtistName(e.target.value)}
                       placeholder="ej: Tony Bolaño"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-[var(--input-border)] rounded-lg bg-[var(--input-bg)] text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:outline-none focus:border-[var(--input-border-focus)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                       Año
                     </label>
                     <input
                       type="number"
                       value={albumYear}
                       onChange={(e) => setAlbumYear(parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-[var(--input-border)] rounded-lg bg-[var(--input-bg)] text-[var(--input-text)] font-mono focus:outline-none focus:border-[var(--input-border-focus)]"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Canciones (una por línea)
                   </label>
                   <textarea
                     value={songsList}
                     onChange={(e) => setSongsList(e.target.value)}
                     placeholder="Me quedo&#10;Cinco años y un faro&#10;Boleros y verdades&#10;..."
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    className="w-full px-4 py-2 border border-[var(--input-border)] rounded-lg bg-[var(--input-bg)] text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:outline-none focus:border-[var(--input-border-focus)] font-mono text-sm"
                     rows={8}
                   />
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
                     Puedes pegar la lista de Spotify o escribir los nombres manualmente
                   </p>
                 </div>
 
                 <button
+                  type="button"
                   onClick={handleParseSongs}
                   disabled={!albumTitle || !artistName || !songsList}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2.5 bg-[var(--button-primary-bg)] hover:bg-[var(--button-primary-hover-bg)] disabled:bg-[var(--button-primary-disabled-bg)] disabled:text-[var(--button-primary-disabled-text)] text-[var(--button-primary-text)] font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Music size={18} />
                   Revisar Canciones
@@ -389,21 +393,21 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
           ) : (
             <>
               {/* Album Info */}
-              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+              <div className="mb-6 p-4 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-xl">
+                <h3 className="font-serif font-semibold text-[var(--text-primary)] mb-1">
                   {albumData.title}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-[var(--text-secondary)]">
                   {albumData.artist} ({albumData.year})
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                <p className="text-xs text-[var(--text-muted)] mt-2 font-mono">
                   {albumData.songs.length} canciones disponibles
                 </p>
               </div>
 
               {/* Songs List */}
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-3">
                   Selecciona las canciones a importar:
                 </h4>
                 {albumData.songs.map((song, index) => {
@@ -415,8 +419,8 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                       key={index}
                       className={`flex items-center gap-3 p-3 rounded-lg border transition ${
                         alreadyExists
-                          ? 'bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-600 opacity-60'
-                          : 'bg-white dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:border-blue-400'
+                          ? 'bg-[var(--bg-surface-subtle)]/50 border-[var(--border-subtle)] opacity-60'
+                          : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]'
                       }`}
                     >
                       <input
@@ -425,15 +429,15 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                         checked={selectedSongs.has(index.toString())}
                         onChange={() => handleToggleSong(index.toString())}
                         disabled={alreadyExists || importStatus === 'processing'}
-                        className="w-4 h-4 text-blue-600 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-4 h-4 accent-[var(--accent-primary)] rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <label
                         htmlFor={`song-${index}`}
-                        className="flex-1 cursor-pointer text-gray-900 dark:text-white select-none disabled:cursor-not-allowed"
+                        className="flex-1 cursor-pointer text-[var(--text-primary)] select-none"
                       >
                         <span className="text-sm font-medium">{song.title}</span>
                         {alreadyExists && (
-                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                          <span className="ml-2 text-xs text-[var(--text-muted)]">
                             (ya existe)
                           </span>
                         )}
@@ -449,14 +453,13 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
       {/* Footer */}
       {(albumData || (isModal && onClose)) && (
         <div
-          className={`flex gap-3 p-6 border-t ${
-            isModal
-              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900'
-              : 'border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]/60'
+          className={`flex gap-3 p-6 border-t border-[var(--border-subtle)] ${
+            isModal ? 'bg-[var(--bg-modal)]' : 'bg-[var(--bg-surface-subtle)]/60'
           }`}
         >
           {(albumData || onClose) && (
             <button
+              type="button"
               onClick={() => {
                 if (albumData) {
                   setAlbumData(null);
@@ -466,7 +469,7 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
                 }
               }}
               disabled={importStatus === 'processing'}
-              className="flex-1 px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-900 dark:text-white rounded-lg transition font-medium cursor-pointer"
+              className="flex-1 px-4 py-2 bg-[var(--button-secondary-bg)] hover:bg-[var(--button-secondary-hover-bg)] border border-[var(--button-secondary-border)] disabled:opacity-50 text-[var(--button-secondary-text)] rounded-lg transition font-medium cursor-pointer"
             >
               {albumData ? 'Atrás' : 'Cancelar'}
             </button>
@@ -474,9 +477,10 @@ export const SpotifyAlbumImportWorkspace: React.FC<SpotifyAlbumImportWorkspacePr
 
           {albumData && (
             <button
+              type="button"
               onClick={handleImportSongs}
               disabled={selectedSongs.size === 0 || importStatus === 'processing'}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium flex items-center justify-center gap-2 cursor-pointer"
+              className="flex-1 px-4 py-2 bg-[var(--button-primary-bg)] hover:bg-[var(--button-primary-hover-bg)] disabled:bg-[var(--button-primary-disabled-bg)] disabled:text-[var(--button-primary-disabled-text)] text-[var(--button-primary-text)] rounded-lg transition font-semibold flex items-center justify-center gap-2 cursor-pointer"
             >
               {importStatus === 'processing' ? (
                 <>
@@ -510,31 +514,40 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
 
   if (!isAuthor) {
     return (
-      <div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md">
-          <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
-            <AlertCircle size={24} />
-            <h2 className="text-lg font-semibold">Acceso restringido</h2>
-          </div>
-          <p className="text-gray-700 dark:text-gray-300 mb-6">
-            Solo los autores pueden importar canciones de discos de Spotify.
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition"
-          >
-            Cerrar
-          </button>
+      <AccessibleModal
+        isOpen={isOpen}
+        onClose={onClose}
+        titleId="spotify-import-restricted-title"
+        backdropClassName="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+        panelClassName="bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-[var(--modal-shadow)] text-[var(--text-primary)]"
+      >
+        <div className="flex items-center gap-3 text-[var(--accent-primary)] mb-4">
+          <AlertCircle size={24} />
+          <h2 id="spotify-import-restricted-title" className="font-serif text-lg font-bold text-[var(--text-primary)]">
+            Acceso restringido
+          </h2>
         </div>
-      </div>
+        <p className="text-sm text-[var(--text-secondary)] mb-6">
+          Solo los autores pueden importar canciones de discos de Spotify.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full px-4 py-2 bg-[var(--button-secondary-bg)] hover:bg-[var(--button-secondary-hover-bg)] border border-[var(--button-secondary-border)] text-[var(--button-secondary-text)] rounded-lg transition font-medium cursor-pointer"
+        >
+          Cerrar
+        </button>
+      </AccessibleModal>
     );
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto"
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={onClose}
+      titleId="spotify-import-modal-title"
+      backdropClassName="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 overflow-y-auto p-3 sm:p-6"
+      panelClassName="relative w-full max-w-2xl flex justify-center"
     >
       <SpotifyAlbumImportWorkspace
         onImport={onImport}
@@ -542,6 +555,6 @@ export const SpotifyAlbumImportModal: React.FC<SpotifyAlbumImportModalProps> = (
         onClose={onClose}
         mode="modal"
       />
-    </div>
+    </AccessibleModal>
   );
 };

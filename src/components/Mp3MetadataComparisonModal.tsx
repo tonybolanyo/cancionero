@@ -25,6 +25,7 @@ import {
   buildComparisonFields,
   Mp3FieldKey
 } from '../lib/audio/mp3Metadata';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface Mp3MetadataComparisonModalProps {
   isOpen: boolean;
@@ -92,20 +93,6 @@ export const Mp3MetadataComparisonModal: React.FC<Mp3MetadataComparisonModalProp
     setSelectedKeys(initial);
     setExpandedKeys(new Set());
   }, [metadata, currentSongData]);
-
-  // Handle ESC key to reject/close
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen || comparisonFields.length === 0) return null;
 
@@ -200,13 +187,13 @@ export const Mp3MetadataComparisonModal: React.FC<Mp3MetadataComparisonModalProp
   const totalCount = comparisonFields.length;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs animate-fadeIn"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+    <AccessibleModal
+      isOpen={isOpen && comparisonFields.length > 0}
+      onClose={onClose}
+      titleId={titleId}
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs animate-fadeIn"
+      panelClassName="bg-[var(--bg-modal)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-scaleIn text-[var(--text-primary)]"
     >
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-scaleIn">
         {/* Header */}
         <div className="p-4 sm:p-6 border-b border-[var(--border-subtle)] flex items-start justify-between gap-4 bg-[var(--bg-surface-subtle)]">
           <div className="space-y-1">
@@ -237,6 +224,7 @@ export const Mp3MetadataComparisonModal: React.FC<Mp3MetadataComparisonModalProp
             onClick={onClose}
             className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer shrink-0"
             title="Cerrar sin sobreescribir (Esc)"
+            aria-label="Cerrar comparación de metadatos"
           >
             <X className="w-5 h-5" />
           </button>
@@ -503,7 +491,6 @@ export const Mp3MetadataComparisonModal: React.FC<Mp3MetadataComparisonModalProp
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

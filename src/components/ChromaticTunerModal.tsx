@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Mic, MicOff, Volume2, X, CheckCircle2 } from 'lucide-react';
 import { detectPitchYIN, PitchDetectionResult } from '../lib/audio/tuning';
 import { GUITAR_TUNINGS } from '../lib/music/chordDiagrams';
 import { playReferenceNote, midiToFrequency } from '../lib/audio/chordSynth';
-import { useKeyboardShortcuts, SHORTCUT_PRIORITY } from '../hooks/useKeyboardShortcuts';
+import { AccessibleModal } from './modals/AccessibleModal';
 
 interface ChromaticTunerModalProps {
   initialTuning?: string;
@@ -38,12 +38,11 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
   const [micError, setMicError] = useState<string | null>(null);
   const [pitch, setPitch] = useState<PitchDetectionResult | null>(null);
 
+  const titleId = useId();
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const a4Ref = useRef<number>(referenceA4Hz);
-
-  const { register, unregister } = useKeyboardShortcuts();
 
   useEffect(() => {
     a4Ref.current = referenceA4Hz;
@@ -71,19 +70,6 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
     stopMicrophone();
     onClose();
   }, [stopMicrophone, onClose]);
-
-  useEffect(() => {
-    register('chromatic-tuner-escape', {
-      key: 'Escape',
-      priority: SHORTCUT_PRIORITY.MODAL + 1,
-      description: 'Cerrar afinador cromático',
-      callback: () => {
-        handleClose();
-        return true;
-      },
-    });
-    return () => unregister('chromatic-tuner-escape');
-  }, [register, unregister, handleClose]);
 
   useEffect(() => {
     return () => {
@@ -142,17 +128,17 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
   const needlePercent = 50 + clampedCents; // 0% = -50c, 50% = 0c, 100% = +50c
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Afinador Cromático de Precisión"
+    <AccessibleModal
+      isOpen={true}
+      onClose={handleClose}
+      titleId={titleId}
+      backdropClassName="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+      panelClassName="w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden text-[var(--text-primary)]"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-modal)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
           <div>
-            <h2 className="font-serif font-bold text-lg text-[var(--text-primary)]">
+            <h2 id={titleId} className="font-serif font-bold text-lg text-[var(--text-primary)]">
               Afinador Cromático YIN
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
@@ -161,10 +147,7 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => {
-              stopMicrophone();
-              onClose();
-            }}
+            onClick={handleClose}
             className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
             aria-label="Cerrar afinador"
           >
@@ -315,7 +298,6 @@ export const ChromaticTunerModal: React.FC<ChromaticTunerModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </AccessibleModal>
   );
 };

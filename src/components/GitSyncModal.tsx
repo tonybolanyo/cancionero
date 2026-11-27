@@ -20,6 +20,8 @@ import { GitCommitHistoryTab } from './gitSync/GitCommitHistoryTab';
 import { GitExportTab, GitImportTab } from './gitSync/GitExportImportTab';
 import { GitRemoteConfigTab } from './gitSync/GitRemoteConfigTab';
 import { GitBackupsTab } from './gitSync/GitBackupsTab';
+import { AccessibleModal } from './modals/AccessibleModal';
+import { ConfirmDialog, useConfirmDialog } from './modals/ConfirmDialog';
 
 export interface GitSyncWorkspaceProps {
   songs: Song[];
@@ -50,6 +52,7 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
   );
   const [manualBackupName, setManualBackupName] = useState('');
   const [selectedBackup, setSelectedBackup] = useState<SongBackupPoint | null>(null);
+  const { requestConfirm, confirmDialogProps } = useConfirmDialog();
 
   useEffect(() => {
     let active = true;
@@ -334,12 +337,23 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
   };
 
   const handleResetCatalog = () => {
-    if (confirm('¿Restablecer el repertorio al catálogo inicial de demostración? Se creará automáticamente un backup de seguridad.')) {
-      const reset = StorageService.resetToDefault();
-      onSongsUpdated(reset);
-      setBackupPoints(StorageService.getBackupPoints());
-      setNotification({ message: 'Catálogo restaurado a los temas iniciales. Punto de seguridad creado.', type: 'success' });
-    }
+    requestConfirm({
+      title: 'Restablecer catálogo inicial',
+      message:
+        '¿Restablecer el repertorio al catálogo inicial de demostración? Se creará automáticamente un backup de seguridad.',
+      confirmLabel: 'Restablecer catálogo',
+      cancelLabel: 'Cancelar',
+      variant: 'warning',
+      onConfirm: () => {
+        const reset = StorageService.resetToDefault();
+        onSongsUpdated(reset);
+        setBackupPoints(StorageService.getBackupPoints());
+        setNotification({
+          message: 'Catálogo restaurado a los temas iniciales. Punto de seguridad creado.',
+          type: 'success'
+        });
+      }
+    });
   };
 
   const handleCreateManualBackup = (e: React.FormEvent) => {
@@ -356,27 +370,32 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
   };
 
   const handleRestoreBackup = (point: SongBackupPoint) => {
-    const confirmed = window.confirm(
-      `¿Confirmas restaurar el cancionero completo al punto "${point.name}" (${point.songCount} canciones)?\n\n` +
-        `Se creará automáticamente un snapshot de seguridad del estado actual antes de aplicar la reversión.`
-    );
-    if (!confirmed) return;
-
-    const res = StorageService.restoreBackupPoint(point.id);
-    if (res.success && res.songs) {
-      onSongsUpdated(res.songs);
-      setBackupPoints(StorageService.getBackupPoints());
-      setNotification({
-        message: `Cancionero revertido con éxito a "${point.name}" (${res.songs.length} temas). Se ha registrado el commit en Git.`,
-        type: 'success'
-      });
-    } else {
-      setNotification({
-        message: `Error al revertir: ${res.error || 'Error desconocido'}`,
-        type: 'error'
-      });
-    }
-    setTimeout(() => setNotification(null), 5000);
+    requestConfirm({
+      title: 'Restaurar punto de seguridad',
+      message:
+        `¿Confirmas restaurar el cancionero completo al punto "${point.name}" (${point.songCount} canciones)?\n\n` +
+        `Se creará automáticamente un snapshot de seguridad del estado actual antes de aplicar la reversión.`,
+      confirmLabel: 'Restaurar cancionero',
+      cancelLabel: 'Cancelar',
+      variant: 'warning',
+      onConfirm: () => {
+        const res = StorageService.restoreBackupPoint(point.id);
+        if (res.success && res.songs) {
+          onSongsUpdated(res.songs);
+          setBackupPoints(StorageService.getBackupPoints());
+          setNotification({
+            message: `Cancionero revertido con éxito a "${point.name}" (${res.songs.length} temas). Se ha registrado el commit en Git.`,
+            type: 'success'
+          });
+        } else {
+          setNotification({
+            message: `Error al revertir: ${res.error || 'Error desconocido'}`,
+            type: 'error'
+          });
+        }
+        setTimeout(() => setNotification(null), 5000);
+      }
+    });
   };
 
   const handleDownloadBackupJson = (point: SongBackupPoint) => {
@@ -392,26 +411,41 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
   };
 
   const handleDeleteBackup = (backupId: string) => {
-    if (window.confirm('¿Deseas eliminar este punto de restauración?')) {
-      StorageService.deleteBackupPoint(backupId);
-      setBackupPoints(StorageService.getBackupPoints());
-      if (selectedBackup?.id === backupId) setSelectedBackup(null);
-      setNotification({
-        message: 'Punto de restauración eliminado.',
-        type: 'success'
-      });
-      setTimeout(() => setNotification(null), 3000);
-    }
+    requestConfirm({
+      title: 'Eliminar punto de restauración',
+      message: '¿Deseas eliminar este punto de restauración?',
+      confirmLabel: 'Eliminar',
+      cancelLabel: 'Cancelar',
+      variant: 'danger',
+      onConfirm: () => {
+        StorageService.deleteBackupPoint(backupId);
+        setBackupPoints(StorageService.getBackupPoints());
+        if (selectedBackup?.id === backupId) setSelectedBackup(null);
+        setNotification({
+          message: 'Punto de restauración eliminado.',
+          type: 'success'
+        });
+        setTimeout(() => setNotification(null), 3000);
+      }
+    });
   };
 
   const handleClearAllBackups = () => {
-    if (window.confirm('¿Seguro que deseas eliminar todos los puntos de restauración? Esta acción no se puede deshacer.')) {
-      StorageService.clearAllBackups();
-      setBackupPoints([]);
-      setSelectedBackup(null);
-      setNotification({ message: 'Todos los puntos de restauración han sido borrados.', type: 'success' });
-      setTimeout(() => setNotification(null), 3000);
-    }
+    requestConfirm({
+      title: 'Eliminar todos los backups',
+      message:
+        '¿Seguro que deseas eliminar todos los puntos de restauración? Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar todos',
+      cancelLabel: 'Cancelar',
+      variant: 'danger',
+      onConfirm: () => {
+        StorageService.clearAllBackups();
+        setBackupPoints([]);
+        setSelectedBackup(null);
+        setNotification({ message: 'Todos los puntos de restauración han sido borrados.', type: 'success' });
+        setTimeout(() => setNotification(null), 3000);
+      }
+    });
   };
 
   const isModal = mode === 'modal';
@@ -436,7 +470,7 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
           </div>
           <div>
             {isModal ? (
-              <h3 className="font-serif text-xl font-bold text-[var(--text-primary)]">
+              <h3 id="git-sync-modal-title" className="font-serif text-xl font-bold text-[var(--text-primary)]">
                 Sincronización Git & Archivos Locales
               </h3>
             ) : (
@@ -648,6 +682,7 @@ export const GitSyncWorkspace: React.FC<GitSyncWorkspaceProps> = ({
           </button>
         </div>
       )}
+      <ConfirmDialog {...confirmDialogProps} />
     </div>
   );
 };
@@ -665,13 +700,13 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
   songs,
   onSongsUpdated
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden"
+    <AccessibleModal
+      isOpen={isOpen}
+      onClose={onClose}
+      titleId="git-sync-modal-title"
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-hidden"
+      panelClassName="relative w-full max-w-4xl flex justify-center"
     >
       <GitSyncWorkspace
         songs={songs}
@@ -679,6 +714,6 @@ export const GitSyncModal: React.FC<GitSyncModalProps> = ({
         onClose={onClose}
         mode="modal"
       />
-    </div>
+    </AccessibleModal>
   );
 };

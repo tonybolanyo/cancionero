@@ -77,6 +77,11 @@ export function useAlbumsManager({
     });
   }, [isAuthor, onOpenAuthModal, onShowToast]);
 
+  const [pendingDeleteAlbum, setPendingDeleteAlbum] = useState<{
+    album: Album;
+    onNavigateAfterDelete?: () => void;
+  } | null>(null);
+
   const handleDeleteAlbum = useCallback((
     album: Album,
     onNavigateAfterDelete?: () => void
@@ -85,10 +90,17 @@ export function useAlbumsManager({
       onOpenAuthModal?.();
       return;
     }
-    if (typeof window !== 'undefined') {
-      const ok = window.confirm(`¿Estás seguro de que deseas eliminar el álbum "${album.title}"? Las canciones del catálogo no se borrarán.`);
-      if (!ok) return;
-    }
+    setPendingDeleteAlbum({ album, onNavigateAfterDelete });
+  }, [isAuthor, onOpenAuthModal]);
+
+  const cancelDeleteAlbum = useCallback(() => {
+    setPendingDeleteAlbum(null);
+  }, []);
+
+  const confirmDeleteAlbum = useCallback(() => {
+    if (!pendingDeleteAlbum) return;
+    const { album, onNavigateAfterDelete } = pendingDeleteAlbum;
+    setPendingDeleteAlbum(null);
 
     const updated = StorageService.deleteAlbum(album.id);
     setAlbums(updated);
@@ -100,12 +112,15 @@ export function useAlbumsManager({
       title: 'Álbum Eliminado',
       message: `El álbum "${album.title}" ha sido eliminado de la discografía.`
     });
-  }, [isAuthor, onOpenAuthModal, onShowToast]);
+  }, [pendingDeleteAlbum, onShowToast]);
 
   return {
     albums,
     setAlbums,
     handleSaveAlbum,
-    handleDeleteAlbum
+    handleDeleteAlbum,
+    pendingDeleteAlbum,
+    confirmDeleteAlbum,
+    cancelDeleteAlbum
   };
 }
