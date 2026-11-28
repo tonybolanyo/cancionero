@@ -1126,6 +1126,16 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             initialInstrument={instrument}
             initialNotationView={notationView}
             accidentalPreference={accidentalPreference}
+            onCapoChange={(nextCapo, activeSong) => {
+              if (activeSong.id === song.id) {
+                setCapoFret(nextCapo);
+              }
+            }}
+            onSemitonesChange={(nextSemitones, activeSong) => {
+              if (activeSong.id === song.id) {
+                setSemitones(nextSemitones);
+              }
+            }}
             onClose={() => setIsStageModeOpen(false)}
           />
         </Suspense>

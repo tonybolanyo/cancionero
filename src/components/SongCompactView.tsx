@@ -27,7 +27,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
   onRenameFile,
   onDelete
 }) => {
-  const [sortField, setSortField] = useState<SortField>('title');
+  const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const handleSort = (field: SortField) => {
@@ -40,6 +40,7 @@ export const SongCompactView: React.FC<SongCompactViewProps> = ({
   };
 
   const sortedSongs = useMemo(() => {
+    if (!sortField) return songs;
     return [...songs].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {

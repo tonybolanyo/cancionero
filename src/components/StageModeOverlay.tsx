@@ -46,8 +46,12 @@ interface StageModeOverlayProps {
   initialInstrument?: InstrumentType;
   initialNotationView?: HarmonicNotationView;
   accidentalPreference?: AccidentalPreference;
+  onCapoChange?: (capoFret: number, song: Song) => void;
+  onSemitonesChange?: (semitones: number, song: Song) => void;
   onClose: () => void;
 }
+
+const CAPO_FRETS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 
 function parseDurationSeconds(durationStr?: string): number {
   if (!durationStr) return 210;
@@ -66,24 +70,32 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
   initialInstrument = 'guitar',
   initialNotationView = 'chords',
   accidentalPreference = 'sharps',
+  onCapoChange,
+  onSemitonesChange,
   onClose
 }) => {
+  const clampCapo = (fret: number) => Math.max(0, Math.min(7, Math.round(fret) || 0));
+
   const [currentIndex, setCurrentIndex] = useState<number>(
     Math.max(0, Math.min(initialIndex, Math.max(0, items.length - 1)))
   );
   const [semitones, setSemitones] = useState<number>(initialSemitones);
-  const [capoFret, setCapoFret] = useState<number>(initialCapoFret);
-  const [instrument, setInstrument] = useState<InstrumentType>(initialInstrument);
-  const [notationView, setNotationView] = useState<HarmonicNotationView>(initialNotationView);
+  const [capoFret, setCapoFret] = useState<number>(() => clampCapo(initialCapoFret));
+  const [instrument] = useState<InstrumentType>(initialInstrument);
+  const [notationView] = useState<HarmonicNotationView>(initialNotationView);
   const [showDiagrams, setShowDiagrams] = useState<boolean>(true);
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
   const [scrollSpeedMultiplier, setScrollSpeedMultiplier] = useState<number>(1.0);
   const [fontScale, setFontScale] = useState<'md' | 'lg' | 'xl'>('lg');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
+  const [swipeFeedback, setSwipeFeedback] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const prevIndexRef = useRef<number>(currentIndex);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const swipeTimerRef = useRef<number | null>(null);
   const { register, unregister } = useKeyboardShortcuts();
 
   const activeItem = items[currentIndex];
@@ -96,16 +108,25 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
     lockBodyScroll: true
   });
 
-  // Reset per-song transposition when advancing through a setlist
+  // Reset per-song transposition & capo when changing song in setlist
   useEffect(() => {
-    if (items.length > 1 && currentIndex !== initialIndex) {
-      setSemitones(0);
-      setCapoFret(0);
+    if (prevIndexRef.current !== currentIndex) {
+      prevIndexRef.current = currentIndex;
+      setSemitones(currentIndex === initialIndex ? initialSemitones : 0);
+      setCapoFret(currentIndex === initialIndex ? clampCapo(initialCapoFret) : 0);
     }
     if (scrollBodyRef.current) {
       scrollBodyRef.current.scrollTo({ top: 0 });
     }
-  }, [currentIndex]);
+  }, [currentIndex, initialIndex, initialSemitones, initialCapoFret]);
+
+  useEffect(() => {
+    return () => {
+      if (swipeTimerRef.current) {
+        window.clearTimeout(swipeTimerRef.current);
+      }
+    };
+  }, []);
 
   // Screen WakeLock API to prevent tablet/phone sleep on stage
   useEffect(() => {
@@ -234,6 +255,80 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
 
   if (!song) return null;
 
+  const updateSemitones = (nextRaw: number) => {
+    const wrapped = nextRaw > 11 ? nextRaw - 12 : nextRaw < -11 ? nextRaw + 12 : nextRaw;
+    setSemitones(wrapped);
+    onSemitonesChange?.(wrapped, song);
+  };
+
+  const updateCapoFret = (nextRaw: number) => {
+    const clamped = clampCapo(nextRaw);
+    setCapoFret(clamped);
+    onCapoChange?.(clamped, song);
+  };
+
+  const showSwipeNotice = (label: string) => {
+    setSwipeFeedback(label);
+    if (swipeTimerRef.current) {
+      window.clearTimeout(swipeTimerRef.current);
+    }
+    swipeTimerRef.current = window.setTimeout(() => {
+      setSwipeFeedback(null);
+    }, 1500);
+  };
+
+  const goToPreviousSong = () => {
+    if (currentIndex <= 0) return;
+    const prevIdx = currentIndex - 1;
+    setCurrentIndex(prevIdx);
+    showSwipeNotice(`Anterior: ${items[prevIdx]?.song.title || ''}`);
+  };
+
+  const goToNextSong = () => {
+    if (currentIndex >= items.length - 1) return;
+    const nextIdx = currentIndex + 1;
+    setCurrentIndex(nextIdx);
+    showSwipeNotice(`Siguiente: ${items[nextIdx]?.song.title || ''}`);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (items.length <= 1 || e.touches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current || items.length <= 1 || e.changedTouches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    const isHorizontalSwipe =
+      elapsed < 700 &&
+      Math.abs(dx) >= 64 &&
+      Math.abs(dx) > Math.abs(dy) * 1.5;
+
+    if (!isHorizontalSwipe) return;
+
+    if (dx < 0 && currentIndex < items.length - 1) {
+      goToNextSong();
+    } else if (dx > 0 && currentIndex > 0) {
+      goToPreviousSong();
+    }
+  };
+
   const formatChordForStage = (sounding: string): string => {
     if (notationView !== 'chords') {
       return chordToFunctionalSymbol(sounding, soundingKey, notationView);
@@ -271,21 +366,23 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
               <button
                 type="button"
                 disabled={currentIndex === 0}
-                onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
-                className="p-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] disabled:opacity-35 cursor-pointer"
-                title="Canción anterior (← / PageUp)"
+                onClick={goToPreviousSong}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
+                title="Canción anterior (← / PageUp / Deslizar derecha)"
+                aria-label="Canción anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-mono text-xs px-2 text-[var(--text-muted)]">
+              <span className="font-mono tabular-nums text-xs px-2 text-[var(--text-muted)]">
                 {currentIndex + 1}/{items.length}
               </span>
               <button
                 type="button"
                 disabled={currentIndex >= items.length - 1}
-                onClick={() => setCurrentIndex(i => Math.min(items.length - 1, i + 1))}
-                className="p-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] disabled:opacity-35 cursor-pointer"
-                title="Siguiente canción (→ / PageDown)"
+                onClick={goToNextSong}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
+                title="Siguiente canción (→ / PageDown / Deslizar izquierda)"
+                aria-label="Siguiente canción"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -297,10 +394,13 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
               {song.title}
             </h1>
             <div className="text-xs font-mono text-[var(--text-muted)] flex flex-wrap items-center gap-2">
-              <span>Tono: {soundingKey}</span>
+              <span>
+                Tono: {soundingKey}
+                {semitones !== 0 && ` (${semitones > 0 ? `+${semitones}` : semitones} st)`}
+              </span>
               {capoFret > 0 && (
                 <>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span className="text-[var(--accent-primary)] font-semibold">
                     Cejilla {capoFret} ({chordShapeWithCapo(soundingKey, capoFret, accidentalPreference)})
                   </span>
@@ -308,19 +408,19 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
               )}
               {song.tuning && (
                 <>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span>{song.tuning}</span>
                 </>
               )}
               {song.tempo && (
                 <>
-                  <span>·</span>
-                  <span>{song.tempo} BPM</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums">{song.tempo} BPM</span>
                 </>
               )}
               {wakeLockActive && (
                 <>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span className="inline-flex items-center gap-1 text-emerald-500">
                     <SunMedium className="w-3 h-3" />
                     Pantalla activa
@@ -333,6 +433,82 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
 
         {/* Stage Controls */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Transposition Quick Control */}
+          <div
+            className="inline-flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]"
+            role="group"
+            aria-label="Transposición en semitonos"
+          >
+            <button
+              type="button"
+              onClick={() => updateSemitones(semitones - 1)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center font-mono text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] rounded-l-lg cursor-pointer"
+              title="Bajar 1 semitono"
+              aria-label="Bajar 1 semitono"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => updateSemitones(0)}
+              disabled={semitones === 0}
+              className="min-h-[44px] px-2.5 font-mono tabular-nums text-xs font-semibold text-[var(--text-primary)] disabled:opacity-80 cursor-pointer disabled:cursor-default whitespace-nowrap"
+              title={semitones === 0 ? 'Tono original (0 st)' : 'Restablecer transposición (0 st)'}
+              aria-label={`Transposición actual ${semitones} semitonos`}
+            >
+              {semitones === 0 ? '0 st' : semitones > 0 ? `+${semitones} st` : `${semitones} st`}
+            </button>
+            <button
+              type="button"
+              onClick={() => updateSemitones(semitones + 1)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center font-mono text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] rounded-r-lg cursor-pointer"
+              title="Subir 1 semitono"
+              aria-label="Subir 1 semitono"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Capo (0-7) Quick Selector */}
+          <div
+            className="inline-flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]"
+            role="group"
+            aria-label="Selector rápido de cejilla (Capo 0 a 7)"
+          >
+            <button
+              type="button"
+              disabled={capoFret <= 0}
+              onClick={() => updateCapoFret(capoFret - 1)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center font-mono text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] rounded-l-lg disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
+              title="Bajar traste de cejilla"
+              aria-label="Bajar cejilla"
+            >
+              -
+            </button>
+            <select
+              value={capoFret}
+              onChange={(e) => updateCapoFret(Number(e.target.value))}
+              aria-label="Cejilla (Capo)"
+              className="min-h-[44px] px-2 bg-transparent text-xs font-mono font-semibold text-[var(--text-primary)] focus:outline-none cursor-pointer"
+            >
+              {CAPO_FRETS.map((fret) => (
+                <option key={fret} value={fret} className="bg-[var(--bg-surface)] text-[var(--text-primary)]">
+                  {fret === 0 ? 'Capo 0' : `Capo ${fret}`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={capoFret >= 7}
+              onClick={() => updateCapoFret(capoFret + 1)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center font-mono text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] rounded-r-lg disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
+              title="Subir traste de cejilla"
+              aria-label="Subir cejilla"
+            >
+              +
+            </button>
+          </div>
+
           <MetronomeWidget
             bpm={song.tempo || 96}
             timeSignature={song.timeSignature || '4/4'}
@@ -342,7 +518,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
           <button
             type="button"
             onClick={() => setShowDiagrams(v => !v)}
-            className={`px-2.5 py-1.5 rounded-lg border whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            className={`min-h-[44px] px-3 rounded-lg border whitespace-nowrap inline-flex items-center gap-1.5 cursor-pointer ${
               showDiagrams
                 ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-primary)] font-semibold'
                 : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
@@ -358,7 +534,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
                 key={sz}
                 type="button"
                 onClick={() => setFontScale(sz)}
-                className={`px-2 py-1 rounded text-xs font-mono cursor-pointer ${
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-xs font-mono cursor-pointer ${
                   fontScale === sz
                     ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-bold'
                     : 'text-[var(--text-muted)]'
@@ -372,7 +548,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
           <button
             type="button"
             onClick={() => setIsAutoScrolling(s => !s)}
-            className={`px-3 py-1.5 rounded-lg border whitespace-nowrap flex items-center gap-1.5 font-semibold cursor-pointer ${
+            className={`min-h-[44px] px-3.5 rounded-lg border whitespace-nowrap inline-flex items-center gap-1.5 font-semibold cursor-pointer ${
               isAutoScrolling
                 ? 'bg-emerald-600 border-emerald-700 text-white'
                 : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-primary)]'
@@ -387,7 +563,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
             <select
               value={scrollSpeedMultiplier}
               onChange={(e) => setScrollSpeedMultiplier(Number(e.target.value))}
-              className="px-2 py-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs font-mono cursor-pointer"
+              className="min-h-[44px] px-2.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs font-mono cursor-pointer"
               aria-label="Velocidad de scroll"
             >
               <option value={0.7}>0.7x</option>
@@ -400,8 +576,9 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -409,7 +586,7 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold whitespace-nowrap cursor-pointer"
+            className="min-h-[44px] inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold whitespace-nowrap cursor-pointer"
             title="Salir de Modo Escenario (Esc)"
           >
             <X className="w-4 h-4" />
@@ -452,8 +629,24 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
         </div>
       )}
 
-      {/* Large Atril Lyrics Body */}
-      <div ref={scrollBodyRef} className="flex-1 overflow-y-auto px-6 sm:px-12 py-8">
+      {/* Swipe Song Feedback Banner */}
+      {swipeFeedback && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="px-6 py-1.5 bg-[var(--accent-subtle)] border-b border-[var(--accent-border)] text-xs font-mono text-center text-[var(--accent-primary)] font-semibold shrink-0"
+        >
+          {swipeFeedback}
+        </div>
+      )}
+
+      {/* Large Atril Lyrics Body (supports horizontal swipe left/right on touch devices) */}
+      <div
+        ref={scrollBodyRef}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="flex-1 overflow-y-auto touch-pan-y px-6 sm:px-12 py-8"
+      >
         <div className="max-w-4xl mx-auto space-y-2 pb-28">
           {transposedLyrics.split('\n').map((line, idx) => {
             if (line.startsWith('##') || line.startsWith('#')) {
@@ -503,19 +696,34 @@ export const StageModeOverlay: React.FC<StageModeOverlayProps> = ({
             );
           })}
 
-          {items[currentIndex + 1] && (
-            <div className="mt-12 pt-6 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-              <span>
-                Siguiente tema: <strong className="text-[var(--text-primary)]">{items[currentIndex + 1].song.title}</strong>
-                {items[currentIndex + 1].cue ? ` · ${items[currentIndex + 1].cue}` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentIndex(i => Math.min(items.length - 1, i + 1))}
-                className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold cursor-pointer"
-              >
-                Pasar al siguiente →
-              </button>
+          {items.length > 1 && (
+            <div className="mt-12 pt-6 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+              <div className="flex items-center gap-2">
+                {currentIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={goToPreviousSong}
+                    className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] font-semibold cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Anterior: {items[currentIndex - 1].song.title}</span>
+                  </button>
+                )}
+              </div>
+
+              {items[currentIndex + 1] && (
+                <button
+                  type="button"
+                  onClick={goToNextSong}
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-text)] font-semibold cursor-pointer ml-auto"
+                >
+                  <span>
+                    Siguiente: {items[currentIndex + 1].song.title}
+                    {items[currentIndex + 1].cue ? ` · ${items[currentIndex + 1].cue}` : ''}
+                  </span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
         </div>

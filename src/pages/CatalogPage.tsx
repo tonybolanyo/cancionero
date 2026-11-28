@@ -65,6 +65,11 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     platformFilter,
     keyFilter,
     tagFilter,
+    selectedTags,
+    bpmRange,
+    mediaFilter,
+    sortBy,
+    hasActiveFilters,
     viewMode,
     scrollRequest,
     setSearchQuery,
@@ -72,6 +77,11 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     setPlatformFilter,
     setKeyFilter,
     setTagFilter,
+    toggleTag,
+    clearTags,
+    setBpmRange,
+    setMediaFilter,
+    setSortBy,
     setActiveNavTab,
     handleViewModeChange,
     handleNavSelect,
@@ -265,9 +275,20 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
           keyFilter={keyFilter}
           onKeyChange={setKeyFilter}
           availableKeys={availableKeys}
+          bpmRange={bpmRange}
+          onBpmRangeChange={setBpmRange}
+          mediaFilter={mediaFilter}
+          onMediaFilterChange={setMediaFilter}
+          sortBy={sortBy}
+          onSortByChange={setSortBy}
           tagFilter={tagFilter}
           onTagChange={setTagFilter}
+          selectedTags={selectedTags}
+          onToggleTag={toggleTag}
+          onClearTags={clearTags}
           availableTags={availableTags}
+          hasActiveFilters={hasActiveFilters}
+          onResetFilters={resetFilters}
           counts={counts}
           isAuthor={isAuthor}
           onOpenAuthModal={onOpenAuthModal}
@@ -290,7 +311,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                     onDownloadMd={onDownloadMd}
                     isAuthor={isAuthor}
                     onViewHistory={onViewHistory}
-                    onSelectTag={setTagFilter}
+                    onSelectTag={toggleTag}
+                    selectedTags={selectedTags}
                     onRenameFile={onRenameSong}
                     onDelete={onDeleteSong}
                     onOpenVisualizer={onOpenVisualizer}
@@ -310,7 +332,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                     onDownloadMd={onDownloadMd}
                     isAuthor={isAuthor}
                     onViewHistory={onViewHistory}
-                    onSelectTag={setTagFilter}
+                    onSelectTag={toggleTag}
+                    selectedTags={selectedTags}
                     onRenameFile={onRenameSong}
                     onDelete={onDeleteSong}
                     onOpenVisualizer={onOpenVisualizer}

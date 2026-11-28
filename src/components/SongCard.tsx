@@ -1,6 +1,8 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, FileCode, Trash2, Youtube } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, FileCode, Trash2, Youtube, ExternalLink } from 'lucide-react';
 import { Song } from '../types/song';
+import { isSafeExternalUrl } from '../utils/authConfig';
+import { isValidPlayableAudioUrl } from '../utils/markdownParser';
 
 interface SongCardProps {
   song: Song;
@@ -10,6 +12,7 @@ interface SongCardProps {
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
+  selectedTags?: string[];
   onRenameFile?: (song: Song) => void;
   onDelete?: (song: Song) => void;
   onOpenVisualizer?: (song: Song) => void;
@@ -23,6 +26,7 @@ export const SongCard: React.FC<SongCardProps> = ({
   isAuthor,
   onViewHistory,
   onSelectTag,
+  selectedTags = [],
   onRenameFile,
   onDelete,
   onOpenVisualizer
@@ -36,7 +40,13 @@ export const SongCard: React.FC<SongCardProps> = ({
     .filter(Boolean)
     .join(' / ');
 
-  const hasAudio = !!(song.spotifyUrl || song.youtubeUrl || song.soundcloudUrl || song.audioUrl);
+  const hasSpotify = isSafeExternalUrl(song.spotifyUrl);
+  const hasYoutube = isSafeExternalUrl(song.youtubeUrl);
+  const hasAppleMusic = isSafeExternalUrl(song.appleMusicUrl);
+  const hasSoundcloud = isSafeExternalUrl(song.soundcloudUrl);
+  const hasDirectAudio = isValidPlayableAudioUrl(song.audioUrl) && !song.audioUrl?.startsWith('gdrive://');
+  const hasAuthorDriveAudio = isAuthor && Boolean(song.driveFileId || song.audioUrl?.startsWith('gdrive://'));
+  const hasAudio = hasSpotify || hasYoutube || hasAppleMusic || hasSoundcloud || hasDirectAudio || hasAuthorDriveAudio;
 
   const getStatusText = () => {
     switch (song.status) {
@@ -91,29 +101,74 @@ export const SongCard: React.FC<SongCardProps> = ({
         {/* Available Streaming Platforms / Audio availability */}
         <div className="flex items-center gap-3 mb-4 text-xs text-[var(--text-muted)]">
           {hasAudio ? (
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                 Disponible en:
               </span>
-              {song.spotifyUrl && (
-                <span className="text-[#1DB954] hover:underline cursor-pointer font-medium" title="Disponible en Spotify">
-                  Spotify
-                </span>
+              {hasSpotify && (
+                <a
+                  href={song.spotifyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[#1DB954] hover:underline font-medium"
+                  title="Escuchar en Spotify (abre pestaña nueva)"
+                >
+                  <span>Spotify</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
               )}
-              {song.youtubeUrl && (
-                <span className="text-[#e53e3e] hover:underline cursor-pointer font-medium" title="Disponible en YouTube">
-                  YouTube
-                </span>
+              {hasYoutube && (
+                <a
+                  href={song.youtubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[#e53e3e] hover:underline font-medium"
+                  title="Ver en YouTube (abre pestaña nueva)"
+                >
+                  <span>YouTube</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
               )}
-              {song.soundcloudUrl && (
-                <span className="text-[#FF5500] hover:underline cursor-pointer font-medium" title="Disponible en SoundCloud">
-                  SoundCloud
-                </span>
+              {hasAppleMusic && (
+                <a
+                  href={song.appleMusicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[#FA243C] hover:underline font-medium"
+                  title="Escuchar en Apple Music (abre pestaña nueva)"
+                >
+                  <span>Apple Music</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
               )}
-              {song.audioUrl && (
-                <span className="text-[var(--accent-primary)] font-medium" title="Audio demo">
+              {hasSoundcloud && (
+                <a
+                  href={song.soundcloudUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[#FF5500] hover:underline font-medium"
+                  title="Escuchar en SoundCloud (abre pestaña nueva)"
+                >
+                  <span>SoundCloud</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              )}
+              {(hasDirectAudio || hasAuthorDriveAudio) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(song);
+                  }}
+                  className="text-[var(--accent-primary)] hover:underline cursor-pointer font-medium"
+                  title="Abrir maqueta en el reproductor"
+                >
                   Maqueta
-                </span>
+                </button>
               )}
             </div>
           ) : (
@@ -126,19 +181,30 @@ export const SongCard: React.FC<SongCardProps> = ({
         {/* Thematic Tags (Clickable for quick catalog filtering) */}
         {song.tags && song.tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mb-4">
-            {song.tags.map((tag) => (
-              <button
-                key={tag}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectTag?.(tag);
-                }}
-                className="text-[11px] font-mono text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                title={`Filtrar canciones por #${tag}`}
-              >
-                #{tag}
-              </button>
-            ))}
+            {song.tags.map((tag) => {
+              const isSelected = selectedTags.some(
+                t => t.trim().toLowerCase() === tag.trim().toLowerCase()
+              );
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectTag?.(tag);
+                  }}
+                  className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)] font-semibold'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]'
+                  }`}
+                  title={`${isSelected ? 'Quitar filtro' : 'Filtrar canciones por'} #${tag}`}
+                >
+                  #{tag}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

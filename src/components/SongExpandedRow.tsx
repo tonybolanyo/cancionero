@@ -1,6 +1,8 @@
 import React from 'react';
-import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode, Trash2, Youtube } from 'lucide-react';
+import { Play, FileText, Edit3, Download, History, Music2, Clock, Disc, FileCode, Trash2, Youtube, ExternalLink } from 'lucide-react';
 import { Song } from '../types/song';
+import { isSafeExternalUrl } from '../utils/authConfig';
+import { isValidPlayableAudioUrl } from '../utils/markdownParser';
 
 interface SongExpandedRowProps {
   song: Song;
@@ -10,6 +12,7 @@ interface SongExpandedRowProps {
   isAuthor: boolean;
   onViewHistory?: (song: Song) => void;
   onSelectTag?: (tag: string) => void;
+  selectedTags?: string[];
   onRenameFile?: (song: Song) => void;
   onDelete?: (song: Song) => void;
   onOpenVisualizer?: (song: Song) => void;
@@ -23,6 +26,7 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
   isAuthor,
   onViewHistory,
   onSelectTag,
+  selectedTags = [],
   onRenameFile,
   onDelete,
   onOpenVisualizer
@@ -35,7 +39,13 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
     .map(line => line.replace(/\[[^\]]+\]/g, '').trim())
     .filter(Boolean);
 
-  const hasAudio = !!(song.spotifyUrl || song.youtubeUrl || song.soundcloudUrl || song.audioUrl);
+  const hasSpotify = isSafeExternalUrl(song.spotifyUrl);
+  const hasYoutube = isSafeExternalUrl(song.youtubeUrl);
+  const hasAppleMusic = isSafeExternalUrl(song.appleMusicUrl);
+  const hasSoundcloud = isSafeExternalUrl(song.soundcloudUrl);
+  const hasDirectAudio = isValidPlayableAudioUrl(song.audioUrl) && !song.audioUrl?.startsWith('gdrive://');
+  const hasAuthorDriveAudio = isAuthor && Boolean(song.driveFileId || song.audioUrl?.startsWith('gdrive://'));
+  const hasAudio = hasSpotify || hasYoutube || hasAppleMusic || hasSoundcloud || hasDirectAudio || hasAuthorDriveAudio;
 
   const getStatusBadge = () => {
     switch (song.status) {
@@ -145,26 +155,73 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
           <div className="flex items-center gap-2">
             <Music2 className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
             {hasAudio ? (
-              <div className="flex items-center gap-2">
-                {song.spotifyUrl && (
-                  <span className="text-[#1DB954] font-medium hover:underline cursor-pointer flex items-center gap-1" title="Disponible en Spotify">
-                    <Disc className="w-3 h-3" /> Spotify
-                  </span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {hasSpotify && (
+                  <a
+                    href={song.spotifyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[#1DB954] font-medium hover:underline flex items-center gap-1"
+                    title="Escuchar en Spotify (abre pestaña nueva)"
+                  >
+                    <Disc className="w-3 h-3" />
+                    <span>Spotify</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
                 )}
-                {song.youtubeUrl && (
-                  <span className="text-[#e53e3e] font-medium hover:underline cursor-pointer flex items-center gap-1" title="Disponible en YouTube">
-                    <Play className="w-3 h-3" /> YouTube
-                  </span>
+                {hasYoutube && (
+                  <a
+                    href={song.youtubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[#e53e3e] font-medium hover:underline flex items-center gap-1"
+                    title="Ver en YouTube (abre pestaña nueva)"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>YouTube</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
                 )}
-                {song.soundcloudUrl && (
-                  <span className="text-[#FF5500] font-medium hover:underline cursor-pointer" title="Disponible en SoundCloud">
-                    SoundCloud
-                  </span>
+                {hasAppleMusic && (
+                  <a
+                    href={song.appleMusicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[#FA243C] font-medium hover:underline flex items-center gap-1"
+                    title="Escuchar en Apple Music (abre pestaña nueva)"
+                  >
+                    <span>Apple Music</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
                 )}
-                {song.audioUrl && (
-                  <span className="text-[var(--accent-primary)] font-medium" title="Audio demo directo">
+                {hasSoundcloud && (
+                  <a
+                    href={song.soundcloudUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[#FF5500] font-medium hover:underline flex items-center gap-1"
+                    title="Escuchar en SoundCloud (abre pestaña nueva)"
+                  >
+                    <span>SoundCloud</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+                {(hasDirectAudio || hasAuthorDriveAudio) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(song);
+                    }}
+                    className="text-[var(--accent-primary)] hover:underline cursor-pointer font-medium"
+                    title="Abrir maqueta en el reproductor"
+                  >
                     Maqueta
-                  </span>
+                  </button>
                 )}
               </div>
             ) : (
@@ -177,19 +234,30 @@ export const SongExpandedRow: React.FC<SongExpandedRowProps> = ({
           {/* Tags */}
           {song.tags && song.tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {song.tags.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectTag?.(tag);
-                  }}
-                  className="text-[10px] font-mono text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                  title={`Filtrar por #${tag}`}
-                >
-                  #{tag}
-                </button>
-              ))}
+              {song.tags.map((tag) => {
+                const isSelected = selectedTags.some(
+                  t => t.trim().toLowerCase() === tag.trim().toLowerCase()
+                );
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectTag?.(tag);
+                    }}
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-text)] border-[var(--accent-primary)] font-semibold'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]'
+                    }`}
+                    title={`${isSelected ? 'Quitar filtro' : 'Filtrar por'} #${tag}`}
+                  >
+                    #{tag}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
